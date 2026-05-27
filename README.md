@@ -35,6 +35,19 @@ python -c "import sklearn; print(sklearn.__version__)"
 
 La versión esperada de `sklearn` es `1.5.0`.
 
+Opcionalmente, copiar variables locales:
+
+```bash
+cp .env.example .env
+```
+
+Variables útiles:
+
+```txt
+MODEL_DIR=app/ml/runtime
+FEEDBACK_DB_PATH=app/ml/runtime/feedback.sqlite3
+```
+
 ## Ejecutar API
 
 Desde la raíz del proyecto:
@@ -74,6 +87,7 @@ curl -X POST http://localhost:8000/api/v1/recommend \
 ```
 
 La respuesta incluye `recommendation_id`, `conditions`, `recommendations`, `packs_ranked`, `sinergias`, `alertas` y `disclaimer`.
+También incluye campos listos para frontend, como `conditions_display`, `display_name`, `reason`, `dosage_hint`, `priority` e `icon_key`.
 
 Si los modelos o artefactos no están disponibles, la API responde de forma controlada:
 
@@ -117,6 +131,12 @@ app/ml/runtime/modelo1_pipeline.pkl
 app/ml/runtime/modelo2_artifacts_cpu.pkl
 ```
 
+La carpeta se puede cambiar con:
+
+```env
+MODEL_DIR=/ruta/a/modelos
+```
+
 También existen artefactos en:
 
 ```txt
@@ -136,6 +156,12 @@ La persistencia principal local usa SQLite:
 
 ```txt
 app/ml/runtime/feedback.sqlite3
+```
+
+La ruta se puede cambiar con:
+
+```env
+FEEDBACK_DB_PATH=/ruta/local/feedback.sqlite3
 ```
 
 Tablas mínimas:
@@ -169,4 +195,38 @@ GET /api/v1/health
 GET /api/v1/debug/model-status
 POST /api/v1/recommend
 POST /api/v1/feedback
+```
+
+## Validación de Calidad de Recomendaciones
+
+Para validar el comportamiento del modelo con datos reales y medir el impacto del feedback:
+
+```bash
+python scripts/validate_recommendation_quality.py
+```
+
+La validación ejecuta 15 perfiles ideales no saludables y revisa:
+
+```txt
+condiciones accionables detectadas
+mínimo 3 suplementos recomendados por perfil
+packs_ranked generado
+top pack con al menos 2 suplementos
+combo sin alertas riesgosas
+feedback_count sube después del feedback
+ratings positivos elevan score_feedback
+ratings negativos reducen score_feedback
+score_final cambia en recomendaciones posteriores
+```
+
+Por defecto usa una base SQLite temporal para no contaminar la demo local. Para guardar un reporte JSON:
+
+```bash
+python scripts/validate_recommendation_quality.py --output reports/recommendation_quality.json
+```
+
+Para validar usando el store real configurado por `FEEDBACK_DB_PATH`:
+
+```bash
+python scripts/validate_recommendation_quality.py --use-runtime-store
 ```

@@ -8,12 +8,14 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Any
 
+from app.core.config import settings
+
 
 RUNTIME_DIR = Path(__file__).resolve().parent
 
 RECOMMENDATION_EVENTS_PATH = RUNTIME_DIR / "recommendation_events.json"
 USER_FEEDBACK_EVENTS_PATH = RUNTIME_DIR / "user_feedback_events.json"
-FEEDBACK_DB_PATH = RUNTIME_DIR / "feedback.sqlite3"
+FEEDBACK_DB_PATH = settings.FEEDBACK_DB_PATH
 
 
 def _ensure_files() -> None:
@@ -54,7 +56,7 @@ def _json_loads(value: str | None, default: Any) -> Any:
 
 
 def _connect() -> sqlite3.Connection:
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    Path(FEEDBACK_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(FEEDBACK_DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     _ensure_db(conn)

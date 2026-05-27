@@ -7,10 +7,11 @@ Requiere: modelo2_artifacts.pkl (generado por modelo2_train.py)
 import numpy as np
 import pandas as pd
 import joblib
-from pathlib import Path
+
+from app.core.config import settings
 
 _artifacts = None
-_ARTIFACTS_PATH = Path(__file__).parent / "modelo2_artifacts_cpu.pkl"
+_ARTIFACTS_PATH = settings.MODEL_DIR / "modelo2_artifacts_cpu.pkl"
 
 
 def _load():

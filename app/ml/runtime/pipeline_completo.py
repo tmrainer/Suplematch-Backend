@@ -8,14 +8,14 @@ Uso:
 
 import pandas as pd
 import joblib
-from pathlib import Path
+from app.core.config import settings
 from app.ml.runtime.modelo2_inference import recomendar_suplementos
 from app.ml.runtime.feedback_reranker import rerank_packs
 from app.ml.runtime.feedback_store import save_recommendation_event
 
 # ─── Cargar Modelo 1 ──────────────────────────────────────────────────────────
-_DIR = Path(__file__).parent
-_m1 = joblib.load(_DIR / "modelo1_pipeline.pkl")
+_MODEL_DIR = settings.MODEL_DIR
+_m1 = joblib.load(_MODEL_DIR / "modelo1_pipeline.pkl")
 _pipe_m1 = _m1["pipeline"]
 _labels   = _m1["labels"]
 _cat_cols = _m1["cat_cols"]

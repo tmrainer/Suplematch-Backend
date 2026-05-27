@@ -64,27 +64,31 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
     RecommendationResponse.model_validate(response)
 
     assert response["conditions"] == ["DEFICIT_VIT_D"]
-    assert response["recommendations"] == [
+    assert response["conditions_display"][0]["display_name"] == "Déficit de vitamina D"
+    assert response["recommendations"][0]["name"] == "Vitamin D"
+    assert response["recommendations"][0]["display_name"] == "Vitamin D"
+    assert response["recommendations"][0]["condition_display"] == "Déficit de vitamina D"
+    assert response["recommendations"][0]["reason"] == "Relacionado con déficit de vitamina d."
+    assert response["recommendations"][0]["dosage_hint"]
+    assert response["recommendations"][0]["priority"] == "principal"
+    assert response["recommendations"][1]["type_display"] == "Soporte complementario"
+    assert response["packs_ranked"][0]["title"] == "Vitamin D + Calcium"
+    assert response["packs_ranked"][0]["components"] == [
         {
             "component_id": "cmp_vit_d",
             "name": "Vitamin D",
-            "condition": "DEFICIT_VIT_D",
-            "score": 1.0,
-            "type": "semilla_directa",
+            "display_name": "Vitamin D",
+            "icon_key": "sun",
         },
         {
             "component_id": "cmp_calcium",
             "name": "Calcium",
-            "condition": "soporte_funcional",
-            "score": 0.82,
-            "type": "candidato_gnn",
+            "display_name": "Calcium",
+            "icon_key": "bone",
         },
     ]
-    assert response["packs_ranked"][0]["title"] == "Vitamin D + Calcium"
-    assert response["packs_ranked"][0]["components"] == [
-        {"component_id": "cmp_vit_d", "name": "Vitamin D"},
-        {"component_id": "cmp_calcium", "name": "Calcium"},
-    ]
+    assert response["packs_ranked"][0]["subtitle"] == "2 suplemento(s) priorizados para tu perfil"
+    assert response["packs_ranked"][0]["cta_label"] == "Ver detalle del pack"
     assert response["sinergias"] == [
         {
             "component_a": "Vitamin D",

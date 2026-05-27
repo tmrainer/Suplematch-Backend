@@ -17,6 +17,52 @@ DISCLAIMER = (
     "si tomas medicamentos, tienes una condición médica o estás embarazada."
 )
 
+CONDITION_LABELS = {
+    "SALUDABLE": "Base saludable",
+    "DEFICIT_VIT_D": "Déficit de vitamina D",
+    "DEFICIT_CALCIO": "Déficit de calcio",
+    "BAJA_INMUNIDAD": "Baja inmunidad",
+    "FATIGA": "Fatiga o baja energía",
+    "ESTRES": "Estrés elevado",
+    "PROBLEMAS_SUENO": "Problemas de sueño",
+}
+
+TYPE_LABELS = {
+    "semilla_directa": "Recomendación principal",
+    "candidato_gnn": "Soporte complementario",
+    "soporte_funcional": "Soporte funcional",
+    "INTERACCION_RIESGOSA": "Interacción riesgosa",
+}
+
+COMPONENT_ICONS = {
+    "vitamin d": "sun",
+    "vitamina d": "sun",
+    "calcium": "bone",
+    "calcio": "bone",
+    "zinc": "zap",
+    "vitamin c": "citrus",
+    "vitamina c": "citrus",
+    "magnesium": "moon",
+    "magnesio": "moon",
+    "iron": "activity",
+    "hierro": "activity",
+    "omega": "waves",
+}
+
+COMPONENT_DOSAGE_HINTS = {
+    "vitamin d": "Consultar dosis según niveles y exposición solar",
+    "vitamina d": "Consultar dosis según niveles y exposición solar",
+    "calcium": "Tomar según dieta y recomendación profesional",
+    "calcio": "Tomar según dieta y recomendación profesional",
+    "zinc": "Evitar exceder uso prolongado sin supervisión",
+    "vitamin c": "Puede tomarse junto con alimentos",
+    "vitamina c": "Puede tomarse junto con alimentos",
+    "magnesium": "Suele tolerarse mejor por la noche",
+    "magnesio": "Suele tolerarse mejor por la noche",
+    "iron": "Evitar combinarlo con calcio en la misma toma",
+    "hierro": "Evitar combinarlo con calcio en la misma toma",
+}
+
 
 def _to_builtin(value: Any) -> Any:
     if isinstance(value, dict):
@@ -81,6 +127,82 @@ def _clean_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _humanize_code(value: str | None) -> str:
+    if value is None:
+        return "Perfil evaluado"
+
+    return (
+        value.replace("_", " ")
+        .strip()
+        .lower()
+        .capitalize()
+    )
+
+
+def _condition_display_name(condition: str | None) -> str:
+    if condition is None:
+        return "Perfil evaluado"
+
+    return CONDITION_LABELS.get(condition, _humanize_code(condition))
+
+
+def _type_display_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    return TYPE_LABELS.get(value, _humanize_code(value))
+
+
+def _component_icon_key(name: str) -> str:
+    clean = name.lower()
+
+    for key, icon in COMPONENT_ICONS.items():
+        if key in clean:
+            return icon
+
+    return "pill"
+
+
+def _dosage_hint(name: str, rec_type: str | None) -> str:
+    clean = name.lower()
+
+    for key, hint in COMPONENT_DOSAGE_HINTS.items():
+        if key in clean:
+            return hint
+
+    if rec_type == "semilla_directa":
+        return "Prioritario para el perfil detectado"
+
+    return "Complementario para el perfil detectado"
+
+
+def _recommendation_reason(condition: str | None, rec_type: str | None) -> str:
+    if condition and condition != "soporte_funcional":
+        return f"Relacionado con {_condition_display_name(condition).lower()}."
+
+    if rec_type == "candidato_gnn":
+        return "Complementa el pack por soporte funcional."
+
+    return "Recomendado para el perfil evaluado."
+
+
+def _condition_probability(index: int, total: int) -> float:
+    if total <= 1:
+        return 0.82
+
+    return max(0.45, 0.82 - (index * 0.12))
+
+
+def _condition_level(probability: float) -> str:
+    if probability >= 0.70:
+        return "Alta prioridad"
+
+    if probability >= 0.55:
+        return "Prioridad media"
+
+    return "Contexto"
+
+
 def _normalize_conditions(values: Any) -> list[str]:
     if not isinstance(values, list):
         values = [values]
@@ -97,6 +219,21 @@ def _normalize_conditions(values: Any) -> list[str]:
         conditions.append(condition)
 
     return conditions
+
+
+def _normalize_conditions_display(conditions: list[str]) -> list[dict[str, Any]]:
+    total = len(conditions)
+
+    return [
+        {
+            "code": condition,
+            "display_name": _condition_display_name(condition),
+            "level": _condition_level(_condition_probability(index, total)),
+            "probability": _condition_probability(index, total),
+            "icon_key": "check" if condition == "SALUDABLE" else "activity",
+        }
+        for index, condition in enumerate(conditions)
+    ]
 
 
 def _normalize_recommendations(values: Any) -> list[dict[str, Any]]:
@@ -133,9 +270,16 @@ def _normalize_recommendations(values: Any) -> list[dict[str, Any]]:
         recommendations.append({
             "component_id": component_id,
             "name": name,
+            "display_name": name,
             "condition": condition,
+            "condition_display": _condition_display_name(condition),
             "score": score,
             "type": rec_type,
+            "type_display": _type_display_name(rec_type),
+            "reason": _recommendation_reason(condition, rec_type),
+            "dosage_hint": _dosage_hint(name, rec_type),
+            "priority": "principal" if rec_type == "semilla_directa" else "complementaria",
+            "icon_key": _component_icon_key(name),
         })
 
     return recommendations
@@ -218,7 +362,12 @@ def _normalize_pack_components(pack: dict[str, Any]) -> list[dict[str, str | Non
                 name = _clean_text(component)
 
             if name is not None:
-                components.append({"component_id": component_id, "name": name})
+                components.append({
+                    "component_id": component_id,
+                    "name": name,
+                    "display_name": name,
+                    "icon_key": _component_icon_key(name),
+                })
 
         if components:
             return components
@@ -240,7 +389,12 @@ def _normalize_pack_components(pack: dict[str, Any]) -> list[dict[str, str | Non
         name = _clean_text(component_names[index]) if index < len(component_names) else component_id
 
         if name is not None:
-            components.append({"component_id": component_id, "name": name})
+            components.append({
+                "component_id": component_id,
+                "name": name,
+                "display_name": name,
+                "icon_key": _component_icon_key(name),
+            })
 
     return components
 
@@ -268,6 +422,7 @@ def _normalize_packs(values: Any) -> list[dict[str, Any]]:
             "pack_id": _clean_text(item.get("pack_id")) or f"pack_{index}",
             "rank": _clean_int(item.get("rank"), index),
             "title": " + ".join(component_names),
+            "subtitle": f"{len(component_names)} suplemento(s) priorizados para tu perfil",
             "components": components,
             "component_ids": component_ids,
             "component_names": component_names,
@@ -277,6 +432,7 @@ def _normalize_packs(values: Any) -> list[dict[str, Any]]:
             "score_coverage": _clean_float(item.get("score_coverage")),
             "score_feedback": _clean_float(item.get("score_feedback")),
             "feedback_count": _clean_int(item.get("feedback_count")),
+            "cta_label": "Ver detalle del pack",
         })
 
     return packs
@@ -302,16 +458,21 @@ class RecommendationService:
         except Exception as exc:
             raise RecommendationGenerationError() from exc
 
+        conditions = _normalize_conditions(
+            _first_present(resultado.get("condiciones"), resultado.get("conditions"), [])
+        )
+        recommendations = _normalize_recommendations(
+            _first_present(resultado.get("recomendaciones"), resultado.get("recommendations"), [])
+        )
+        packs_ranked = _normalize_packs(resultado.get("packs_ranked", []))
+
         return {
             "session_id": f"ses_{uuid4().hex}",
             "recommendation_id": resultado.get("recommendation_id"),
-            "conditions": _normalize_conditions(
-                _first_present(resultado.get("condiciones"), resultado.get("conditions"), [])
-            ),
-            "recommendations": _normalize_recommendations(
-                _first_present(resultado.get("recomendaciones"), resultado.get("recommendations"), [])
-            ),
-            "packs_ranked": _normalize_packs(resultado.get("packs_ranked", [])),
+            "conditions": conditions,
+            "conditions_display": _normalize_conditions_display(conditions),
+            "recommendations": recommendations,
+            "packs_ranked": packs_ranked,
             "sinergias": _normalize_relations(resultado.get("sinergias", [])),
             "alertas": _normalize_relations(resultado.get("alertas", [])),
             "combo_seguro": resultado.get("combo_seguro", True),

@@ -64,8 +64,12 @@ def test_recommend_endpoint_returns_normalized_response():
     assert status_code == 200
     assert body["recommendation_id"] == "rec_test"
     assert body["conditions"] == ["DEFICIT_VIT_D"]
+    assert body["conditions_display"][0]["display_name"] == "Déficit de vitamina D"
     assert body["recommendations"][0]["name"] == "Vitamin D"
+    assert body["recommendations"][0]["reason"] == "Relacionado con déficit de vitamina d."
+    assert body["recommendations"][0]["icon_key"] == "sun"
     assert body["packs_ranked"][0]["title"] == "Vitamin D + Calcium"
+    assert body["packs_ranked"][0]["components"][0]["display_name"] == "Vitamin D"
     assert body["sinergias"] == [
         {
             "component_a": "Vitamin D",
