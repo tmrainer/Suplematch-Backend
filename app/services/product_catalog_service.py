@@ -1,0 +1,273 @@
+from __future__ import annotations
+
+import csv
+import math
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from app.core.config import settings
+
+
+MAX_PRODUCTS_PER_COMPONENT = 3
+
+
+@dataclass(frozen=True)
+class CatalogProduct:
+    pharmacy: str
+    commercial_name: str
+    formal_name: str | None
+    registro_sanitario: str
+    digemid_producto: str | None
+    component_id: str
+    ingredient: str
+    amount: str | None
+    unit: str | None
+    amount_mg: float | None
+    component_match_score: float | None
+    price: float
+    currency: str
+    availability: str
+    url: str
+    sku: str | None
+    brand: str | None
+    regulatory_status: str
+
+    @property
+    def product_key(self) -> str:
+        return f"{self.pharmacy}|{self.sku or self.url}|{self.registro_sanitario}"
+
+    def to_response(self) -> dict[str, Any]:
+        return {
+            "pharmacy": self.pharmacy,
+            "commercial_name": self.commercial_name,
+            "formal_name": self.formal_name,
+            "registro_sanitario": self.registro_sanitario,
+            "digemid_producto": self.digemid_producto,
+            "component_id": self.component_id,
+            "ingredient": self.ingredient,
+            "amount": self.amount,
+            "unit": self.unit,
+            "amount_mg": self.amount_mg,
+            "component_match_score": self.component_match_score,
+            "price": self.price,
+            "currency": self.currency,
+            "availability": self.availability,
+            "url": self.url,
+            "sku": self.sku,
+            "brand": self.brand,
+            "regulatory_status": self.regulatory_status,
+        }
+
+
+def _clean(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _float(value: Any) -> float | None:
+    try:
+        number = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(number):
+        return None
+
+    return number
+
+
+def _load_rows(path: Path) -> list[CatalogProduct]:
+    if not path.exists():
+        return []
+
+    products = []
+
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+
+        for row in reader:
+            price = _float(row.get("price"))
+            if price is None:
+                continue
+
+            if (row.get("availability") or "").strip().lower() != "available":
+                continue
+
+            component_id = _clean(row.get("component_id"))
+            registro_sanitario = _clean(row.get("registro_sanitario"))
+            commercial_name = _clean(row.get("commercial_name"))
+            pharmacy = _clean(row.get("pharmacy"))
+            url = _clean(row.get("url"))
+
+            if not all([component_id, registro_sanitario, commercial_name, pharmacy, url]):
+                continue
+
+            products.append(
+                CatalogProduct(
+                    pharmacy=pharmacy or "",
+                    commercial_name=commercial_name or "",
+                    formal_name=_clean(row.get("formal_name")),
+                    registro_sanitario=registro_sanitario or "",
+                    digemid_producto=_clean(row.get("digemid_producto")),
+                    component_id=component_id or "",
+                    ingredient=_clean(row.get("ingredient")) or component_id or "",
+                    amount=_clean(row.get("amount")),
+                    unit=_clean(row.get("unit")),
+                    amount_mg=_float(row.get("amount_mg")),
+                    component_match_score=_float(row.get("component_match_score")),
+                    price=price,
+                    currency=_clean(row.get("currency")) or "PEN",
+                    availability=_clean(row.get("availability")) or "available",
+                    url=url or "",
+                    sku=_clean(row.get("sku")),
+                    brand=_clean(row.get("brand")),
+                    regulatory_status=_clean(row.get("regulatory_status")) or "digemid_match",
+                )
+            )
+
+    return products
+
+
+@lru_cache(maxsize=4)
+def _catalog_by_component(path_value: str) -> dict[str, list[CatalogProduct]]:
+    products = _load_rows(Path(path_value))
+    grouped: dict[str, dict[str, CatalogProduct]] = {}
+
+    for product in products:
+        component_group = grouped.setdefault(product.component_id, {})
+        existing = component_group.get(product.product_key)
+
+        if existing is None or product.price < existing.price:
+            component_group[product.product_key] = product
+
+    return {
+        component_id: sorted(items.values(), key=_base_product_sort_key)
+        for component_id, items in grouped.items()
+    }
+
+
+def _base_product_sort_key(product: CatalogProduct) -> tuple[float, float, str, str]:
+    match_score = product.component_match_score if product.component_match_score is not None else 0.0
+    return (
+        product.price,
+        -match_score,
+        product.pharmacy.lower(),
+        product.commercial_name.lower(),
+    )
+
+
+class ProductCatalogService:
+    def __init__(self, catalog_path: Path | None = None):
+        self.catalog_path = catalog_path or settings.APPROVED_CATALOG_PATH
+
+    def products_for_component(
+        self,
+        component_id: str | None,
+        limit: int = MAX_PRODUCTS_PER_COMPONENT,
+    ) -> list[dict[str, Any]]:
+        if not component_id:
+            return []
+
+        products = self._products_by_component().get(component_id, [])
+        return [product.to_response() for product in self._diverse_products(products, limit)]
+
+    def select_products_for_pack(
+        self,
+        component_ids: list[str],
+        limit_per_component: int = 1,
+    ) -> list[dict[str, Any]]:
+        selected: list[CatalogProduct] = []
+        used_pharmacies: dict[str, int] = {}
+        used_rs: set[str] = set()
+        used_product_keys: set[str] = set()
+
+        for component_id in component_ids:
+            candidates = self._products_by_component().get(component_id, [])
+            if not candidates:
+                continue
+
+            ranked = sorted(
+                candidates,
+                key=lambda product: self._pack_product_score(
+                    product,
+                    used_pharmacies=used_pharmacies,
+                    used_rs=used_rs,
+                    used_product_keys=used_product_keys,
+                ),
+                reverse=True,
+            )
+
+            picked_for_component = 0
+            for product in ranked:
+                if product.product_key in used_product_keys:
+                    continue
+
+                selected.append(product)
+                used_product_keys.add(product.product_key)
+                used_rs.add(product.registro_sanitario)
+                used_pharmacies[product.pharmacy] = used_pharmacies.get(product.pharmacy, 0) + 1
+                picked_for_component += 1
+
+                if picked_for_component >= limit_per_component:
+                    break
+
+        return [product.to_response() for product in selected]
+
+    def _products_by_component(self) -> dict[str, list[CatalogProduct]]:
+        return _catalog_by_component(str(self.catalog_path))
+
+    def _diverse_products(
+        self,
+        products: list[CatalogProduct],
+        limit: int,
+    ) -> list[CatalogProduct]:
+        selected: list[CatalogProduct] = []
+        seen_pharmacies = set()
+
+        for product in products:
+            if len(selected) >= limit:
+                break
+
+            if product.pharmacy in seen_pharmacies:
+                continue
+
+            selected.append(product)
+            seen_pharmacies.add(product.pharmacy)
+
+        if len(selected) < limit:
+            selected_keys = {product.product_key for product in selected}
+            for product in products:
+                if len(selected) >= limit:
+                    break
+
+                if product.product_key in selected_keys:
+                    continue
+
+                selected.append(product)
+                selected_keys.add(product.product_key)
+
+        return selected
+
+    def _pack_product_score(
+        self,
+        product: CatalogProduct,
+        *,
+        used_pharmacies: dict[str, int],
+        used_rs: set[str],
+        used_product_keys: set[str],
+    ) -> float:
+        match_score = (product.component_match_score or 85.0) / 100.0
+        price_score = 1.0 / (1.0 + max(product.price, 0.0))
+        diversity_penalty = 0.10 * used_pharmacies.get(product.pharmacy, 0)
+        rs_penalty = 0.08 if product.registro_sanitario in used_rs else 0.0
+        duplicate_penalty = 1.0 if product.product_key in used_product_keys else 0.0
+
+        return (
+            0.55 * match_score
+            + 0.45 * price_score
+            - diversity_penalty
+            - rs_penalty
+            - duplicate_penalty
+        )

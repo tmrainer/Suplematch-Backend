@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ConditionDisplay(BaseModel):
@@ -22,6 +22,7 @@ class RecommendationItem(BaseModel):
     dosage_hint: str
     priority: str
     icon_key: str
+    products: list["RecommendedProduct"] = Field(default_factory=list)
 
 
 class PackComponent(BaseModel):
@@ -46,12 +47,34 @@ class RankedPack(BaseModel):
     score_feedback: float | None = None
     feedback_count: int
     cta_label: str
+    selected_products: list["RecommendedProduct"] = Field(default_factory=list)
 
 
 class ComponentRelation(BaseModel):
     component_a: str
     component_b: str
     type: str
+
+
+class RecommendedProduct(BaseModel):
+    pharmacy: str
+    commercial_name: str
+    formal_name: str | None = None
+    registro_sanitario: str
+    digemid_producto: str | None = None
+    component_id: str
+    ingredient: str
+    amount: str | None = None
+    unit: str | None = None
+    amount_mg: float | None = None
+    component_match_score: float | None = None
+    price: float
+    currency: str
+    availability: str
+    url: str
+    sku: str | None = None
+    brand: str | None = None
+    regulatory_status: str
 
 
 class RecommendationResponse(BaseModel):

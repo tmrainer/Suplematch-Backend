@@ -88,6 +88,7 @@ curl -X POST http://localhost:8000/api/v1/recommend \
 
 La respuesta incluye `recommendation_id`, `conditions`, `recommendations`, `packs_ranked`, `sinergias`, `alertas` y `disclaimer`.
 También incluye campos listos para frontend, como `conditions_display`, `display_name`, `reason`, `dosage_hint`, `priority` e `icon_key`.
+Cuando existe `data/catalog/approved_catalog.csv`, `recommendations` incluye `products` por componente y `packs_ranked` incluye `selected_products` con productos reales validados por RS.
 
 Si los modelos o artefactos no están disponibles, la API responde de forma controlada:
 
@@ -149,6 +150,41 @@ Para el MVP actual, el pipeline usado por la API vive en:
 ```txt
 app/ml/runtime/pipeline_completo.py
 ```
+
+## Catálogo Aprobado DIGEMID
+
+La recomendación mantiene la lógica actual:
+
+```txt
+encuesta -> condiciones -> componentes -> packs con feedback
+```
+
+Luego se enriquece con productos reales usando esta relación:
+
+```txt
+supplements_exhaustive_clean.csv.registro_sanitario
+  -> digemid_limpio.csv.item
+  -> product_components.csv.item/component_id
+  -> modelo2 component_id
+```
+
+Para reconstruir el catálogo aprobado:
+
+```bash
+python scripts/build_approved_catalog.py \
+  --scraped /home/puntoipunto/suplematch-scraper/output/supplements_exhaustive_clean.csv \
+  --digemid digemid_limpio.csv \
+  --components product_components.csv \
+  --out data/catalog/approved_catalog.csv
+```
+
+El backend lee por defecto:
+
+```txt
+data/catalog/approved_catalog.csv
+```
+
+Los productos sin RS en DIGEMID, sin componentes confiables o no disponibles no se usan para recomendaciones comerciales.
 
 ## Persistencia de Feedback
 

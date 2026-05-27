@@ -129,3 +129,47 @@ def test_recommendation_fails_cleanly_when_pipeline_crashes():
         assert exc.detail == RECOMMENDATION_ERROR_DETAIL
     else:
         raise AssertionError("Expected RecommendationError")
+
+
+def test_recommendation_includes_approved_products_for_real_component_ids():
+    def pipeline(_payload, verbose=False):
+        return {
+            "recommendation_id": "rec_products",
+            "condiciones": ["DEFICIT_VIT_D"],
+            "recomendaciones": [
+                {
+                    "component_id": "COMP_94DFE28A9A5C",
+                    "nombre": "Vitamin D",
+                    "condicion": "DEFICIT_VIT_D",
+                    "score": 1.0,
+                    "tipo": "semilla_directa",
+                }
+            ],
+            "packs_ranked": [
+                {
+                    "pack_id": "pack_products",
+                    "rank": 1,
+                    "component_ids": ["COMP_94DFE28A9A5C"],
+                    "component_names": ["Vitamin D"],
+                    "score_final": 0.91,
+                    "score_gnn": 0.88,
+                    "score_coverage": 1.0,
+                    "score_feedback": 0.7,
+                    "feedback_count": 0,
+                }
+            ],
+            "sinergias": [],
+            "alertas": [],
+            "combo_seguro": True,
+            "mensaje": "OK",
+        }
+
+    service = RecommendationService(models={"pipeline_vitaminas": pipeline})
+    response = service.recommend(_encuesta())
+
+    RecommendationResponse.model_validate(response)
+
+    assert response["recommendations"][0]["products"]
+    assert response["recommendations"][0]["products"][0]["regulatory_status"] == "digemid_match"
+    assert response["packs_ranked"][0]["selected_products"]
+    assert response["packs_ranked"][0]["selected_products"][0]["component_id"] == "COMP_94DFE28A9A5C"

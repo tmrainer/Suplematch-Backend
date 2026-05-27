@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["*"]
     MODEL_DIR: Path = BASE_DIR / "app/ml/runtime"
     FEEDBACK_DB_PATH: Path = BASE_DIR / "app/ml/runtime/feedback.sqlite3"
+    DIGEMID_CSV_PATH: Path = BASE_DIR / "digemid_limpio.csv"
+    PRODUCT_COMPONENTS_CSV_PATH: Path = BASE_DIR / "product_components.csv"
+    APPROVED_CATALOG_PATH: Path = BASE_DIR / "data/catalog/approved_catalog.csv"
 
 
 settings = Settings()

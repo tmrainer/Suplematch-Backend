@@ -9,6 +9,7 @@ import numpy as np
 from app.schemas.encuesta import EncuestaInput
 from app.ml.feature_builder import FeatureBuilder
 from app.core.errors import ModelNotLoadedError, RecommendationGenerationError
+from app.services.product_catalog_service import ProductCatalogService
 
 
 DISCLAIMER = (
@@ -438,10 +439,38 @@ def _normalize_packs(values: Any) -> list[dict[str, Any]]:
     return packs
 
 
+def _attach_products_to_recommendations(
+    recommendations: list[dict[str, Any]],
+    product_catalog: ProductCatalogService,
+) -> list[dict[str, Any]]:
+    for recommendation in recommendations:
+        recommendation["products"] = product_catalog.products_for_component(
+            recommendation.get("component_id")
+        )
+
+    return recommendations
+
+
+def _attach_products_to_packs(
+    packs: list[dict[str, Any]],
+    product_catalog: ProductCatalogService,
+) -> list[dict[str, Any]]:
+    for pack in packs:
+        component_ids = [
+            str(component_id)
+            for component_id in pack.get("component_ids", [])
+            if component_id
+        ]
+        pack["selected_products"] = product_catalog.select_products_for_pack(component_ids)
+
+    return packs
+
+
 class RecommendationService:
     def __init__(self, models: dict):
         self.models = models
         self.feature_builder = FeatureBuilder()
+        self.product_catalog = ProductCatalogService()
 
     def recommend(self, encuesta: EncuestaInput) -> dict:
         pipeline = self.models.get("pipeline_vitaminas")
@@ -465,6 +494,14 @@ class RecommendationService:
             _first_present(resultado.get("recomendaciones"), resultado.get("recommendations"), [])
         )
         packs_ranked = _normalize_packs(resultado.get("packs_ranked", []))
+        recommendations = _attach_products_to_recommendations(
+            recommendations,
+            self.product_catalog,
+        )
+        packs_ranked = _attach_products_to_packs(
+            packs_ranked,
+            self.product_catalog,
+        )
 
         return {
             "session_id": f"ses_{uuid4().hex}",
