@@ -18,8 +18,8 @@ _cat_cols = _m1["cat_cols"]
 _num_cols = _m1["num_cols"]
 
 
-def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float]]:
-    """Modelo 1: encuesta → condiciones detectadas + probabilidades reales."""
+def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float], pd.DataFrame]:
+    """Modelo 1: encuesta → condiciones detectadas + probabilidades reales + row_df."""
     cols = _cat_cols + _num_cols
     row  = pd.DataFrame([usuario])[cols]
 
@@ -31,7 +31,7 @@ def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float]]:
         pred = _pipe_m1.predict(row)[0]
         detected = [_labels[i] for i, v in enumerate(pred) if v == 1]
 
-    return (detected if detected else ["SALUDABLE"]), condition_scores
+    return (detected if detected else ["SALUDABLE"]), condition_scores, row
 
 
 def pipeline_vitaminas(usuario: dict, verbose: bool = True) -> dict:
@@ -49,12 +49,14 @@ def pipeline_vitaminas(usuario: dict, verbose: bool = True) -> dict:
         packs_ranked      : list[dict]
         mensaje           : str
     """
-    condiciones, condition_scores = predecir_condicion(usuario)
+    condiciones, condition_scores, row_df = predecir_condicion(usuario)
 
     resultado = recomendar_suplementos(condiciones)
-    resultado["condiciones"]     = condiciones
+    resultado["condiciones"]      = condiciones
     resultado["condition_scores"] = condition_scores
-    resultado["explainability"]  = build_explainability(condition_scores, usuario)
+    resultado["explainability"]   = build_explainability(
+        _pipe_m1, _labels, row_df, condition_scores, usuario
+    )
 
     packs_ranked = rerank_packs(
         recomendaciones=resultado.get("recomendaciones", []),
