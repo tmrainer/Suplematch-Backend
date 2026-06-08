@@ -42,7 +42,6 @@ app/ml/runtime/user_feedback_events.json
 data/feedback/*.json
 
 # Heavy model artifacts
-*.pkl
 *.joblib
 artifacts/models/
 
