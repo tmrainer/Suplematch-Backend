@@ -1,56 +1,69 @@
 # SupleMatch Backend
 
-Backend FastAPI para generar recomendaciones de suplementos, registrar feedback y reordenar packs usando señales de uso.
+API FastAPI para recomendar suplementos personalizados según el perfil del usuario. Combina un clasificador de condiciones (Random Forest) con un recomendador basado en grafo GNN, enriquecido con productos reales validados por DIGEMID.
 
-## Requisitos
+## Stack
 
-- Python 3.12
-- scikit-learn 1.5.0
-- Linux/macOS o WSL recomendado para la ejecución local
+- Python 3.12 · FastAPI · SQLAlchemy · Alembic · PostgreSQL
+- Scikit-learn 1.5.0 (Modelo 1 — clasificador multilabel)
+- GNN sobre embeddings de grafo (Modelo 2 — recomendador)
+- SHAP para explicabilidad del Modelo 1
 
-`scikit-learn==1.5.0` está fijado en `requirements.txt` porque los artefactos `.pkl` del modelo deben cargarse con una versión compatible.
+## Setup local
 
-## Setup Local
-
-Crear y activar el entorno virtual:
+### 1. Crear entorno virtual
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 ```
 
-Actualizar herramientas base e instalar dependencias:
+### 2. Instalar dependencias
 
 ```bash
-python -m pip install --upgrade pip
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+> **Importante:** `scikit-learn==1.5.0` está fijado porque los archivos `.pkl` deben cargarse con la misma versión con que fueron entrenados. No actualizar sklearn sin reentrenar los modelos.
 
 Verificar versiones clave:
 
 ```bash
-python --version
-python -c "import sklearn; print(sklearn.__version__)"
+python -c "import sklearn; print(sklearn.__version__)"   # debe ser 1.5.0
+python -c "import shap; print(shap.__version__)"         # >= 0.45.0
 ```
 
-La versión esperada de `sklearn` es `1.5.0`.
-
-Opcionalmente, copiar variables locales:
+### 3. Variables de entorno
 
 ```bash
 cp .env.example .env
 ```
 
-Variables útiles:
+Variables relevantes:
 
-```txt
+```env
 MODEL_DIR=app/ml/runtime
 FEEDBACK_DB_PATH=app/ml/runtime/feedback.sqlite3
+DIGEMID_CSV_PATH=data/raw/csv/digemid_limpio.csv
+PRODUCT_COMPONENTS_CSV_PATH=data/training/modelo2/product_components.csv
+APPROVED_CATALOG_PATH=data/catalog/approved_catalog.csv
+DATABASE_URL=postgresql+psycopg://suplematch:suplematch@localhost:5432/suplematch
 ```
 
-## Ejecutar API
+### 4. Modelos
 
-Desde la raíz del proyecto:
+Los modelos entrenados están versionados en el repositorio:
+
+```
+app/ml/runtime/
+├── modelo1_pipeline.pkl       # Random Forest multilabel (clasificador de condiciones)
+└── modelo2_artifacts.pkl      # Embeddings GNN + grafo de relaciones
+```
+
+No se requiere reentrenamiento para correr la API.
+
+### 5. Levantar la API
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -62,13 +75,77 @@ Health check:
 curl http://localhost:8000/api/v1/health
 ```
 
-Estado de modelos:
+Estado de modelos cargados:
 
 ```bash
 curl http://localhost:8000/api/v1/debug/model-status
 ```
 
-## Probar `/recommend`
+---
+
+## Pipeline de recomendación
+
+```
+Encuesta del usuario
+      │
+      ▼
+Modelo 1 (Random Forest multilabel)
+  → predict_proba → probabilidades reales por condición
+  → SHAP TreeExplainer → drivers personalizados por usuario
+      │
+      ▼
+Condiciones detectadas (ej: FATIGA, DEFICIT_VIT_D)
+      │
+      ▼
+Modelo 2 (GNN — embeddings de grafo)
+  → semillas directas por condición
+  → candidatos por similitud coseno en el espacio de embeddings
+  → filtro de sinergias y alertas de interacción
+      │
+      ▼
+Re-ranking por feedback histórico
+      │
+      ▼
+Enriquecimiento con productos DIGEMID
+  → catálogo aprobado con RS validado y precios scrapeados
+```
+
+---
+
+## Explicabilidad (Explainability)
+
+El endpoint `/recommend` retorna el campo `explainability` con el detalle de **por qué** el modelo detectó cada condición para ese usuario específico.
+
+**Cómo funciona:**
+
+1. Se usa `predict_proba` del pipeline sklearn para obtener probabilidades reales (no hardcodeadas) por condición.
+2. Para cada condición con probabilidad ≥ 45%, se corre `shap.TreeExplainer` sobre el sub-estimador Random Forest correspondiente del `MultiOutputClassifier`.
+3. Se extraen los top-3 features por valor absoluto de SHAP, mapeando nombres transformados (post-`ColumnTransformer`) de vuelta a las variables originales de la encuesta.
+4. Si `shap` no está instalado, el sistema cae automáticamente a un mapeo basado en reglas de dominio (mismo resultado visual, menor precisión).
+
+**Ejemplo de respuesta:**
+
+```json
+"explainability": [
+  {
+    "condition": "FATIGA",
+    "probability": 0.83,
+    "drivers": [
+      { "label": "Fatiga frecuente",   "value": 4, "value_label": "A menudo",  "impact": "alto",  "shap_value": 0.31 },
+      { "label": "Problemas de sueño", "value": 5, "value_label": "Severo",    "impact": "alto",  "shap_value": 0.22 },
+      { "label": "Nivel de estrés",    "value": 3, "value_label": "Moderado",  "impact": "medio", "shap_value": 0.09 }
+    ]
+  }
+]
+```
+
+El campo `shap_value` indica la contribución real de esa variable al score del modelo para ese usuario. Es distinto para cada persona.
+
+---
+
+## Endpoints principales
+
+### POST `/api/v1/recommend`
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/recommend \
@@ -86,183 +163,94 @@ curl -X POST http://localhost:8000/api/v1/recommend \
   }'
 ```
 
-La respuesta incluye `recommendation_id`, `conditions`, `recommendations`, `packs_ranked`, `sinergias`, `alertas` y `disclaimer`.
-También incluye campos listos para frontend, como `conditions_display`, `display_name`, `reason`, `dosage_hint`, `priority` e `icon_key`.
-Cuando existe `data/catalog/approved_catalog.csv`, `recommendations` incluye `products` por componente y `packs_ranked` incluye `selected_products` con productos reales validados por RS.
+Campos de la respuesta:
 
-Si los modelos o artefactos no están disponibles, la API responde de forma controlada:
+| Campo | Descripción |
+|---|---|
+| `conditions` | Condiciones detectadas (códigos) |
+| `conditions_display` | Condiciones con nombre, nivel y probabilidad real |
+| `explainability` | Drivers SHAP por condición — qué variables influyeron y cuánto |
+| `recommendations` | Suplementos con razón, dosis y productos reales |
+| `packs_ranked` | Packs ordenados por score GNN + feedback histórico |
+| `sinergias` | Pares de componentes con sinergia funcional (del grafo) |
+| `alertas` | Interacciones riesgosas detectadas |
+| `disclaimer` | Aviso médico |
 
-```json
-{
-  "detail": "No se pudo generar la recomendación. Revisa los artefactos del modelo."
-}
-```
-
-## Probar `/feedback`
-
-Usa un `recommendation_id` y un `pack_id` devueltos por `/recommend`:
+### POST `/api/v1/feedback`
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/feedback \
   -H "Content-Type: application/json" \
   -d '{
-    "recommendation_id": "rec_demo",
-    "pack_id": "pack_demo",
-    "component_ids": ["cmp_vit_d", "cmp_calcium"],
+    "recommendation_id": "rec_abc123",
+    "pack_id": "pack_1",
+    "component_ids": ["COMP_ABC", "COMP_XYZ"],
     "rating": 5,
-    "conditions": ["DEFICIT_VIT_D"],
-    "comment": "Me sirvió la recomendación"
+    "conditions": ["FATIGA"],
+    "comment": "Me sirvió"
   }'
 ```
 
-`rating` debe estar entre `1` y `5`.
+El feedback alimenta el re-ranking de packs en recomendaciones futuras.
 
-Resumen de feedback:
+---
 
-```bash
-curl http://localhost:8000/api/v1/feedback/summary
+## Datos
+
+### Estructura
+
+```
+data/
+├── raw/
+│   └── csv/
+│       ├── digemid_limpio.csv              # Registro DIGEMID (productos regulados)
+│       ├── supplements_exhaustive_clean.csv # Scraping de farmacias peruanas
+│       └── scrape_parts/                   # CSVs por farmacia
+├── training/
+│   └── modelo2/
+│       ├── Component_Master_Clean.csv      # Catálogo de componentes con señales
+│       ├── Component_Relationship_Edges_Clean.csv  # Relaciones del grafo
+│       └── product_components.csv          # Mapeo ítem DIGEMID → componente
+└── catalog/
+    └── approved_catalog.csv               # Catálogo aprobado (generado)
 ```
 
-## Modelos
-
-El runtime carga los modelos desde:
-
-```txt
-app/ml/runtime/modelo1_pipeline.pkl
-app/ml/runtime/modelo2_artifacts_cpu.pkl
-```
-
-La carpeta se puede cambiar con:
-
-```env
-MODEL_DIR=/ruta/a/modelos
-```
-
-También existen artefactos en:
-
-```txt
-artifacts/models/modelo1_pipeline.pkl
-artifacts/models/modelo2_artifacts.pkl
-```
-
-Para el MVP actual, el pipeline usado por la API vive en:
-
-```txt
-app/ml/runtime/pipeline_completo.py
-```
-
-## Catálogo Aprobado DIGEMID
-
-La recomendación mantiene la lógica actual:
-
-```txt
-encuesta -> condiciones -> componentes -> packs con feedback
-```
-
-Luego se enriquece con productos reales usando esta relación:
-
-```txt
-supplements_exhaustive_clean.csv.registro_sanitario
-  -> digemid_limpio.csv.item
-  -> product_components.csv.item/component_id
-  -> modelo2 component_id
-```
-
-Para reconstruir el catálogo aprobado:
+### Reconstruir catálogo aprobado
 
 ```bash
 python scripts/build_approved_catalog.py \
-  --scraped /home/puntoipunto/suplematch-scraper/output/supplements_exhaustive_clean.csv \
-  --digemid digemid_limpio.csv \
-  --components product_components.csv \
+  --scraped data/raw/csv/supplements_exhaustive_clean.csv \
+  --digemid data/raw/csv/digemid_limpio.csv \
+  --components data/training/modelo2/product_components.csv \
   --out data/catalog/approved_catalog.csv
 ```
 
-El backend lee por defecto:
+---
 
-```txt
-data/catalog/approved_catalog.csv
-```
-
-Los productos sin RS en DIGEMID, sin componentes confiables o no disponibles no se usan para recomendaciones comerciales.
-
-## Persistencia de Feedback
-
-La persistencia principal local usa SQLite:
-
-```txt
-app/ml/runtime/feedback.sqlite3
-```
-
-La ruta se puede cambiar con:
-
-```env
-FEEDBACK_DB_PATH=/ruta/local/feedback.sqlite3
-```
-
-Tablas mínimas:
-
-```txt
-recommendation_events
-feedback_events
-```
-
-Los JSON legacy se mantienen como fuente de migración para demos locales:
-
-```txt
-app/ml/runtime/recommendation_events.json
-app/ml/runtime/user_feedback_events.json
-```
-
-En el primer acceso al store, los eventos existentes en esos JSON se migran a SQLite con `INSERT OR IGNORE`.
-
-## Tests Mínimos
-
-Si `pytest` está instalado:
+## Tests
 
 ```bash
 pytest tests/integration -q
 ```
 
-Los tests de integración cubren:
-
-```txt
-GET /api/v1/health
-GET /api/v1/debug/model-status
-POST /api/v1/recommend
-POST /api/v1/feedback
-```
-
-## Validación de Calidad de Recomendaciones
-
-Para validar el comportamiento del modelo con datos reales y medir el impacto del feedback:
+Validación de calidad del modelo:
 
 ```bash
 python scripts/validate_recommendation_quality.py
 ```
 
-La validación ejecuta 15 perfiles ideales no saludables y revisa:
+---
 
-```txt
-condiciones accionables detectadas
-mínimo 3 suplementos recomendados por perfil
-packs_ranked generado
-top pack con al menos 2 suplementos
-combo sin alertas riesgosas
-feedback_count sube después del feedback
-ratings positivos elevan score_feedback
-ratings negativos reducen score_feedback
-score_final cambia en recomendaciones posteriores
-```
-
-Por defecto usa una base SQLite temporal para no contaminar la demo local. Para guardar un reporte JSON:
+## Docker
 
 ```bash
-python scripts/validate_recommendation_quality.py --output reports/recommendation_quality.json
+docker compose up --build
 ```
 
-Para validar usando el store real configurado por `FEEDBACK_DB_PATH`:
+---
 
-```bash
-python scripts/validate_recommendation_quality.py --use-runtime-store
-```
+## Notas de versión
+
+- `scikit-learn==1.5.0` — no cambiar sin reentrenar los `.pkl`
+- `shap>=0.45.0` — requerido para explicabilidad SHAP; si no está instalado el sistema usa fallback automático
+- `torch` — requerido por el Modelo 2 (GNN embeddings)
