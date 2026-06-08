@@ -3,11 +3,16 @@ from __future__ import annotations
 import csv
 import math
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.repositories.catalog_repository import CatalogRepository
+from app.repositories.review_metrics_repository import DEFAULT_REVIEW_SCORE, ReviewMetricsRepository
 
 
 MAX_PRODUCTS_PER_COMPONENT = 3
@@ -159,8 +164,16 @@ def _base_product_sort_key(product: CatalogProduct) -> tuple[float, float, str, 
 
 
 class ProductCatalogService:
-    def __init__(self, catalog_path: Path | None = None):
+    def __init__(
+        self,
+        catalog_path: Path | None = None,
+        db: Session | None = None,
+        budget_preference: str = "sin_preferencia",
+    ):
         self.catalog_path = catalog_path or settings.APPROVED_CATALOG_PATH
+        self.db = db
+        self.budget_preference = budget_preference
+        self.review_metrics = ReviewMetricsRepository(db) if db is not None else None
 
     def products_for_component(
         self,
@@ -170,15 +183,31 @@ class ProductCatalogService:
         if not component_id:
             return []
 
+        if self.db is not None:
+            products = CatalogRepository(self.db).products_for_component(component_id, limit=50)
+            products = self._score_product_dicts(
+                products,
+                used_pharmacies={},
+                used_rs=set(),
+                used_product_ids=set(),
+            )
+            return self._diverse_product_dicts(products, limit)
+
         products = self._products_by_component().get(component_id, [])
-        return [product.to_response() for product in self._diverse_products(products, limit)]
+        return [
+            self._score_catalog_product(product, used_pharmacies={}, used_rs=set(), used_product_keys=set())
+            for product in self._diverse_products(products, limit)
+        ]
 
     def select_products_for_pack(
         self,
         component_ids: list[str],
         limit_per_component: int = 1,
     ) -> list[dict[str, Any]]:
-        selected: list[CatalogProduct] = []
+        if self.db is not None:
+            return self._select_products_for_pack_from_db(component_ids, limit_per_component)
+
+        selected: list[dict[str, Any]] = []
         used_pharmacies: dict[str, int] = {}
         used_rs: set[str] = set()
         used_product_keys: set[str] = set()
@@ -204,7 +233,14 @@ class ProductCatalogService:
                 if product.product_key in used_product_keys:
                     continue
 
-                selected.append(product)
+                selected.append(
+                    self._score_catalog_product(
+                        product,
+                        used_pharmacies=used_pharmacies,
+                        used_rs=used_rs,
+                        used_product_keys=used_product_keys,
+                    )
+                )
                 used_product_keys.add(product.product_key)
                 used_rs.add(product.registro_sanitario)
                 used_pharmacies[product.pharmacy] = used_pharmacies.get(product.pharmacy, 0) + 1
@@ -213,7 +249,54 @@ class ProductCatalogService:
                 if picked_for_component >= limit_per_component:
                     break
 
-        return [product.to_response() for product in selected]
+        return selected
+
+    def _select_products_for_pack_from_db(
+        self,
+        component_ids: list[str],
+        limit_per_component: int,
+    ) -> list[dict[str, Any]]:
+        selected: list[dict[str, Any]] = []
+        used_pharmacies: dict[str, int] = {}
+        used_rs: set[str] = set()
+        used_product_ids: set[str] = set()
+        repo = CatalogRepository(self.db)
+
+        for component_id in component_ids:
+            candidates = repo.products_for_component(component_id, limit=50)
+            if not candidates:
+                continue
+            candidates = self._score_product_dicts(
+                candidates,
+                used_pharmacies=used_pharmacies,
+                used_rs=used_rs,
+                used_product_ids=used_product_ids,
+            )
+
+            ranked = sorted(
+                candidates,
+                key=lambda product: float(product.get("product_score") or 0.0),
+                reverse=True,
+            )
+
+            picked_for_component = 0
+            for product in ranked:
+                product_id = str(product.get("product_id") or product.get("url"))
+                if product_id in used_product_ids:
+                    continue
+
+                selected.append(product)
+                used_product_ids.add(product_id)
+                if product.get("registro_sanitario"):
+                    used_rs.add(str(product["registro_sanitario"]))
+                pharmacy = str(product.get("pharmacy") or "")
+                used_pharmacies[pharmacy] = used_pharmacies.get(pharmacy, 0) + 1
+                picked_for_component += 1
+
+                if picked_for_component >= limit_per_component:
+                    break
+
+        return selected
 
     def _products_by_component(self) -> dict[str, list[CatalogProduct]]:
         return _catalog_by_component(str(self.catalog_path))
@@ -250,6 +333,40 @@ class ProductCatalogService:
 
         return selected
 
+    def _diverse_product_dicts(
+        self,
+        products: list[dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        selected: list[dict[str, Any]] = []
+        seen_pharmacies = set()
+
+        for product in products:
+            if len(selected) >= limit:
+                break
+
+            pharmacy = product.get("pharmacy")
+            if pharmacy in seen_pharmacies:
+                continue
+
+            selected.append(product)
+            seen_pharmacies.add(pharmacy)
+
+        if len(selected) < limit:
+            selected_ids = {product.get("product_id") or product.get("url") for product in selected}
+            for product in products:
+                if len(selected) >= limit:
+                    break
+
+                product_id = product.get("product_id") or product.get("url")
+                if product_id in selected_ids:
+                    continue
+
+                selected.append(product)
+                selected_ids.add(product_id)
+
+        return selected
+
     def _pack_product_score(
         self,
         product: CatalogProduct,
@@ -258,16 +375,229 @@ class ProductCatalogService:
         used_rs: set[str],
         used_product_keys: set[str],
     ) -> float:
-        match_score = (product.component_match_score or 85.0) / 100.0
-        price_score = 1.0 / (1.0 + max(product.price, 0.0))
-        diversity_penalty = 0.10 * used_pharmacies.get(product.pharmacy, 0)
-        rs_penalty = 0.08 if product.registro_sanitario in used_rs else 0.0
-        duplicate_penalty = 1.0 if product.product_key in used_product_keys else 0.0
-
-        return (
-            0.55 * match_score
-            + 0.45 * price_score
-            - diversity_penalty
-            - rs_penalty
-            - duplicate_penalty
+        scored = self._score_catalog_product(
+            product,
+            used_pharmacies=used_pharmacies,
+            used_rs=used_rs,
+            used_product_keys=used_product_keys,
         )
+        duplicate_penalty = 1.0 if product.product_key in used_product_keys else 0.0
+        return float(scored.get("product_score") or 0.0) - duplicate_penalty
+
+    def _score_catalog_product(
+        self,
+        product: CatalogProduct,
+        *,
+        used_pharmacies: dict[str, int],
+        used_rs: set[str],
+        used_product_keys: set[str],
+    ) -> dict[str, Any]:
+        response = product.to_response()
+        response["stock"] = None
+        response["last_seen_at"] = None
+        duplicate_penalty = 1.0 if product.product_key in used_product_keys else 0.0
+        return self._apply_product_scores(
+            response,
+            review_metrics={
+                "review_score": DEFAULT_REVIEW_SCORE,
+                "bayesian_review_score": DEFAULT_REVIEW_SCORE,
+                "review_count": 0,
+                "avg_rating": None,
+                "verified_review_count": 0,
+                "verified_review_ratio": 0.0,
+            },
+            used_pharmacies=used_pharmacies,
+            used_rs=used_rs,
+            duplicate_penalty=duplicate_penalty,
+        )
+
+    def _score_product_dicts(
+        self,
+        products: list[dict[str, Any]],
+        *,
+        used_pharmacies: dict[str, int],
+        used_rs: set[str],
+        used_product_ids: set[str],
+    ) -> list[dict[str, Any]]:
+        review_metrics_by_product = {}
+        if self.review_metrics is not None:
+            review_metrics_by_product = self.review_metrics.product_metrics(
+                [product.get("product_id") for product in products if product.get("product_id")]
+            )
+
+        scored = []
+        for product in products:
+            product_id = str(product.get("product_id") or product.get("url") or "")
+            duplicate_penalty = 1.0 if product_id in used_product_ids else 0.0
+            scored.append(
+                self._apply_product_scores(
+                    dict(product),
+                    review_metrics=review_metrics_by_product.get(product_id),
+                    used_pharmacies=used_pharmacies,
+                    used_rs=used_rs,
+                    duplicate_penalty=duplicate_penalty,
+                )
+            )
+        return scored
+
+    def _apply_product_scores(
+        self,
+        product: dict[str, Any],
+        *,
+        review_metrics: dict[str, Any] | None,
+        used_pharmacies: dict[str, int],
+        used_rs: set[str],
+        duplicate_penalty: float,
+    ) -> dict[str, Any]:
+        match_score = self._match_score(product)
+        price_score = self._price_score(product.get("price"))
+        stock_score = self._stock_score(product)
+        traceability_score = self._traceability_score(product)
+        pharmacy_diversity_score = self._pharmacy_diversity_score(product, used_pharmacies)
+        freshness_score = self._freshness_score(product.get("last_seen_at"))
+        review_score = float((review_metrics or {}).get("review_score", DEFAULT_REVIEW_SCORE))
+        verified_review_ratio = float((review_metrics or {}).get("verified_review_ratio", 0.0))
+
+        price_stock_score = (price_score + stock_score) / 2.0
+        if self.budget_preference == "bajo":
+            product_score = (
+                0.28 * match_score
+                + 0.30 * price_stock_score
+                + 0.16 * review_score
+                + 0.13 * traceability_score
+                + 0.08 * pharmacy_diversity_score
+                + 0.05 * freshness_score
+                + 0.02 * min(verified_review_ratio, 1.0)
+                - duplicate_penalty
+            )
+        else:
+            product_score = (
+                0.30 * match_score
+                + 0.20 * price_stock_score
+                + 0.20 * review_score
+                + 0.15 * traceability_score
+                + 0.10 * pharmacy_diversity_score
+                + 0.05 * freshness_score
+                + 0.03 * min(verified_review_ratio, 1.0)
+                - duplicate_penalty
+            )
+
+        metrics = {
+            "match_score": round(match_score, 4),
+            "price_score": round(price_score, 4),
+            "stock_score": round(stock_score, 4),
+            "traceability_score": round(traceability_score, 4),
+            "pharmacy_diversity_score": round(pharmacy_diversity_score, 4),
+            "freshness_score": round(freshness_score, 4),
+            "review_score": round(review_score, 4),
+            "product_score": round(max(0.0, min(1.0, product_score)), 4),
+        }
+        if review_metrics:
+            metrics.update(review_metrics)
+
+        product.update(metrics)
+        product["selection_metrics"] = dict(metrics)
+        product["selection_reasons"] = self._selection_reasons(metrics)
+        return product
+
+    def _match_score(self, product: dict[str, Any]) -> float:
+        try:
+            raw = float(product.get("component_match_score") or 85.0)
+        except (TypeError, ValueError):
+            raw = 85.0
+        return max(0.0, min(1.0, raw / 100.0))
+
+    def _price_score(self, value: Any) -> float:
+        try:
+            price = float(value or 0.0)
+        except (TypeError, ValueError):
+            return 0.65
+        if price <= 0:
+            return 0.65
+        return max(0.05, min(1.0, 1.0 / (1.0 + price / 100.0)))
+
+    def _stock_score(self, product: dict[str, Any]) -> float:
+        availability = str(product.get("availability") or "").lower()
+        stock = product.get("stock")
+        if "available" not in availability:
+            return 0.25
+        try:
+            stock_value = int(stock)
+        except (TypeError, ValueError):
+            return 0.75
+        if stock_value <= 0:
+            return 0.40
+        if stock_value < 5:
+            return 0.75
+        return 1.0
+
+    def _traceability_score(self, product: dict[str, Any]) -> float:
+        status = str(product.get("regulatory_status") or "").lower()
+        registro = _clean(product.get("registro_sanitario"))
+        if registro and ("digemid" in status or "match" in status):
+            return 1.0
+        if registro:
+            return 0.85
+        if "trace" in status or "match" in status:
+            return 0.70
+        return 0.45
+
+    def _pharmacy_diversity_score(self, product: dict[str, Any], used_pharmacies: dict[str, int]) -> float:
+        pharmacy = str(product.get("pharmacy") or "")
+        return max(0.35, 1.0 - 0.20 * used_pharmacies.get(pharmacy, 0))
+
+    def _freshness_score(self, last_seen_at: Any) -> float:
+        if not last_seen_at:
+            return 0.70
+        if isinstance(last_seen_at, datetime):
+            seen_at = last_seen_at
+        else:
+            try:
+                seen_at = datetime.fromisoformat(str(last_seen_at).replace("Z", "+00:00"))
+            except ValueError:
+                return 0.70
+        if seen_at.tzinfo is None:
+            seen_at = seen_at.replace(tzinfo=timezone.utc)
+        age_days = max(0, (datetime.now(timezone.utc) - seen_at).days)
+        if age_days <= 7:
+            return 1.0
+        if age_days <= 30:
+            return 0.85
+        if age_days <= 90:
+            return 0.65
+        return 0.45
+
+    def _selection_reasons(self, metrics: dict[str, Any]) -> list[str]:
+        reasons = []
+        if metrics["match_score"] >= 0.85:
+            reasons.append("Buen match con el componente recomendado")
+        if metrics["price_score"] >= 0.70:
+            reasons.append("Precio competitivo")
+        if metrics["review_score"] >= 0.75 and int(metrics.get("review_count") or 0) > 0:
+            reasons.append("Reviews publicadas positivas")
+        if metrics["traceability_score"] >= 0.85:
+            reasons.append("Registro sanitario trazable")
+        if metrics["pharmacy_diversity_score"] >= 0.90:
+            reasons.append("Aporta diversidad de farmacia")
+        if not reasons:
+            reasons.append("Opcion comercial disponible para este componente")
+        return reasons[:4]
+
+    def _pack_product_dict_score(
+        self,
+        product: dict[str, Any],
+        *,
+        used_pharmacies: dict[str, int],
+        used_rs: set[str],
+        used_product_ids: set[str],
+    ) -> float:
+        product_id = str(product.get("product_id") or product.get("url") or "")
+        duplicate_penalty = 1.0 if product_id in used_product_ids else 0.0
+        scored = self._apply_product_scores(
+            dict(product),
+            review_metrics=None,
+            used_pharmacies=used_pharmacies,
+            used_rs=used_rs,
+            duplicate_penalty=duplicate_penalty,
+        )
+        return float(scored.get("product_score") or 0.0)

@@ -8,8 +8,10 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from app.schemas.encuesta import EncuestaInput
+from app.db.models import User
 from app.ml.feature_builder import FeatureBuilder
 from app.core.errors import ModelNotLoadedError, RecommendationGenerationError
+from app.repositories.recommendation_metrics_repository import RecommendationMetricsRepository
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.services.product_catalog_service import ProductCatalogService
 
@@ -64,6 +66,34 @@ COMPONENT_DOSAGE_HINTS = {
     "magnesio": "Suele tolerarse mejor por la noche",
     "iron": "Evitar combinarlo con calcio en la misma toma",
     "hierro": "Evitar combinarlo con calcio en la misma toma",
+}
+
+CURRENT_SUPPLEMENT_KEYWORDS = {
+    "vitamina_d": ("vitamin d", "vitamina d", "d3"),
+    "calcio": ("calcium", "calcio"),
+    "magnesio": ("magnesium", "magnesio"),
+    "zinc": ("zinc",),
+    "vitamina_c": ("vitamin c", "vitamina c", "ascorb"),
+    "hierro": ("iron", "hierro"),
+    "omega_3": ("omega", "epa", "dha"),
+    "multivitaminico": ("multi",),
+    "proteina": ("protein", "proteina"),
+}
+
+SECURITY_WARNING_LABELS = {
+    "embarazo_lactancia": "Embarazo o lactancia: validar cualquier suplemento con un profesional de salud.",
+    "enfermedad_renal": "Enfermedad renal: evitar suplementación sin evaluación médica.",
+    "enfermedad_hepatica": "Enfermedad hepática: revisar seguridad y dosis con un profesional.",
+    "anticoagulantes": "Uso de anticoagulantes: revisar interacciones antes de tomar suplementos.",
+    "medicacion_cronica": "Medicación crónica: confirmar posibles interacciones antes de iniciar suplementos.",
+}
+
+RESTRICTION_WARNING_LABELS = {
+    "alergia_lacteos": "Alergia a lácteos: revisar excipientes y origen del producto.",
+    "alergia_soya": "Alergia a soya: revisar excipientes del producto.",
+    "alergia_pescado_mariscos": "Alergia a pescado o mariscos: cuidado con omega 3 de origen marino.",
+    "evita_gelatina": "Evita gelatina: revisar cápsulas blandas o de origen animal.",
+    "sin_gluten": "Sin gluten: verificar declaración del fabricante.",
 }
 
 
@@ -177,6 +207,52 @@ def _dosage_hint(name: str, rec_type: str | None) -> str:
         return "Prioritario para el perfil detectado"
 
     return "Complementario para el perfil detectado"
+
+
+def _current_supplement_match(name: str | None, current_supplements: list[str]) -> bool:
+    clean = (name or "").lower()
+    for supplement in current_supplements:
+        if any(keyword in clean for keyword in CURRENT_SUPPLEMENT_KEYWORDS.get(supplement, ())):
+            return True
+    return False
+
+
+def _profile_warnings(encuesta: EncuestaInput) -> list[str]:
+    warnings = []
+    current_supplements = getattr(encuesta, "suplementos_actuales", []) or []
+    if current_supplements:
+        warnings.append("Ya consumes suplementos: evita duplicar dosis sin revisar etiqueta y dosis total diaria.")
+
+    for item in getattr(encuesta, "condiciones_seguridad", []) or []:
+        warning = SECURITY_WARNING_LABELS.get(item)
+        if warning and warning not in warnings:
+            warnings.append(warning)
+
+    for item in getattr(encuesta, "restricciones", []) or []:
+        warning = RESTRICTION_WARNING_LABELS.get(item)
+        if warning and warning not in warnings:
+            warnings.append(warning)
+
+    if getattr(encuesta, "edad_rango", None) == "menos_18":
+        warnings.append("Menor de edad: las recomendaciones requieren supervisión de un adulto y profesional de salud.")
+
+    return warnings
+
+
+def _annotate_current_supplements(recommendations: list[dict[str, Any]], encuesta: EncuestaInput) -> list[dict[str, Any]]:
+    current_supplements = getattr(encuesta, "suplementos_actuales", []) or []
+    if not current_supplements:
+        return recommendations
+
+    for recommendation in recommendations:
+        already_taking = _current_supplement_match(
+            recommendation.get("name") or recommendation.get("display_name"),
+            current_supplements,
+        )
+        recommendation["already_taking"] = already_taking
+        if already_taking:
+            recommendation["safety_note"] = "Indicas que ya consumes algo similar; revisar dosis y evitar duplicar."
+    return recommendations
 
 
 def _recommendation_reason(condition: str | None, rec_type: str | None) -> str:
@@ -300,7 +376,7 @@ def _normalize_recommendations(values: Any, condition_scores: dict[str, float] |
             "score": score,
             "type": rec_type,
             "type_display": _type_display_name(rec_type),
-            "reason": _recommendation_reason_with_score(condition, condition_score, rec_type),
+            "reason": _recommendation_reason(condition, rec_type),
             "dosage_hint": _dosage_hint(name, rec_type),
             "priority": "principal" if rec_type == "semilla_directa" else "complementaria",
             "icon_key": _component_icon_key(name),
@@ -494,9 +570,9 @@ class RecommendationService:
         self.models = models
         self.db = db
         self.feature_builder = FeatureBuilder()
-        self.product_catalog = ProductCatalogService()
+        self.product_catalog = ProductCatalogService(db=db)
 
-    def recommend(self, encuesta: EncuestaInput) -> dict:
+    def recommend(self, encuesta: EncuestaInput, user: User | None = None) -> dict:
         pipeline = self.models.get("pipeline_vitaminas")
 
         if pipeline is None:
@@ -522,14 +598,18 @@ class RecommendationService:
             condition_scores=condition_scores,
         )
         packs_ranked = _normalize_packs(resultado.get("packs_ranked", []))
+        self.product_catalog.budget_preference = getattr(encuesta, "presupuesto", "sin_preferencia")
         recommendations = _attach_products_to_recommendations(
             recommendations,
             self.product_catalog,
         )
+        recommendations = _annotate_current_supplements(recommendations, encuesta)
         packs_ranked = _attach_products_to_packs(
             packs_ranked,
             self.product_catalog,
         )
+        if self.db is not None:
+            packs_ranked = RecommendationMetricsRepository(self.db).apply_metrics_to_packs(packs_ranked)
 
         session_id = f"ses_{uuid4().hex}"
         recommendation_id = _clean_text(resultado.get("recommendation_id")) or f"rec_{uuid4().hex}"
@@ -552,6 +632,7 @@ class RecommendationService:
             "combo_seguro": resultado.get("combo_seguro", True),
             "mensaje": resultado.get("mensaje", "OK"),
             "disclaimer": DISCLAIMER,
+            "profile_warnings": _profile_warnings(encuesta),
             "model_versions": model_versions,
         }
 
@@ -564,6 +645,7 @@ class RecommendationService:
                 model_versions=model_versions,
                 recommendations=recommendations,
                 packs_ranked=packs_ranked,
+                user_id=user.id if user else None,
             )
 
         return response

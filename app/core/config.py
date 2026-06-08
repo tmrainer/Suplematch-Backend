@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["*"]
     DATABASE_URL: str = "postgresql+psycopg://suplematch:suplematch@localhost:5432/suplematch"
     DB_ECHO: bool = False
+    JWT_SECRET_KEY: str = "change-me-local-dev-only"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     MODEL_DIR: Path = BASE_DIR / "app/ml/runtime"
     FEEDBACK_DB_PATH: Path = BASE_DIR / "app/ml/runtime/feedback.sqlite3"
     DIGEMID_CSV_PATH: Path = BASE_DIR / "data/raw/csv/digemid_limpio.csv"

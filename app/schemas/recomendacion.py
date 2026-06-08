@@ -38,6 +38,8 @@ class RecommendationItem(BaseModel):
     priority: str
     icon_key: str
     products: list["RecommendedProduct"] = Field(default_factory=list)
+    already_taking: bool = False
+    safety_note: str | None = None
 
 
 class PackComponent(BaseModel):
@@ -60,7 +62,13 @@ class RankedPack(BaseModel):
     score_gnn: float | None = None
     score_coverage: float | None = None
     score_feedback: float | None = None
+    score_reviews: float | None = None
+    score_exposure: float | None = None
+    score_products: float | None = None
+    score_diversity: float | None = None
     feedback_count: int
+    reviews_count: int = 0
+    exposure_count: int = 0
     cta_label: str
     selected_products: list["RecommendedProduct"] = Field(default_factory=list)
 
@@ -72,6 +80,7 @@ class ComponentRelation(BaseModel):
 
 
 class RecommendedProduct(BaseModel):
+    product_id: str | None = None
     pharmacy: str
     commercial_name: str
     formal_name: str | None = None
@@ -90,6 +99,21 @@ class RecommendedProduct(BaseModel):
     sku: str | None = None
     brand: str | None = None
     regulatory_status: str
+    stock: int | None = None
+    last_seen_at: str | None = None
+    product_score: float | None = None
+    match_score: float | None = None
+    review_score: float | None = None
+    review_count: int = 0
+    avg_rating: float | None = None
+    bayesian_review_score: float | None = None
+    price_score: float | None = None
+    stock_score: float | None = None
+    traceability_score: float | None = None
+    pharmacy_diversity_score: float | None = None
+    freshness_score: float | None = None
+    selection_reasons: list[str] = Field(default_factory=list)
+    selection_metrics: dict[str, Any] = Field(default_factory=dict)
 
 
 class RecommendationResponse(BaseModel):
@@ -105,4 +129,5 @@ class RecommendationResponse(BaseModel):
     combo_seguro: bool
     mensaje: str
     disclaimer: str
+    profile_warnings: list[str] = Field(default_factory=list)
     model_versions: dict[str, str]

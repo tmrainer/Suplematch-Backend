@@ -1,3 +1,7 @@
+from sqlalchemy import select
+
+from app.db.models import RecommendationSession
+from app.db.session import SessionLocal
 from app.main import create_app
 from tests.integration.test_health import asgi_request
 
@@ -17,9 +21,19 @@ def _survey_payload():
 
 
 def test_recommend_endpoint_returns_normalized_response():
+    recommendation_id = "rec_test_normalized_response"
+
+    with SessionLocal() as db:
+        existing = db.scalar(
+            select(RecommendationSession).where(RecommendationSession.recommendation_id == recommendation_id)
+        )
+        if existing is not None:
+            db.delete(existing)
+            db.commit()
+
     def pipeline(_payload, verbose=False):
         return {
-            "recommendation_id": "rec_test",
+            "recommendation_id": recommendation_id,
             "condiciones": ["DEFICIT_VIT_D"],
             "recomendaciones": [
                 {
@@ -62,7 +76,7 @@ def test_recommend_endpoint_returns_normalized_response():
     status_code, body = asgi_request(app, "POST", "/api/v1/recommend", _survey_payload())
 
     assert status_code == 200
-    assert body["recommendation_id"] == "rec_test"
+    assert body["recommendation_id"] == recommendation_id
     assert body["conditions"] == ["DEFICIT_VIT_D"]
     assert body["conditions_display"][0]["display_name"] == "Déficit de vitamina D"
     assert body["recommendations"][0]["name"] == "Vitamin D"
@@ -79,3 +93,11 @@ def test_recommend_endpoint_returns_normalized_response():
     ]
     assert body["alertas"] == []
     assert body["disclaimer"]
+
+    with SessionLocal() as db:
+        session = db.scalar(
+            select(RecommendationSession).where(RecommendationSession.recommendation_id == recommendation_id)
+        )
+        if session is not None:
+            db.delete(session)
+            db.commit()

@@ -335,45 +335,72 @@ def load_feedback_events() -> list[dict[str, Any]]:
 def get_feedback_stats_by_pack() -> dict[str, dict[str, Any]]:
     stats: dict[str, dict[str, Any]] = {}
 
-    for event in load_feedback_events():
-        component_ids = [str(cid) for cid in event.get("component_ids") or [] if cid]
-        pack_id = event.get("pack_id")
+    with _connect() as conn:
+        # Eventos con pack_id explícito — agregados en SQL
+        rows = conn.execute(
+            """
+            SELECT
+                pack_id,
+                COUNT(*) AS n,
+                AVG((rating_overall - 1.0) / 4.0) AS avg_score,
+                MAX(timestamp) AS last_feedback_at
+            FROM feedback_events
+            WHERE pack_id IS NOT NULL
+              AND rating_overall IS NOT NULL
+            GROUP BY pack_id
+            """
+        ).fetchall()
 
-        if not pack_id and not component_ids:
-            continue
-
-        pack_id = pack_id or _pack_key(component_ids)
-        score = _rating_to_score(event.get("rating_overall", event.get("rating")))
-
-        if score is None:
-            continue
-
-        if pack_id not in stats:
-            stats[pack_id] = {
-                "n": 0.0,
-                "sum": 0.0,
-                "component_ids": component_ids,
-                "last_feedback_at": event.get("timestamp"),
+        for row in rows:
+            avg_score = float(row["avg_score"])
+            stats[row["pack_id"]] = {
+                "n": float(row["n"]),
+                "avg_score": avg_score,
+                "avg_rating": 1.0 + (4.0 * avg_score),
+                "component_ids": [],
+                "last_feedback_at": row["last_feedback_at"],
             }
 
-        stats[pack_id]["n"] += 1.0
-        stats[pack_id]["sum"] += score
+        # Eventos sin pack_id — derivar clave desde component_ids (caso raro)
+        rows_no_pack = conn.execute(
+            """
+            SELECT component_ids_json, rating_overall, timestamp
+            FROM feedback_events
+            WHERE pack_id IS NULL
+              AND rating_overall IS NOT NULL
+            """
+        ).fetchall()
 
-        if component_ids and not stats[pack_id]["component_ids"]:
-            stats[pack_id]["component_ids"] = component_ids
+    temp: dict[str, dict[str, Any]] = {}
+    for row in rows_no_pack:
+        component_ids = [str(cid) for cid in _json_loads(row["component_ids_json"], []) if cid]
+        if not component_ids:
+            continue
+        pack_id = _pack_key(component_ids)
+        score = _rating_to_score(row["rating_overall"])
+        if score is None:
+            continue
+        if pack_id not in temp:
+            temp[pack_id] = {"n": 0.0, "sum": 0.0, "component_ids": component_ids, "last_feedback_at": row["timestamp"]}
+        temp[pack_id]["n"] += 1.0
+        temp[pack_id]["sum"] += score
 
-        timestamp = event.get("timestamp")
-        if timestamp and (
-            not stats[pack_id]["last_feedback_at"]
-            or str(timestamp) > str(stats[pack_id]["last_feedback_at"])
-        ):
-            stats[pack_id]["last_feedback_at"] = timestamp
-
-    for item in stats.values():
-        n = max(float(item["n"]), 1.0)
-        avg_score = float(item["sum"]) / n
-        item["avg_score"] = avg_score
-        item["avg_rating"] = 1.0 + (4.0 * avg_score)
+    for pack_id, item in temp.items():
+        avg_score = item["sum"] / max(item["n"], 1.0)
+        if pack_id in stats:
+            total_n = stats[pack_id]["n"] + item["n"]
+            merged_avg = (stats[pack_id]["avg_score"] * stats[pack_id]["n"] + avg_score * item["n"]) / total_n
+            stats[pack_id]["n"] = total_n
+            stats[pack_id]["avg_score"] = merged_avg
+            stats[pack_id]["avg_rating"] = 1.0 + (4.0 * merged_avg)
+        else:
+            stats[pack_id] = {
+                "n": item["n"],
+                "avg_score": avg_score,
+                "avg_rating": 1.0 + (4.0 * avg_score),
+                "component_ids": item["component_ids"],
+                "last_feedback_at": item["last_feedback_at"],
+            }
 
     return stats
 
