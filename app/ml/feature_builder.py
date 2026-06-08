@@ -51,6 +51,13 @@ class FeatureBuilder:
         "bajo": 1,
     }
 
+    ALCOHOL_MAP = {
+        "frecuente": 2,
+        "ocasional": 1,
+        "raro": 0,
+        "nunca": 0,
+    }
+
     def build_pipeline_payload(self, encuesta: EncuestaInput) -> dict:
         edad = self.EDAD_MAP[encuesta.edad_rango]
         problemas_sueno = self.SUENO_MAP[encuesta.horas_sueno]
@@ -59,9 +66,18 @@ class FeatureBuilder:
         exposicion_solar = self.SOL_MAP[encuesta.exposicion_solar]
         enfermedad_frecuente = self.ENFERMEDAD_MAP[encuesta.frecuencia_enfermedad]
         irritabilidad = self.ESTRES_MAP[encuesta.estres]
+        alcohol_bonus = self.ALCOHOL_MAP.get(encuesta.alcohol, 0)
+
+        # Dieta poco variada incrementa riesgo de déficits
+        dieta_deficiente = encuesta.dieta in ("poco_variada", "regular")
+
+        meta_energia = 1 if fatiga_general >= 3 or problemas_sueno >= 4 or dieta_deficiente else 0
+        meta_inmunidad = 1 if enfermedad_frecuente >= 3 or alcohol_bonus >= 1 else 0
+        meta_salud_osea = 1 if exposicion_solar == "baja" or edad >= 50 or dieta_deficiente else 0
+        meta_cognitivo = 1 if irritabilidad >= 4 or problemas_sueno >= 4 else 0
 
         return {
-            "sexo": "F",
+            "sexo": getattr(encuesta, "sexo", "F"),
             "tipo_dieta": "omnivoro",
             "exposicion_solar": exposicion_solar,
             "nivel_actividad": nivel_actividad,
@@ -78,14 +94,14 @@ class FeatureBuilder:
             "caida_cabello": 2,
             "piel_seca": 2,
             "unas_quebradizas": 2,
-            "enfermedad_frecuente": enfermedad_frecuente,
+            "enfermedad_frecuente": min(5, enfermedad_frecuente + alcohol_bonus),
             "calambres": 2,
             "irritabilidad": irritabilidad,
 
-            "meta_energia": 1 if fatiga_general >= 3 or problemas_sueno >= 4 else 0,
-            "meta_inmunidad": 1 if enfermedad_frecuente >= 3 else 0,
+            "meta_energia": meta_energia,
+            "meta_inmunidad": meta_inmunidad,
             "meta_belleza": 0,
             "meta_rendimiento": 1 if nivel_actividad in ["activo", "muy_activo"] else 0,
-            "meta_salud_osea": 1 if exposicion_solar == "baja" or edad >= 50 else 0,
-            "meta_cognitivo": 1 if irritabilidad >= 4 or problemas_sueno >= 4 else 0,
+            "meta_salud_osea": meta_salud_osea,
+            "meta_cognitivo": meta_cognitivo,
         }

@@ -11,7 +11,7 @@ import joblib
 from app.core.config import settings
 
 _artifacts = None
-_ARTIFACTS_PATH = settings.MODEL_DIR / "modelo2_artifacts_cpu.pkl"
+_ARTIFACTS_PATH = settings.MODEL_DIR / "modelo2_artifacts.pkl"
 
 
 def _load():

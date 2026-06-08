@@ -1,4 +1,19 @@
+from typing import Any
 from pydantic import BaseModel, Field
+
+
+class FeatureDriver(BaseModel):
+    feature: str
+    label: str
+    value: Any
+    value_label: str
+    impact: str
+
+
+class ConditionExplanation(BaseModel):
+    condition: str
+    probability: float
+    drivers: list[FeatureDriver]
 
 
 class ConditionDisplay(BaseModel):
@@ -82,6 +97,7 @@ class RecommendationResponse(BaseModel):
     recommendation_id: str | None = None
     conditions: list[str]
     conditions_display: list[ConditionDisplay]
+    explainability: list[ConditionExplanation] = Field(default_factory=list)
     recommendations: list[RecommendationItem]
     packs_ranked: list[RankedPack]
     sinergias: list[ComponentRelation]

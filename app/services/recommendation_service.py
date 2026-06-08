@@ -5,10 +5,12 @@ from uuid import uuid4
 from typing import Any
 
 import numpy as np
+from sqlalchemy.orm import Session
 
 from app.schemas.encuesta import EncuestaInput
 from app.ml.feature_builder import FeatureBuilder
 from app.core.errors import ModelNotLoadedError, RecommendationGenerationError
+from app.repositories.recommendation_repository import RecommendationRepository
 from app.services.product_catalog_service import ProductCatalogService
 
 
@@ -187,21 +189,35 @@ def _recommendation_reason(condition: str | None, rec_type: str | None) -> str:
     return "Recomendado para el perfil evaluado."
 
 
-def _condition_probability(index: int, total: int) -> float:
+def _condition_probability_fallback(index: int, total: int) -> float:
     if total <= 1:
         return 0.82
-
     return max(0.45, 0.82 - (index * 0.12))
 
 
 def _condition_level(probability: float) -> str:
     if probability >= 0.70:
         return "Alta prioridad"
-
     if probability >= 0.55:
         return "Prioridad media"
-
     return "Contexto"
+
+
+def _recommendation_reason_with_score(
+    condition: str | None,
+    condition_score: float | None,
+    rec_type: str | None,
+) -> str:
+    if condition and condition != "soporte_funcional":
+        name = _condition_display_name(condition).lower()
+        if condition_score and condition_score >= 0.70:
+            return f"Alta prioridad por {name} (confianza {round(condition_score * 100)}%)."
+        if condition_score and condition_score >= 0.50:
+            return f"Indicado para {name} (confianza {round(condition_score * 100)}%)."
+        return f"Indicado para {name}."
+    if rec_type == "candidato_gnn":
+        return "Complementa el pack por sinergia funcional con los demás componentes."
+    return "Recomendado para el perfil evaluado."
 
 
 def _normalize_conditions(values: Any) -> list[str]:
@@ -222,22 +238,28 @@ def _normalize_conditions(values: Any) -> list[str]:
     return conditions
 
 
-def _normalize_conditions_display(conditions: list[str]) -> list[dict[str, Any]]:
+def _normalize_conditions_display(
+    conditions: list[str],
+    condition_scores: dict[str, float] | None = None,
+) -> list[dict[str, Any]]:
     total = len(conditions)
+    scores = condition_scores or {}
 
     return [
         {
             "code": condition,
             "display_name": _condition_display_name(condition),
-            "level": _condition_level(_condition_probability(index, total)),
-            "probability": _condition_probability(index, total),
+            "level": _condition_level(
+                scores.get(condition, _condition_probability_fallback(index, total))
+            ),
+            "probability": scores.get(condition, _condition_probability_fallback(index, total)),
             "icon_key": "check" if condition == "SALUDABLE" else "activity",
         }
         for index, condition in enumerate(conditions)
     ]
 
 
-def _normalize_recommendations(values: Any) -> list[dict[str, Any]]:
+def _normalize_recommendations(values: Any, condition_scores: dict[str, float] | None = None) -> list[dict[str, Any]]:
     if not isinstance(values, list):
         return []
 
@@ -267,6 +289,7 @@ def _normalize_recommendations(values: Any) -> list[dict[str, Any]]:
         if dedupe_key in seen:
             continue
 
+        condition_score = (condition_scores or {}).get(condition) if condition else None
         seen.add(dedupe_key)
         recommendations.append({
             "component_id": component_id,
@@ -277,7 +300,7 @@ def _normalize_recommendations(values: Any) -> list[dict[str, Any]]:
             "score": score,
             "type": rec_type,
             "type_display": _type_display_name(rec_type),
-            "reason": _recommendation_reason(condition, rec_type),
+            "reason": _recommendation_reason_with_score(condition, condition_score, rec_type),
             "dosage_hint": _dosage_hint(name, rec_type),
             "priority": "principal" if rec_type == "semilla_directa" else "complementaria",
             "icon_key": _component_icon_key(name),
@@ -467,8 +490,9 @@ def _attach_products_to_packs(
 
 
 class RecommendationService:
-    def __init__(self, models: dict):
+    def __init__(self, models: dict, db: Session | None = None):
         self.models = models
+        self.db = db
         self.feature_builder = FeatureBuilder()
         self.product_catalog = ProductCatalogService()
 
@@ -487,11 +511,15 @@ class RecommendationService:
         except Exception as exc:
             raise RecommendationGenerationError() from exc
 
+        condition_scores = _to_builtin(resultado.get("condition_scores", {}))
+        explainability   = _to_builtin(resultado.get("explainability", []))
+
         conditions = _normalize_conditions(
             _first_present(resultado.get("condiciones"), resultado.get("conditions"), [])
         )
         recommendations = _normalize_recommendations(
-            _first_present(resultado.get("recomendaciones"), resultado.get("recommendations"), [])
+            _first_present(resultado.get("recomendaciones"), resultado.get("recommendations"), []),
+            condition_scores=condition_scores,
         )
         packs_ranked = _normalize_packs(resultado.get("packs_ranked", []))
         recommendations = _attach_products_to_recommendations(
@@ -503,11 +531,20 @@ class RecommendationService:
             self.product_catalog,
         )
 
-        return {
-            "session_id": f"ses_{uuid4().hex}",
-            "recommendation_id": resultado.get("recommendation_id"),
+        session_id = f"ses_{uuid4().hex}"
+        recommendation_id = _clean_text(resultado.get("recommendation_id")) or f"rec_{uuid4().hex}"
+        model_versions = {
+            "model1": "modelo1_pipeline.pkl",
+            "model2": "modelo2_artifacts.pkl",
+            "reranker": "feedback_reranker.py",
+        }
+
+        response = {
+            "session_id": session_id,
+            "recommendation_id": recommendation_id,
             "conditions": conditions,
-            "conditions_display": _normalize_conditions_display(conditions),
+            "conditions_display": _normalize_conditions_display(conditions, condition_scores),
+            "explainability": explainability,
             "recommendations": recommendations,
             "packs_ranked": packs_ranked,
             "sinergias": _normalize_relations(resultado.get("sinergias", [])),
@@ -515,9 +552,18 @@ class RecommendationService:
             "combo_seguro": resultado.get("combo_seguro", True),
             "mensaje": resultado.get("mensaje", "OK"),
             "disclaimer": DISCLAIMER,
-            "model_versions": {
-                "model1": "modelo1_pipeline.pkl",
-                "model2": "modelo2_artifacts.pkl",
-                "reranker": "feedback_reranker.py",
-            },
+            "model_versions": model_versions,
         }
+
+        if self.db is not None:
+            RecommendationRepository(self.db).save_response(
+                recommendation_id=recommendation_id,
+                session_id=session_id,
+                input_payload=encuesta.model_dump(),
+                conditions=conditions,
+                model_versions=model_versions,
+                recommendations=recommendations,
+                packs_ranked=packs_ranked,
+            )
+
+        return response
