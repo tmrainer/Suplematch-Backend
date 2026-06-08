@@ -1,353 +1,321 @@
-# Plan de Mejoras — Prototipo Final Suplematch
+# Plan de Mejoras — Prototipo Final SupleMatch
 **Entrega:** 10 de junio de 2026  
-**Requisito del profesor:** Prototipo final con funcionalidad, integración y usabilidad sustancialmente mejoradas.
+**Requisito:** *"Final Prototype: Presentation of the final Data Product prototype with substantially improved functionality, integration, and usability."*
 
 ---
 
-## Diagnóstico del estado actual
+## Arquitectura del sistema
 
-| Área | Estado | Problema |
+```
+┌─────────────────────────────────────────────────────────┐
+│                    USUARIO                              │
+│   Responde 9 preguntas sobre hábitos y síntomas        │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              MODELO 1 — Random Forest multilabel        │
+│                                                         │
+│  Input: edad, fatiga, sueño, sol, ejercicio,           │
+│         estrés, inmunidad, dieta, alcohol               │
+│                                                         │
+│  Output: probabilidad de cada condición                 │
+│  ┌─────────────────────────────────────────┐            │
+│  │ FATIGA          → 83%                   │            │
+│  │ DEFICIT_VIT_D   → 71%                   │            │
+│  │ BAJA_INMUNIDAD  → 52%                   │            │
+│  │ ESTRES          → 31% (descartado <45%) │            │
+│  └─────────────────────────────────────────┘            │
+│                                                         │
+│  + SHAP TreeExplainer: qué variables causaron cada     │
+│    condición, personalizado por usuario                 │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              MODELO 2 — GNN (Grafo)                     │
+│                                                         │
+│  Grafo de 935 componentes nutricionales con             │
+│  1,604 relaciones entre ellos                           │
+│                                                         │
+│  Por cada condición detectada:                          │
+│  1. Selecciona semillas directas (ej: Vitamina D        │
+│     para DEFICIT_VIT_D)                                 │
+│  2. Busca candidatos por similitud coseno en el         │
+│     espacio de embeddings GNN                           │
+│  3. Filtra por relaciones funcionales del grafo         │
+│  4. Detecta sinergias (pares que se potencian)          │
+│  5. Detecta alertas (interacciones riesgosas)           │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              RE-RANKING POR FEEDBACK                    │
+│                                                         │
+│  Los packs de suplementos se reordenan según el         │
+│  historial de feedback de usuarios anteriores.          │
+│  Si usuarios similares calificaron bien un pack,        │
+│  sube en el ranking.                                    │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              ENRIQUECIMIENTO CON DIGEMID                │
+│                                                         │
+│  Cada suplemento recomendado se vincula a productos     │
+│  reales disponibles en farmacias peruanas:              │
+│  Inkafarma, Mifarma, Boticas y Salud, etc.             │
+│                                                         │
+│  Solo aparecen productos con:                           │
+│  ✓ Registro Sanitario validado en DIGEMID              │
+│  ✓ Precio scrapeado recientemente                       │
+│  ✓ URL activa en la farmacia                            │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Diagnóstico del estado anterior (antes de las mejoras)
+
+Esta sección documenta los problemas que existían antes del 08/06/2026.
+
+### Problemas críticos (el sistema no funcionaba correctamente)
+
+| Problema | Archivo | Impacto |
 |---|---|---|
-| `app/ml/explainability.py` | Vacío (1 línea) | No hay explicabilidad real implementada |
-| Probabilidades de condición | Hardcodeadas | `0.82 - index * 0.12` — no salen del modelo |
-| `FeatureBuilder` | Incompleto | `sexo`, `peso_kg`, `altura_cm`, `tipo_dieta` son constantes, no vienen de la encuesta |
-| Frontend → Backend | Desconectado | El frontend lee `r.nombre` / `r.razon` pero la API retorna `name` / `reason` |
-| Sinergias y alertas | Hardcodeadas en UI | El frontend ignora los datos reales que retorna la API |
-| Condiciones detectadas | No se muestran | La API las retorna pero la pantalla `Recomendaciones` no las renderiza |
-| Pregunta `dieta` | Recogida, no usada | `buildPayload` en la encuesta la envía pero `FeatureBuilder` la ignora |
-| Pregunta `alcohol` | Recogida, no usada | Igual que dieta |
+| `explainability.py` estaba vacío | `app/ml/explainability.py` | No había ninguna explicabilidad implementada |
+| Nombre incorrecto del pkl del Modelo 2 | `modelo2_inference.py` | El Modelo 2 nunca cargaba, lanzaba error |
+| Rutas de CSV rotas en config | `app/core/config.py` | El backend no encontraba los datos de DIGEMID |
+| Modelos pkl en `.gitignore` | `.gitignore` | Quien clonaba el repo no tenía los modelos |
 
----
+### Problemas de integración (datos reales ignorados)
 
-## Mejora 1 — Explainability real (prioridad crítica)
-
-El profesor pide que el usuario entienda **por qué** obtuvo ese resultado y **qué variables lo determinaron**.
-
-### 1.1 Probabilidades reales del Modelo 1
-
-**Archivo:** `app/ml/runtime/pipeline_completo.py`
-
-El Modelo 1 es un clasificador sklearn multilabel. En lugar de `predict`, usar `predict_proba` para obtener la probabilidad real de cada condición.
-
-```python
-# Antes (pipeline_completo.py)
-pred = _pipe_m1.predict(row)[0]
-detected = [_labels[i] for i, v in enumerate(pred) if v == 1]
-
-# Después
-proba = _pipe_m1.predict_proba(row)  # lista de arrays, uno por label
-detected = []
-condition_scores = {}
-for i, label in enumerate(_labels):
-    p = proba[i][0][1]  # probabilidad de clase 1
-    condition_scores[label] = round(float(p), 4)
-    if p >= 0.45:
-        detected.append(label)
-
-resultado["condition_scores"] = condition_scores
-```
-
-Pasar `condition_scores` hasta la respuesta de la API para que el frontend muestre barras de probabilidad reales.
-
-### 1.2 Feature importance del Modelo 1
-
-**Archivo nuevo:** `app/ml/explainability.py`
-
-El pipeline sklearn expone `feature_importances_` en el estimador final. Se puede extraer qué features (columnas de la encuesta) más influyeron en cada condición.
-
-```python
-def get_feature_importance(pipeline, feature_names: list[str]) -> dict[str, float]:
-    """Extrae importancia de features del clasificador dentro del pipeline."""
-    estimator = pipeline.named_steps.get("classifier") or pipeline[-1]
-    if not hasattr(estimator, "estimators_"):
-        return {}
-    
-    importances = {}
-    for label_idx, est in enumerate(estimator.estimators_):
-        if hasattr(est, "feature_importances_"):
-            importances[label_idx] = dict(
-                zip(feature_names, est.feature_importances_.tolist())
-            )
-    return importances
-
-
-def explain_conditions(
-    condition_scores: dict[str, float],
-    feature_importances: dict,
-    user_payload: dict,
-    labels: list[str],
-) -> list[dict]:
-    """
-    Para cada condición detectada, devuelve las top-3 variables que más
-    contribuyeron a activarla, con el valor que el usuario ingresó.
-    """
-    explanations = []
-    FEATURE_LABELS = {
-        "fatiga_general":      "Fatiga frecuente",
-        "problemas_sueno":     "Problemas de sueño",
-        "irritabilidad":       "Nivel de estrés",
-        "enfermedad_frecuente":"Frecuencia de enfermedades",
-        "exposicion_solar":    "Exposición al sol",
-        "nivel_actividad":     "Actividad física",
-        "edad":                "Edad",
-        "niebla_mental":       "Niebla mental",
-    }
-    
-    for label_idx, label in enumerate(labels):
-        score = condition_scores.get(label, 0.0)
-        if score < 0.45:
-            continue
-        
-        feat_imp = feature_importances.get(label_idx, {})
-        top_features = sorted(feat_imp.items(), key=lambda x: x[1], reverse=True)[:3]
-        
-        drivers = []
-        for feat_name, importance in top_features:
-            drivers.append({
-                "feature":       feat_name,
-                "label":         FEATURE_LABELS.get(feat_name, feat_name),
-                "value":         user_payload.get(feat_name),
-                "importance":    round(importance, 4),
-            })
-        
-        explanations.append({
-            "condition":    label,
-            "probability":  score,
-            "drivers":      drivers,
-        })
-    
-    return explanations
-```
-
-### 1.3 Razón por componente (Modelo 2)
-
-**Archivo:** `app/services/recommendation_service.py`
-
-Actualmente la razón es texto genérico: `"Relacionado con fatiga o baja energía."`. Mejorar para incluir la condición que lo activó y su probabilidad:
-
-```python
-def _recommendation_reason(condition: str | None, score: float | None, rec_type: str | None) -> str:
-    condition_name = _condition_display_name(condition)
-    if score and score > 0.70:
-        return f"Alta prioridad por {condition_name.lower()} (confianza {round(score*100)}%)."
-    if condition and condition != "soporte_funcional":
-        return f"Indicado para {condition_name.lower()}."
-    if rec_type == "candidato_gnn":
-        return "Complementa el pack por sinergia funcional con los demás componentes."
-    return "Recomendado para el perfil evaluado."
-```
-
-### 1.4 Nuevo campo en la respuesta API
-
-Agregar `explainability` al response de `/recommend`:
-
-```json
-{
-  "conditions_display": [...],
-  "explainability": [
-    {
-      "condition": "FATIGA",
-      "probability": 0.83,
-      "drivers": [
-        { "label": "Fatiga frecuente",   "value": 4, "importance": 0.38 },
-        { "label": "Problemas de sueño", "value": 5, "importance": 0.22 },
-        { "label": "Nivel de estrés",    "value": 4, "importance": 0.17 }
-      ]
-    }
-  ],
-  "recommendations": [...]
-}
-```
-
-**Archivo:** `app/schemas/recomendacion.py` — agregar `explainability: list[ConditionExplanation]`.
-
----
-
-## Mejora 2 — Cerrar brechas de integración frontend ↔ backend
-
-### 2.1 Mapeo de campos en `Recomendaciones.jsx`
-
-El componente lee campos inexistentes en la respuesta real de la API:
-
-| Lo que lee el frontend | Lo que retorna la API | Fix |
-|---|---|---|
-| `r.nombre` | `r.name` | Cambiar a `r.name` |
-| `r.razon` | `r.reason` | Cambiar a `r.reason` |
-| `r.dosis` | `r.dosage_hint` | Cambiar a `r.dosage_hint` |
-| `apiResult?.recomendaciones` | `apiResult?.recommendations` | Cambiar key |
-
-### 2.2 Mostrar condiciones detectadas
-
-La pantalla `Recomendaciones.jsx` ignora `apiResult.conditions_display`. Agregar una sección de "Perfil detectado" con las condiciones y sus probabilidades (recibidas desde el backend real en Mejora 1.1).
-
-### 2.3 Sinergias y alertas desde la API
-
-Las sinergias/alertas están hardcodeadas en el JSX. Reemplazar por los datos reales:
-
-```jsx
-// Antes (hardcoded)
-<div>💡 <strong>Zinc + Vitamina C</strong> se potencian mutuamente</div>
-
-// Después (dinámico)
-{(apiResult?.sinergias ?? []).map(s => (
-  <div key={`${s.component_a}-${s.component_b}`}>
-    💡 <strong>{s.component_a} + {s.component_b}</strong> — {s.type}
-  </div>
-))}
-{(apiResult?.alertas ?? []).map(a => (
-  <div key={`${a.component_a}-${a.component_b}`}>
-    ⚠️ <strong>{a.component_a} + {a.component_b}</strong> — {a.type}
-  </div>
-))}
-```
-
----
-
-## Mejora 3 — Encuesta más completa
-
-### 3.1 Campos faltantes en FeatureBuilder
-
-**Archivo:** `app/ml/feature_builder.py`
-
-Actualmente se hardcodean valores que deberían venir de la encuesta:
-
-```python
-# Hardcodeado (incorrecto)
-"sexo": "F",
-"tipo_dieta": "omnivoro",
-"peso_kg": 60.0,
-"altura_cm": 165.0,
-```
-
-**Fix en `FeatureBuilder.build_pipeline_payload`:**
-
-```python
-DIETA_MAP = {
-    "poco_variada":     "omnivoro",
-    "regular":          "omnivoro",
-    "bastante_variada": "omnivoro",
-    "muy_balanceada":   "omnivoro",
-}
-
-def build_pipeline_payload(self, encuesta: EncuestaInput) -> dict:
-    ...
-    tipo_dieta = self.DIETA_MAP.get(encuesta.dieta, "omnivoro")
-    ...
-    return {
-        "sexo": encuesta.sexo if hasattr(encuesta, "sexo") else "F",
-        "tipo_dieta": tipo_dieta,
-        ...
-    }
-```
-
-### 3.2 Agregar pregunta de sexo a la encuesta
-
-**Archivo:** `frontend-suplematch/src/screens/Encuesta.jsx`
-
-Agregar como primera pregunta (antes de edad):
-
-```js
-{
-  key: 'sexo',
-  title: '¿Cuál es tu sexo biológico?',
-  sub: 'Relevante para el perfil nutricional',
-  type: 'single',
-  options: [
-    { label: 'Femenino',    value: 'F' },
-    { label: 'Masculino',   value: 'M' },
-    { label: 'Prefiero no indicar', value: 'F' },
-  ],
-},
-```
-
-**Archivo:** `app/schemas/encuesta.py` — agregar campo `sexo: Literal["M", "F"] = "F"`.
-
-### 3.3 Usar variable `alcohol` en las metas
-
-La pregunta `alcohol` ya se recoge pero no se usa. Puede alimentar la meta de toxicidad hepática o desactivar ciertos suplementos:
-
-```python
-ALCOHOL_MAP = {
-    "nunca":     0,
-    "raro":      1,
-    "ocasional": 2,
-    "frecuente": 4,
-}
-```
-
----
-
-## Mejora 4 — Nueva pantalla de Explainability en el frontend
-
-**Archivo nuevo:** `frontend-suplematch/src/screens/Explicacion.jsx`
-
-Pantalla que se muestra entre `Loading` y `Recomendaciones`, o como tab en `Recomendaciones`:
-
-```
-┌──────────────────────────────────────┐
-│  Por qué te recomendamos esto        │
-├──────────────────────────────────────┤
-│  🔍 Fatiga o baja energía      83%  │
-│  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░         │
-│                                      │
-│  Factores que lo determinaron:       │
-│  • Fatiga frecuente         (alta)   │
-│  • Problemas de sueño       (media)  │
-│  • Nivel de estrés          (media)  │
-├──────────────────────────────────────┤
-│  🦠 Baja inmunidad          61%  │
-│  ▓▓▓▓▓▓▓▓▓░░░░░░░░░         │
-│                                      │
-│  Factores que lo determinaron:       │
-│  • Enfermedades frecuentes  (alta)   │
-│  • Exposición al sol        (media)  │
-└──────────────────────────────────────┘
-```
-
-Flujo actualizado: `Landing → Encuesta → Loading → Recomendaciones (con tab "¿Por qué?") → Precios → Feedback`
-
----
-
-## Mejora 5 — Usabilidad general
-
-### 5.1 Pantalla de Condiciones actual
-`screens/Condiciones.jsx` existe pero no se sabe si está integrada al flujo. Verificar que muestra `conditions_display` de la API antes de `Recomendaciones`.
-
-### 5.2 Feedback loop visible
-El usuario no sabe que su feedback mejora futuras recomendaciones. Agregar en `Feedback.jsx` un mensaje post-envío:
-
-> "Gracias. Tu opinión ayuda a mejorar las recomendaciones para todos los usuarios."
-
-### 5.3 Manejo de error de API
-Si la API falla, el frontend cae en el fallback hardcodeado sin notificar al usuario. Mostrar un toast con mensaje claro y opción de reintentar.
-
----
-
-## Resumen de archivos a modificar
-
-| Archivo | Tipo de cambio |
+| Problema | Impacto visible |
 |---|---|
-| `app/ml/explainability.py` | Implementar desde cero |
-| `app/ml/runtime/pipeline_completo.py` | Usar `predict_proba`, pasar `condition_scores` |
-| `app/services/recommendation_service.py` | Integrar `explainability`, mejorar `_recommendation_reason` |
-| `app/schemas/recomendacion.py` | Agregar `explainability` al response schema |
-| `app/schemas/encuesta.py` | Agregar campo `sexo`, `dieta` como requerido |
-| `app/ml/feature_builder.py` | Usar `dieta`, `sexo`, `alcohol` de la encuesta |
-| `frontend/src/screens/Recomendaciones.jsx` | Corregir campos, mostrar condiciones, sinergias reales |
-| `frontend/src/screens/Encuesta.jsx` | Agregar pregunta de sexo |
-| `frontend/src/screens/Explicacion.jsx` | Crear pantalla nueva (o tab) |
-| `frontend/src/App.jsx` | Integrar nueva pantalla al flujo |
+| Probabilidades hardcodeadas (0.82, 0.70, 0.58...) | Todos los usuarios veían exactamente las mismas probabilidades |
+| Sinergias hardcodeadas en el JSX del frontend | "Zinc + Vitamina C" aparecía siempre, sin importar el resultado real |
+| Lista de suplementos hardcodeada en Feedback | Siempre mostraba Vitamina D3, Zinc, Vitamina C, sin importar la recomendación |
+| `dieta` y `alcohol` de la encuesta ignorados | El FeatureBuilder no los usaba, eran preguntas decorativas |
+
+### Problemas de datos
+
+| Problema | Impacto |
+|---|---|
+| CSVs duplicados en múltiples carpetas | Confusión sobre cuál es la fuente de verdad |
+| README con información incorrecta | Instrucciones de instalación con nombre de pkl equivocado |
+| `shap` no en requirements.txt | Dependencia no documentada |
 
 ---
 
-## Priorización para el 10/06/2026
+## Mejora 1 — Explainability con SHAP
 
-| Prioridad | Tarea | Impacto |
+### ¿Qué pide el profesor?
+
+Que el sistema pueda explicar **por qué** generó ese resultado: qué variables del usuario influyeron en cada condición detectada y cuánto.
+
+### ¿Qué es SHAP y por qué se eligió?
+
+SHAP (SHapley Additive exPlanations) es el estándar de la industria para explicabilidad de modelos de machine learning. Se basa en la teoría de juegos de Shapley (1953): calcula la contribución justa de cada "jugador" (variable) al resultado del "juego" (predicción del modelo).
+
+**Ventajas sobre otras alternativas:**
+- **Exacto para árboles:** `TreeExplainer` calcula valores exactos (no aproximaciones) aprovechando la estructura del Random Forest
+- **Personalizado:** cada usuario obtiene una explicación diferente según sus respuestas
+- **Consistente:** si una variable tiene más impacto, siempre tiene un SHAP value mayor
+- **Interpretable:** SHAP value positivo = empuja hacia "sí tiene esa condición"; negativo = empuja hacia "no la tiene"
+
+### Cómo se implementó en SupleMatch
+
+El Modelo 1 es un `MultiOutputClassifier` que contiene un `RandomForestClassifier` por cada condición. Para explicar la predicción de un usuario:
+
+**Paso 1 — Separar preprocesador del clasificador:**
+```python
+steps = list(pipeline.steps)
+preprocessor = Pipeline(steps[:-1])       # ColumnTransformer (OHE + passthrough)
+classifier = steps[-1][1]                  # MultiOutputClassifier
+```
+
+**Paso 2 — Transformar el input:**
+```python
+X_transformed = preprocessor.transform(row_df)
+# Convierte: "baja" → [1, 0, 0] (one-hot encoding de exposicion_solar)
+# Pasa numéricas sin cambio: fatiga_general=4 → 4
+```
+
+**Paso 3 — SHAP por condición:**
+```python
+for i, label in enumerate(labels):
+    if condition_scores[label] < 0.45:
+        continue  # solo condiciones detectadas
+    estimator = classifier.estimators_[i]  # el RF para esta condición
+    explainer = shap.TreeExplainer(estimator)
+    shap_values = explainer.shap_values(X_transformed)
+    # shap_values[1][0] = valores para clase "sí tiene condición", primera muestra
+```
+
+**Paso 4 — Top-3 features:**
+```python
+top_indices = np.argsort(np.abs(vals))[::-1][:3]
+# Ordena por impacto absoluto, toma los 3 más importantes
+```
+
+**Paso 5 — Mapear al nombre original:**
+```python
+# "cat__exposicion_solar_baja" → feature="exposicion_solar", valor="baja"
+# "num__fatiga_general" → feature="fatiga_general", valor=4
+```
+
+### Visualización en la app
+
+La pantalla de Condiciones muestra para cada condición detectada:
+
+```
+┌────────────────────────────────────────────┐
+│ ☀️  Déficit de Vitamina D            71%  │
+│ ████████████████░░░░░░                     │
+│ Alta prioridad                             │
+├────────────────────────────────────────────┤
+│ ¿Por qué?                                  │
+│ Exposición solar    [Menos de 15 min/día] │ ← rojo (alto)
+│ Prioridad salud ósea         [Priorizada] │ ← rojo (alto)
+│ Edad                                  [24] │ ← verde (bajo)
+└────────────────────────────────────────────┘
+```
+
+Los badges de color indican el nivel de impacto de cada variable en la predicción:
+- 🔴 **Alto** (shap_value > 0.15): variable muy determinante
+- 🟡 **Medio** (shap_value 0.05-0.15): contribución moderada
+- 🟢 **Bajo** (shap_value < 0.05): contribución menor
+
+### Fallback automático
+
+Si `shap` no está instalado en el entorno, el sistema detecta el `ImportError` y usa un mapeo de reglas de dominio (qué variables son relevantes para cada condición según conocimiento experto). El resultado visual es el mismo pero sin los valores exactos de SHAP.
+
+---
+
+## Mejora 2 — Probabilidades reales del Modelo 1
+
+### ¿Por qué importa?
+
+Las probabilidades son el indicador principal de confianza del sistema. Mostrar valores reales del modelo:
+- Da credibilidad científica al resultado
+- Permite al usuario entender qué tan seguro está el sistema de cada condición
+- Es diferente para cada usuario (personalización real)
+
+### Implementación
+
+```python
+# Antes: predict binario (0 o 1)
+pred = pipeline.predict(row)[0]
+# → [1, 0, 1, 0, 0, 0] — sin gradación
+
+# Después: predict_proba (probabilidad continua)
+proba_list = pipeline.predict_proba(row)
+# → {"FATIGA": 0.83, "DEFICIT_VIT_D": 0.71, "BAJA_INMUNIDAD": 0.52, ...}
+```
+
+Se considera que una condición está "detectada" si su probabilidad ≥ 45%.
+
+---
+
+## Mejora 3 — Integración real de dieta y alcohol
+
+### Justificación
+
+La encuesta recogía estas preguntas pero el modelo las ignoraba completamente. Para una entrega de prototipo final, todas las variables de la encuesta deben tener efecto en el resultado.
+
+### Lógica implementada
+
+**Calidad de dieta (`dieta`):**
+
+Una dieta poco variada aumenta el riesgo de déficits nutricionales. Se usa para activar metas:
+
+| Respuesta | Efecto en el modelo |
+|---|---|
+| `poco_variada` | `meta_energia=1`, `meta_salud_osea=1` |
+| `regular` | `meta_energia=1` si también hay fatiga |
+| `bastante_variada` | Sin cambio adicional |
+| `muy_balanceada` | Sin cambio adicional |
+
+**Consumo de alcohol (`alcohol`):**
+
+El alcohol afecta la absorción de vitaminas y el sistema inmune:
+
+| Respuesta | Efecto en el modelo |
+|---|---|
+| `frecuente` | `enfermedad_frecuente += 2`, `meta_inmunidad=1` |
+| `ocasional` | `enfermedad_frecuente += 1` |
+| `raro` / `nunca` | Sin cambio |
+
+---
+
+## Mejora 4 — Correcciones de integración Frontend ↔ Backend
+
+### El problema de los datos hardcodeados
+
+En una primera versión del MVP es normal hardcodear datos para probar la interfaz. Pero en el prototipo final, todos los datos deben venir de la API real.
+
+### Lo que se corrigió
+
+**Sinergias y alertas (antes hardcodeadas):**
+
+Las sinergias y alertas se generan en el Modelo 2 analizando el grafo. Por ejemplo, si el modelo recomienda Vitamina C y Zinc, detecta automáticamente que tienen sinergia funcional porque están conectados en el grafo con `relationship_class: FUNCIONAL`. Esto ahora se muestra en la pantalla.
+
+**Suplementos en feedback:**
+
+El formulario de feedback ahora lista los suplementos reales recomendados para ese usuario, no siempre "Vitamina D3, Zinc, Vitamina C".
+
+**Probabilidades en pantalla de condiciones:**
+
+La barra de probabilidad y el porcentaje mostrado son los valores reales del `predict_proba` del Modelo 1.
+
+---
+
+## Estado del sistema tras las mejoras
+
+### Flujo completo funcional
+
+```
+Encuesta (9 preguntas)
+    ↓ dieta y alcohol ahora se usan
+FeatureBuilder → payload para el modelo
+    ↓
+Modelo 1 (Random Forest)
+    ↓ predict_proba → probabilidades reales
+    ↓ SHAP TreeExplainer → drivers personalizados
+Condiciones detectadas + explicaciones
+    ↓
+Modelo 2 (GNN)
+    ↓ semillas + embeddings + grafo
+Suplementos recomendados + sinergias + alertas reales
+    ↓
+Re-ranking por feedback
+    ↓
+Enriquecimiento DIGEMID → productos con precio y RS
+    ↓
+Respuesta API con campos explainability, conditions_display, sinergias, alertas
+    ↓
+Frontend muestra todo de forma dinámica (no hardcodeada)
+```
+
+### Lo que muestra el usuario en cada pantalla
+
+| Pantalla | Datos dinámicos (desde API) |
+|---|---|
+| **Condiciones** | Probabilidad real por condición · Drivers SHAP personalizados · Valores de las respuestas del usuario |
+| **Recomendaciones** | Pack recomendado · Razón con % de confianza · Sinergias reales del grafo · Alertas reales de interacción · Productos con precio real |
+| **Precios** | Productos disponibles por farmacia · RS DIGEMID · Precio scrapeado |
+| **Feedback** | Lista real de suplementos recomendados |
+
+---
+
+## Pendientes futuros (post-entrega)
+
+Estas mejoras quedaron identificadas pero no se implementaron por tiempo:
+
+| Mejora | Descripción | Complejidad |
 |---|---|---|
-| 🔴 1 | Implementar `explainability.py` con feature importance real | Alto — es el requisito explícito del profesor |
-| 🔴 2 | Corregir mapeo de campos frontend ↔ backend | Alto — sin esto la app muestra datos vacíos |
-| 🔴 3 | Mostrar `conditions_display` y probabilidades reales en UI | Alto — explica el porqué visualmente |
-| 🟡 4 | Sinergias y alertas dinámicas desde la API | Medio — reemplaza hardcode por datos reales |
-| 🟡 5 | Integrar `dieta` y `sexo` al `FeatureBuilder` | Medio — cierra brecha de datos entre encuesta y modelo |
-| 🟢 6 | Pantalla `Explicacion.jsx` dedicada | Medio — visual impactante para la presentación |
-| 🟢 7 | Manejo de errores y feedback post-envío | Bajo — mejora usabilidad |
+| Pregunta de sexo en la encuesta | Agregar al frontend y al schema de la API | Baja |
+| SHAP para el Modelo 2 (GNN) | SHAP no aplica directamente; se necesitaría GNNExplainer (PyTorch Geometric) | Alta |
+| Guardar preferencias del usuario | Persistir perfil entre sesiones | Media |
+| Dashboard de métricas | Visualizar distribución de condiciones y feedback | Media |
+| Actualización semanal del catálogo | Automatizar el scraping y re-validación DIGEMID | Media |
