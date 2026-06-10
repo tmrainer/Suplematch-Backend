@@ -14,6 +14,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
 from app.core.config import settings
+from app.core.observability import log_event
 from app.db.models import (
     CatalogImportError,
     CatalogImportRun,
@@ -24,6 +25,7 @@ from app.db.models import (
     utcnow,
 )
 from app.db.session import SessionLocal
+from app.services.product_safety import catalog_verification_status, infer_restriction_flags, verified_restriction_flags
 
 
 def clean(value: Any) -> str:
@@ -60,6 +62,17 @@ def base_url_from_product_url(url: str) -> str | None:
 def read_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
+
+
+def row_payload(row: dict[str, str]) -> dict[str, Any]:
+    payload = dict(row)
+    payload["restriction_flags_inferred"] = infer_restriction_flags(payload)
+    payload["restriction_flags_verified"] = verified_restriction_flags(payload)
+    payload["restriction_flags"] = payload["restriction_flags_verified"] or payload["restriction_flags_inferred"]
+    payload["label_verified_at"] = clean(row.get("label_verified_at")) or None
+    payload["label_verification_source"] = clean(row.get("label_verification_source")) or None
+    payload.update(catalog_verification_status(payload))
+    return payload
 
 
 class CatalogImporter:
@@ -120,6 +133,15 @@ class CatalogImporter:
             db.commit()
 
         stats["components"] = len(component_cache)
+        log_event(
+            "catalog_import_completed",
+            source=str(self.catalog_path),
+            rows=stats["rows"],
+            products=stats["products"],
+            components=stats["components"],
+            links=stats["links"],
+            errors=stats["errors"],
+        )
         return stats
 
     def _get_pharmacy(
@@ -220,7 +242,7 @@ class CatalogImporter:
                 component_traceable=clean(row.get("regulatory_status")) or "digemid_match",
                 commercial_status="active",
                 last_seen_at=utcnow(),
-                raw_payload_json=dict(row),
+                raw_payload_json=row_payload(row),
             )
             db.add(product)
             db.flush()
@@ -242,7 +264,7 @@ class CatalogImporter:
         product.stock = parse_int(row.get("stock"))
         product.source_strategy = clean(row.get("source_strategy")) or product.source_strategy
         product.last_seen_at = utcnow()
-        product.raw_payload_json = dict(row)
+        product.raw_payload_json = row_payload(row)
 
     def _link_product_component(
         self,

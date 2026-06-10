@@ -77,6 +77,35 @@ class UserProfile(Base):
     user: Mapped[User] = relationship(back_populates="profile")
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    __table_args__ = (UniqueConstraint("token_hash", name="uq_password_reset_tokens_token_hash"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    requested_ip: Mapped[str | None] = mapped_column(String(80))
+    user_agent: Mapped[str | None] = mapped_column(Text)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    __table_args__ = (UniqueConstraint("token_hash", name="uq_refresh_tokens_token_hash"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    replaced_by_token_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    requested_ip: Mapped[str | None] = mapped_column(String(80))
+    user_agent: Mapped[str | None] = mapped_column(Text)
+
+
 class Pharmacy(Base):
     __tablename__ = "pharmacies"
 
@@ -161,6 +190,24 @@ class CommercialProductComponent(Base):
     component: Mapped[Component] = relationship(back_populates="products")
 
 
+class IngredientSafetyRule(Base):
+    __tablename__ = "ingredient_safety_rules"
+    __table_args__ = (UniqueConstraint("name", name="uq_ingredient_safety_rules_name"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(160), index=True)
+    ingredient_pattern: Mapped[str] = mapped_column(Text)
+    restriction_code: Mapped[str | None] = mapped_column(String(80), index=True)
+    safety_condition_code: Mapped[str | None] = mapped_column(String(80), index=True)
+    action: Mapped[str] = mapped_column(String(40), default="warn", index=True)
+    severity: Mapped[str] = mapped_column(String(40), default="medium", index=True)
+    message: Mapped[str] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    source: Mapped[str] = mapped_column(String(120), default="system_seed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class StagingScrapedProduct(Base):
     __tablename__ = "staging_scraped_products"
 
@@ -214,11 +261,54 @@ class RecommendationSession(Base):
     recommendation_id: Mapped[str | None] = mapped_column(String(120), unique=True, index=True)
     input_payload_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     conditions_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    profile_warnings_json: Mapped[list] = mapped_column(JSONB, default=list)
     model_versions_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     items: Mapped[list[RecommendationItem]] = relationship(back_populates="session", cascade="all, delete-orphan")
     packs: Mapped[list[RecommendedPack]] = relationship(back_populates="session", cascade="all, delete-orphan")
+
+
+class LabReport(Base):
+    __tablename__ = "lab_reports"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    source_type: Mapped[str] = mapped_column(String(40), default="manual", index=True)
+    file_name: Mapped[str | None] = mapped_column(String(255))
+    file_mime_type: Mapped[str | None] = mapped_column(String(120))
+    raw_text: Mapped[str | None] = mapped_column(Text)
+    parsed_payload_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    analysis_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    consent_health_data: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(40), default="processed", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+    biomarkers: Mapped[list[LabBiomarkerResult]] = relationship(
+        back_populates="report",
+        cascade="all, delete-orphan",
+    )
+
+
+class LabBiomarkerResult(Base):
+    __tablename__ = "lab_biomarker_results"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    lab_report_id: Mapped[UUID] = mapped_column(ForeignKey("lab_reports.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(80), index=True)
+    display_name: Mapped[str] = mapped_column(String(180))
+    value: Mapped[float] = mapped_column(Float)
+    unit: Mapped[str] = mapped_column(String(40))
+    reference_low: Mapped[float | None] = mapped_column(Float)
+    reference_high: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    severity: Mapped[str] = mapped_column(String(40), index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    source_text: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    report: Mapped[LabReport] = relationship(back_populates="biomarkers")
 
 
 class RecommendationItem(Base):
@@ -287,6 +377,7 @@ class RecommendedPackItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     pack: Mapped[RecommendedPack] = relationship(back_populates="items")
+    product: Mapped[CommercialProduct | None] = relationship()
 
 
 class RecommendationFeedback(Base):
@@ -322,6 +413,9 @@ class SupplementReview(Base):
     status: Mapped[str] = mapped_column(String(40), default="published", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    product: Mapped[CommercialProduct] = relationship()
+    component: Mapped[Component | None] = relationship()
 
 
 class PackReview(Base):

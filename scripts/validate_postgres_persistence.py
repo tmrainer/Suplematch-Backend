@@ -22,6 +22,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
 
+def cleanup_validation_data() -> None:
+    with SessionLocal() as db:
+        sessions = list(
+            db.scalars(
+                select(RecommendationSession).where(
+                    RecommendationSession.recommendation_id.like("rec_validation_%")
+                )
+            )
+        )
+        session_ids = [session.id for session in sessions]
+        if session_ids:
+            feedback_rows = list(
+                db.scalars(
+                    select(RecommendationFeedback).where(
+                        RecommendationFeedback.recommendation_session_id.in_(session_ids)
+                    )
+                )
+            )
+            for feedback in feedback_rows:
+                db.delete(feedback)
+            for session in sessions:
+                db.delete(session)
+
+        user = db.scalar(select(User).where(User.email == "validation@suplematch.local"))
+        if user is not None:
+            db.delete(user)
+
+        db.commit()
+
+
 def ensure_user() -> User:
     with SessionLocal() as db:
         repo = UserRepository(db)
@@ -116,8 +146,13 @@ def validate_recommendation_persistence(user: User) -> dict:
 
 def main() -> int:
     build_parser().parse_args()
-    user = ensure_user()
-    result = validate_recommendation_persistence(user)
+    cleanup_validation_data()
+    try:
+        user = ensure_user()
+        result = validate_recommendation_persistence(user)
+    finally:
+        cleanup_validation_data()
+
     print("postgres_persistence=ok")
     for key, value in result.items():
         print(f"{key}={value}")

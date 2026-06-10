@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import CommercialProduct, CommercialProductComponent, Component, Pharmacy
+from app.db.models import CatalogOverride, CommercialProduct, CommercialProductComponent, Component, Pharmacy
 
 
 class CatalogRepository:
@@ -20,7 +20,7 @@ class CatalogRepository:
             .join(Pharmacy, CommercialProduct.pharmacy_id == Pharmacy.id)
             .where(
                 Component.component_id == component_id,
-                CommercialProduct.commercial_status == "active",
+                CommercialProduct.commercial_status.in_(["active", "preferred"]),
                 CommercialProduct.availability == "available",
                 CommercialProduct.price.is_not(None),
             )
@@ -28,8 +28,13 @@ class CatalogRepository:
             .limit(limit)
         ).all()
 
+        overrides = self._latest_overrides([product.id for product, _link, _component, _pharmacy in rows])
         products = []
         for product, link, component, pharmacy in rows:
+            override = overrides.get(product.id)
+            if override and override.blocked:
+                continue
+
             products.append(
                 {
                     "product_id": str(product.id),
@@ -52,6 +57,14 @@ class CatalogRepository:
                     "sku": product.sku,
                     "brand": product.brand,
                     "regulatory_status": product.component_traceable or "digemid_match",
+                    "catalog_preferred": bool(override.preferred) if override else product.commercial_status == "preferred",
+                    "catalog_blocked": bool(override.blocked) if override else product.commercial_status == "blocked",
+                    "catalog_override_reason": override.reason if override else None,
+                    "restriction_flags": (product.raw_payload_json or {}).get("restriction_flags") or [],
+                    "restriction_flags_verified": (product.raw_payload_json or {}).get("restriction_flags_verified") or [],
+                    "restriction_flags_inferred": (product.raw_payload_json or {}).get("restriction_flags_inferred") or [],
+                    "label_verified_at": (product.raw_payload_json or {}).get("label_verified_at"),
+                    "label_verification_source": (product.raw_payload_json or {}).get("label_verification_source"),
                     "last_seen_at": product.last_seen_at.isoformat() if product.last_seen_at else None,
                 }
             )
@@ -75,7 +88,7 @@ class CatalogRepository:
         stmt = (
             select(CommercialProduct, Pharmacy)
             .join(Pharmacy, CommercialProduct.pharmacy_id == Pharmacy.id)
-            .where(CommercialProduct.commercial_status == "active")
+            .where(CommercialProduct.commercial_status.in_(["active", "preferred"]))
             .order_by(CommercialProduct.price.asc().nullslast(), CommercialProduct.updated_at.desc())
         )
         if query:
@@ -86,4 +99,26 @@ class CatalogRepository:
                 .join(Component, CommercialProductComponent.component_id == Component.id)
                 .where(Component.component_id == component_id)
             )
-        return list(self.db.execute(stmt.offset(offset).limit(limit)))
+        rows = list(self.db.execute(stmt.offset(offset).limit(limit)))
+        overrides = self._latest_overrides([product.id for product, _pharmacy in rows])
+        return [
+            (product, pharmacy)
+            for product, pharmacy in rows
+            if not (overrides.get(product.id) and overrides[product.id].blocked)
+        ]
+
+    def _latest_overrides(self, product_ids: list) -> dict:
+        if not product_ids:
+            return {}
+
+        rows = list(
+            self.db.scalars(
+                select(CatalogOverride)
+                .where(CatalogOverride.product_id.in_(product_ids))
+                .order_by(CatalogOverride.product_id.asc(), CatalogOverride.created_at.desc())
+            )
+        )
+        overrides = {}
+        for override in rows:
+            overrides.setdefault(override.product_id, override)
+        return overrides

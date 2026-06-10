@@ -58,6 +58,7 @@ class RecommendationRepository:
         input_payload: dict[str, Any],
         conditions: list[str],
         model_versions: dict[str, str],
+        profile_warnings: list[str] | None,
         recommendations: list[dict[str, Any]],
         packs_ranked: list[dict[str, Any]],
         user_id: UUID | None = None,
@@ -69,6 +70,7 @@ class RecommendationRepository:
             recommendation_id=recommendation_id,
             input_payload_json=input_payload,
             conditions_json={"conditions": conditions},
+            profile_warnings_json=profile_warnings or [],
             model_versions_json=model_versions,
         )
         self.db.add(session)

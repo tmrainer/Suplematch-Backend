@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.labs import LabBiomarkerInput
+
 
 Sexo = Literal["femenino", "masculino", "prefiero_no_decir"]
 PesoRango = Literal["menos_50", "50_65", "66_80", "mas_80"]
@@ -37,7 +39,6 @@ CondicionSeguridad = Literal[
     "anticoagulantes",
     "medicacion_cronica",
 ]
-Presupuesto = Literal["bajo", "medio", "alto", "sin_preferencia"]
 Objetivo = Literal["energia", "inmunidad", "suenio", "rendimiento", "salud_osea", "cabello_piel_unas", "estres"]
 
 
@@ -67,7 +68,9 @@ class EncuestaInput(BaseModel):
     suplementos_actuales: list[SuplementoActual] = Field(default_factory=list, max_length=8)
     restricciones: list[Restriccion] = Field(default_factory=list, max_length=6)
     condiciones_seguridad: list[CondicionSeguridad] = Field(default_factory=list, max_length=6)
-    presupuesto: Presupuesto = "sin_preferencia"
+    presupuesto_min: float | None = Field(default=None, ge=0, le=2000)
+    presupuesto_max: float | None = Field(default=None, ge=0, le=2000)
+    lab_results: list[LabBiomarkerInput] = Field(default_factory=list, max_length=40)
 
     @model_validator(mode="after")
     def validate_closed_answers(self):

@@ -99,6 +99,66 @@ def test_pack_selection_penalizes_repeated_pharmacy_when_possible(tmp_path):
     assert all(product["url"].startswith("https://example.test/") for product in selected)
 
 
+def test_restrictions_penalize_marine_omega_products(tmp_path):
+    catalog_path = tmp_path / "approved_catalog.csv"
+    rows = [
+        {
+            "pharmacy": "Inkafarma",
+            "commercial_name": "Omega 3 Aceite de Pescado",
+            "formal_name": "Omega 3 marino",
+            "registro_sanitario": "DE-OMEGA-1",
+            "digemid_producto": "OMEGA 3 ACEITE DE PESCADO",
+            "component_id": "cmp_omega",
+            "ingredient": "EPA DHA aceite de pescado",
+            "amount": "1000",
+            "unit": "mg",
+            "amount_mg": "1000",
+            "component_match_score": "100",
+            "price": "18.0",
+            "currency": "PEN",
+            "availability": "available",
+            "url": "https://example.test/fish",
+            "sku": "fish",
+            "brand": "A",
+            "regulatory_status": "digemid_match",
+        },
+        {
+            "pharmacy": "Mifarma",
+            "commercial_name": "Omega vegetal algas",
+            "formal_name": "Omega 3 de algas",
+            "registro_sanitario": "DE-OMEGA-2",
+            "digemid_producto": "OMEGA 3 ALGAS",
+            "component_id": "cmp_omega",
+            "ingredient": "DHA de algas",
+            "amount": "500",
+            "unit": "mg",
+            "amount_mg": "500",
+            "component_match_score": "95",
+            "price": "45.0",
+            "currency": "PEN",
+            "availability": "available",
+            "url": "https://example.test/algae",
+            "sku": "algae",
+            "brand": "B",
+            "regulatory_status": "digemid_match",
+        },
+    ]
+    with catalog_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    _catalog_by_component.cache_clear()
+
+    service = ProductCatalogService(
+        catalog_path=catalog_path,
+        restrictions=["alergia_pescado_mariscos"],
+    )
+    products = service.products_for_component("cmp_omega", limit=2)
+
+    assert [product["commercial_name"] for product in products] == ["Omega vegetal algas"]
+    assert all(product["sku"] != "fish" for product in products)
+
+
 def test_db_pack_selection_uses_published_review_metrics(monkeypatch):
     products = [
         {
@@ -190,4 +250,4 @@ def test_db_pack_selection_uses_published_review_metrics(monkeypatch):
     assert selected[0]["product_id"] == "22222222-2222-2222-2222-222222222222"
     assert selected[0]["review_count"] == 40
     assert selected[0]["product_score"] > products[0].get("product_score", 0)
-    assert "Reviews publicadas positivas" in selected[0]["selection_reasons"]
+    assert "Mejor score de reviews" in selected[0]["selection_reasons"]

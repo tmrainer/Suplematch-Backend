@@ -11,8 +11,11 @@ from app.schemas.encuesta import EncuestaInput
 from app.db.models import User
 from app.ml.feature_builder import FeatureBuilder
 from app.core.errors import ModelNotLoadedError, RecommendationGenerationError
+from app.core.observability import log_event
 from app.repositories.recommendation_metrics_repository import RecommendationMetricsRepository
 from app.repositories.recommendation_repository import RecommendationRepository
+from app.repositories.user_repository import UserRepository
+from app.services.lab_analysis_service import LabAnalysisService
 from app.services.product_catalog_service import ProductCatalogService
 
 
@@ -26,10 +29,18 @@ CONDITION_LABELS = {
     "SALUDABLE": "Base saludable",
     "DEFICIT_VIT_D": "Déficit de vitamina D",
     "DEFICIT_CALCIO": "Déficit de calcio",
+    "DEFICIT_B12": "Déficit de vitamina B12",
+    "DEFICIT_HIERRO": "Déficit de hierro",
+    "DEFICIT_MAGNESIO": "Déficit de magnesio",
     "BAJA_INMUNIDAD": "Baja inmunidad",
     "FATIGA": "Fatiga o baja energía",
+    "FATIGA_CRONICA": "Fatiga crónica",
     "ESTRES": "Estrés elevado",
     "PROBLEMAS_SUENO": "Problemas de sueño",
+    "RENDIMIENTO_DEPORTIVO": "Rendimiento deportivo",
+    "SALUD_OSEA": "Salud ósea",
+    "SALUD_COGNITIVA": "Salud cognitiva",
+    "SALUD_CAPILAR": "Salud capilar y piel",
 }
 
 TYPE_LABELS = {
@@ -38,6 +49,69 @@ TYPE_LABELS = {
     "soporte_funcional": "Soporte funcional",
     "INTERACCION_RIESGOSA": "Interacción riesgosa",
 }
+
+COMPONENT_NAME_ES: dict[str, str] = {
+    "vitamin b12": "Vitamina B12",
+    "vitamin b6": "Vitamina B6",
+    "vitamin b1": "Vitamina B1",
+    "vitamin b2": "Vitamina B2",
+    "vitamin c": "Vitamina C",
+    "vitamin d": "Vitamina D",
+    "vitamin d3": "Vitamina D3",
+    "vitamin e": "Vitamina E",
+    "vitamin k": "Vitamina K",
+    "vitamin k2": "Vitamina K2",
+    "vitamin a": "Vitamina A",
+    "folic acid": "Ácido fólico",
+    "folate": "Folato",
+    "niacin": "Niacina",
+    "choline": "Colina",
+    "pantothenic acid": "Ácido pantoténico",
+    "biotin": "Biotina",
+    "calcium": "Calcio",
+    "magnesium": "Magnesio",
+    "magnesium glycinate": "Glicinato de magnesio",
+    "magnesium citrate": "Citrato de magnesio",
+    "zinc": "Zinc",
+    "iron": "Hierro",
+    "iodine": "Yodo",
+    "selenium": "Selenio",
+    "copper": "Cobre",
+    "manganese": "Manganeso",
+    "chromium": "Cromo",
+    "potassium": "Potasio",
+    "omega-3": "Omega-3",
+    "omega 3": "Omega-3",
+    "fish oil": "Aceite de pescado",
+    "collagen": "Colágeno",
+    "coenzyme q10": "Coenzima Q10",
+    "coq10": "CoQ10",
+    "ashwagandha": "Ashwagandha",
+    "melatonin": "Melatonina",
+    "probiotics": "Probióticos",
+    "l-carnitine": "L-Carnitina",
+    "carnitine": "Carnitina",
+    "creatine": "Creatina",
+    "glutamine": "Glutamina",
+    "spirulina": "Espirulina",
+    "turmeric": "Cúrcuma",
+    "curcumin": "Curcumina",
+    "ginger": "Jengibre",
+    "garlic": "Ajo",
+    "green tea extract": "Extracto de té verde",
+    "caffeine": "Cafeína",
+    "rhodiola": "Rhodiola",
+    "ginkgo biloba": "Ginkgo biloba",
+    "valerian": "Valeriana",
+    "passionflower": "Pasiflora",
+    "chamomile": "Manzanilla",
+    "evening primrose oil": "Aceite de onagra",
+}
+
+
+def _translate_component_name(name: str) -> str:
+    return COMPONENT_NAME_ES.get(name.lower(), name)
+
 
 COMPONENT_ICONS = {
     "vitamin d": "sun",
@@ -94,6 +168,14 @@ RESTRICTION_WARNING_LABELS = {
     "alergia_pescado_mariscos": "Alergia a pescado o mariscos: cuidado con omega 3 de origen marino.",
     "evita_gelatina": "Evita gelatina: revisar cápsulas blandas o de origen animal.",
     "sin_gluten": "Sin gluten: verificar declaración del fabricante.",
+}
+
+HARD_SAFETY_CONDITIONS = {
+    "embarazo_lactancia",
+    "enfermedad_renal",
+    "enfermedad_hepatica",
+    "anticoagulantes",
+    "medicacion_cronica",
 }
 
 
@@ -239,6 +321,116 @@ def _profile_warnings(encuesta: EncuestaInput) -> list[str]:
     return warnings
 
 
+def _safety_level(encuesta: EncuestaInput) -> str:
+    if getattr(encuesta, "edad_rango", None) == "menos_18":
+        return "medical_review_required"
+
+    conditions = set(getattr(encuesta, "condiciones_seguridad", []) or [])
+    if conditions.intersection(HARD_SAFETY_CONDITIONS):
+        return "medical_review_required"
+
+    if getattr(encuesta, "restricciones", None) or getattr(encuesta, "suplementos_actuales", None):
+        return "caution"
+
+    return "normal"
+
+
+def _safety_actions(encuesta: EncuestaInput) -> list[str]:
+    level = _safety_level(encuesta)
+    if level == "normal":
+        return []
+
+    actions = [
+        "No iniciar ni combinar suplementos solo con esta recomendación.",
+        "Revisar etiqueta, dosis total diaria y posibles interacciones.",
+    ]
+
+    if level == "medical_review_required":
+        actions.insert(0, "Validar el plan con un profesional de salud antes de comprar o consumir.")
+
+    return actions
+
+
+def _lab_analysis_for_survey(encuesta: EncuestaInput) -> dict[str, Any] | None:
+    lab_results = getattr(encuesta, "lab_results", []) or []
+    if not lab_results:
+        return None
+    return LabAnalysisService().analyze_manual(lab_results, persist=False, source_note="survey_lab_results")
+
+
+def _combine_safety_level(survey_level: str, lab_analysis: dict[str, Any] | None) -> str:
+    if lab_analysis and lab_analysis.get("safety_level") == "medical_review_required":
+        return "medical_review_required"
+    if survey_level == "medical_review_required":
+        return survey_level
+    if lab_analysis and lab_analysis.get("safety_level") == "caution":
+        return "caution"
+    return survey_level
+
+
+def _merge_lab_supplement_signals(
+    recommendations: list[dict[str, Any]],
+    lab_analysis: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not lab_analysis:
+        return recommendations
+
+    existing_names = {
+        str(item.get("name") or item.get("display_name") or "").strip().lower()
+        for item in recommendations
+    }
+    merged = list(recommendations)
+    for signal in lab_analysis.get("supplement_signals", []):
+        supplement = str(signal.get("supplement") or "").strip()
+        if not supplement or supplement.lower() in existing_names:
+            continue
+        component_id = str(signal.get("component_id") or f"lab_{signal.get('biomarker_code') or supplement.lower()}")
+        merged.append(
+            {
+                "component_id": component_id,
+                "name": supplement,
+                "display_name": _translate_component_name(supplement),
+                "condition": "LAB_RESULT",
+                "condition_display": "Resultado de laboratorio",
+                "score": 0.88,
+                "type": "lab_signal",
+                "type_display": "Señal por examen",
+                "reason": signal.get("reason") or "Señal detectada en examen cargado.",
+                "dosage_hint": "Validar dosis y necesidad con profesional de salud.",
+                "priority": "lab_signal",
+                "icon_key": _component_icon_key(supplement),
+                "products": [],
+                "already_taking": False,
+                "safety_note": "Basado en examen cargado; no es diagnóstico.",
+            }
+        )
+    return merged
+
+
+def _survey_profile_values(encuesta: EncuestaInput) -> dict[str, Any]:
+    return {
+        "sex": getattr(encuesta, "sexo", None),
+        "diet_type": getattr(encuesta, "tipo_dieta", None),
+        "activity_level": getattr(encuesta, "frecuencia_ejercicio", None),
+        "health_goals": {
+            "objetivos": getattr(encuesta, "objetivos", []) or [],
+            "presupuesto_min": getattr(encuesta, "presupuesto_min", None),
+            "presupuesto_max": getattr(encuesta, "presupuesto_max", None),
+            "toma_suplementos": getattr(encuesta, "toma_suplementos", "no"),
+            "suplementos_actuales": getattr(encuesta, "suplementos_actuales", []) or [],
+            "edad_rango": getattr(encuesta, "edad_rango", None),
+            "peso_rango": getattr(encuesta, "peso_rango", None),
+            "talla_rango": getattr(encuesta, "talla_rango", None),
+        },
+        "allergies": {
+            "restricciones": getattr(encuesta, "restricciones", []) or [],
+        },
+        "medical_warnings": {
+            "condiciones_seguridad": getattr(encuesta, "condiciones_seguridad", []) or [],
+        },
+    }
+
+
 def _annotate_current_supplements(recommendations: list[dict[str, Any]], encuesta: EncuestaInput) -> list[dict[str, Any]]:
     current_supplements = getattr(encuesta, "suplementos_actuales", []) or []
     if not current_supplements:
@@ -370,7 +562,7 @@ def _normalize_recommendations(values: Any, condition_scores: dict[str, float] |
         recommendations.append({
             "component_id": component_id,
             "name": name,
-            "display_name": name,
+            "display_name": _translate_component_name(name),
             "condition": condition,
             "condition_display": _condition_display_name(condition),
             "score": score,
@@ -465,7 +657,7 @@ def _normalize_pack_components(pack: dict[str, Any]) -> list[dict[str, str | Non
                 components.append({
                     "component_id": component_id,
                     "name": name,
-                    "display_name": name,
+                    "display_name": _translate_component_name(name),
                     "icon_key": _component_icon_key(name),
                 })
 
@@ -492,7 +684,7 @@ def _normalize_pack_components(pack: dict[str, Any]) -> list[dict[str, str | Non
             components.append({
                 "component_id": component_id,
                 "name": name,
-                "display_name": name,
+                "display_name": _translate_component_name(name),
                 "icon_key": _component_icon_key(name),
             })
 
@@ -598,7 +790,14 @@ class RecommendationService:
             condition_scores=condition_scores,
         )
         packs_ranked = _normalize_packs(resultado.get("packs_ranked", []))
-        self.product_catalog.budget_preference = getattr(encuesta, "presupuesto", "sin_preferencia")
+        lab_analysis = _lab_analysis_for_survey(encuesta)
+        recommendations = _merge_lab_supplement_signals(recommendations, lab_analysis)
+        self.product_catalog.budget_min = getattr(encuesta, "presupuesto_min", None)
+        self.product_catalog.budget_max = getattr(encuesta, "presupuesto_max", None)
+        self.product_catalog.restrictions = getattr(encuesta, "restricciones", []) or []
+        self.product_catalog.safety_conditions = getattr(encuesta, "condiciones_seguridad", []) or []
+        safety_level = _combine_safety_level(_safety_level(encuesta), lab_analysis)
+        commercial_recommendations_blocked = False
         recommendations = _attach_products_to_recommendations(
             recommendations,
             self.product_catalog,
@@ -618,6 +817,16 @@ class RecommendationService:
             "model2": "modelo2_artifacts.pkl",
             "reranker": "feedback_reranker.py",
         }
+        profile_warnings = _profile_warnings(encuesta)
+        if lab_analysis:
+            for warning in lab_analysis.get("warnings", []):
+                if warning not in profile_warnings:
+                    profile_warnings.append(warning)
+        safety_actions = _safety_actions(encuesta)
+        if lab_analysis:
+            for action in lab_analysis.get("safety_actions", []):
+                if action not in safety_actions:
+                    safety_actions.append(action)
 
         response = {
             "session_id": session_id,
@@ -632,17 +841,36 @@ class RecommendationService:
             "combo_seguro": resultado.get("combo_seguro", True),
             "mensaje": resultado.get("mensaje", "OK"),
             "disclaimer": DISCLAIMER,
-            "profile_warnings": _profile_warnings(encuesta),
+            "profile_warnings": profile_warnings,
+            "safety_level": safety_level,
+            "safety_actions": safety_actions,
+            "commercial_recommendations_blocked": commercial_recommendations_blocked,
+            "lab_analysis": lab_analysis,
             "model_versions": model_versions,
         }
 
+        log_event(
+            "recommendation_generated",
+            recommendation_id=recommendation_id,
+            user_id=str(user.id) if user else None,
+            conditions=conditions,
+            recommendation_count=len(recommendations),
+            pack_count=len(packs_ranked),
+            safety_level=safety_level,
+            commercial_recommendations_blocked=commercial_recommendations_blocked,
+        )
+
         if self.db is not None:
+            if user is not None:
+                UserRepository(self.db).update_profile(user, _survey_profile_values(encuesta))
+
             RecommendationRepository(self.db).save_response(
                 recommendation_id=recommendation_id,
                 session_id=session_id,
                 input_payload=encuesta.model_dump(),
                 conditions=conditions,
                 model_versions=model_versions,
+                profile_warnings=profile_warnings,
                 recommendations=recommendations,
                 packs_ranked=packs_ranked,
                 user_id=user.id if user else None,

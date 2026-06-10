@@ -59,6 +59,13 @@ class UserRepository:
         self.db.commit()
         return self.get_by_id(user.id)
 
+    def update_password(self, user: User, password: str) -> User:
+        user.password_hash = hash_password(password)
+        user.updated_at = utcnow()
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
     def assign_role(self, user: User, role_name: str) -> None:
         role = self.db.scalar(select(Role).where(Role.name == role_name))
         if role is None:

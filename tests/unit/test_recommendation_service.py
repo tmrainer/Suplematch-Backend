@@ -66,7 +66,7 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
     assert response["conditions"] == ["DEFICIT_VIT_D"]
     assert response["conditions_display"][0]["display_name"] == "Déficit de vitamina D"
     assert response["recommendations"][0]["name"] == "Vitamin D"
-    assert response["recommendations"][0]["display_name"] == "Vitamin D"
+    assert response["recommendations"][0]["display_name"] == "Vitamina D"
     assert response["recommendations"][0]["condition_display"] == "Déficit de vitamina D"
     assert response["recommendations"][0]["reason"] == "Relacionado con déficit de vitamina d."
     assert response["recommendations"][0]["dosage_hint"]
@@ -77,13 +77,13 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
         {
             "component_id": "cmp_vit_d",
             "name": "Vitamin D",
-            "display_name": "Vitamin D",
+            "display_name": "Vitamina D",
             "icon_key": "sun",
         },
         {
             "component_id": "cmp_calcium",
             "name": "Calcium",
-            "display_name": "Calcium",
+            "display_name": "Calcio",
             "icon_key": "bone",
         },
     ]

@@ -102,6 +102,9 @@ class RecommendedProduct(BaseModel):
     stock: int | None = None
     last_seen_at: str | None = None
     product_score: float | None = None
+    catalog_preferred: bool = False
+    catalog_blocked: bool = False
+    catalog_override_reason: str | None = None
     match_score: float | None = None
     review_score: float | None = None
     review_count: int = 0
@@ -112,6 +115,18 @@ class RecommendedProduct(BaseModel):
     traceability_score: float | None = None
     pharmacy_diversity_score: float | None = None
     freshness_score: float | None = None
+    restriction_penalty: float | None = None
+    ingredient_safety_penalty: float | None = None
+    restriction_boost: float | None = None
+    preferred_boost: float | None = None
+    product_safety_blocked: bool = False
+    product_safety_rules: list[dict[str, Any]] = Field(default_factory=list)
+    restriction_flags: list[str] = Field(default_factory=list)
+    restriction_flags_verified: list[str] = Field(default_factory=list)
+    restriction_flags_inferred: list[str] = Field(default_factory=list)
+    restriction_warnings: list[str] = Field(default_factory=list)
+    label_verified_at: str | None = None
+    label_verification_source: str | None = None
     selection_reasons: list[str] = Field(default_factory=list)
     selection_metrics: dict[str, Any] = Field(default_factory=dict)
 
@@ -130,4 +145,8 @@ class RecommendationResponse(BaseModel):
     mensaje: str
     disclaimer: str
     profile_warnings: list[str] = Field(default_factory=list)
+    safety_level: str = "normal"
+    safety_actions: list[str] = Field(default_factory=list)
+    commercial_recommendations_blocked: bool = False
+    lab_analysis: dict[str, Any] | None = None
     model_versions: dict[str, str]

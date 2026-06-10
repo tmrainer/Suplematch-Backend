@@ -49,11 +49,17 @@ VALUE_LABELS: dict[str, dict] = {
     "irritabilidad":        {1: "Bajo", 3: "Moderado", 4: "Alto", 5: "Muy alto"},
     "enfermedad_frecuente": {1: "Casi nunca", 2: "1-2/año", 4: "3-4/año", 5: "Muy seguido"},
     "niebla_mental":        {2: "Leve", 3: "Moderada", 4: "Frecuente"},
+    "dolor_muscular":       {1: "Leve", 3: "Moderado", 4: "Frecuente", 5: "Severo"},
+    "caida_cabello":        {1: "Sin caída", 2: "Leve", 3: "Moderada", 4: "Frecuente", 5: "Severa"},
+    "calambres":            {1: "Sin calambres", 2: "Ocasionales", 3: "Frecuentes", 4: "Muy frecuentes"},
     "exposicion_solar":     {"baja": "Menos de 15 min/día", "media": "15-60 min/día", "alta": "Más de 1h/día"},
     "nivel_actividad":      {"sedentario": "Sedentario", "moderado": "Moderado", "activo": "Activo", "muy_activo": "Muy activo"},
     "meta_salud_osea":      {0: "No priorizada", 1: "Priorizada"},
     "meta_inmunidad":       {0: "No priorizada", 1: "Priorizada"},
     "meta_energia":         {0: "No priorizada", 1: "Priorizada"},
+    "meta_rendimiento":     {0: "No priorizado", 1: "Priorizado"},
+    "meta_cognitivo":       {0: "No priorizado", 1: "Priorizado"},
+    "meta_belleza":         {0: "No priorizado", 1: "Priorizado"},
 }
 
 # Fallback rule-based: qué features son relevantes por condición
@@ -62,6 +68,11 @@ CONDITION_FEATURE_MAP: dict[str, list[tuple[str, str, bool]]] = {
         ("fatiga_general",   "Fatiga frecuente",     True),
         ("problemas_sueno",  "Problemas de sueño",   True),
         ("irritabilidad",    "Nivel de estrés",       True),
+    ],
+    "FATIGA_CRONICA": [
+        ("fatiga_general",   "Fatiga frecuente",     True),
+        ("problemas_sueno",  "Problemas de sueño",   True),
+        ("meta_energia",     "Objetivo energía",      True),
     ],
     "PROBLEMAS_SUENO": [
         ("problemas_sueno",  "Calidad del sueño",    True),
@@ -76,7 +87,22 @@ CONDITION_FEATURE_MAP: dict[str, list[tuple[str, str, bool]]] = {
     "DEFICIT_CALCIO": [
         ("exposicion_solar", "Exposición solar",      False),
         ("meta_salud_osea",  "Prioridad salud ósea",  True),
-        ("edad",             "Edad",                  True),
+        ("calambres",        "Calambres musculares",  True),
+    ],
+    "DEFICIT_B12": [
+        ("fatiga_general",   "Fatiga frecuente",     True),
+        ("niebla_mental",    "Niebla mental",         True),
+        ("caida_cabello",    "Caída de cabello",      True),
+    ],
+    "DEFICIT_HIERRO": [
+        ("fatiga_general",   "Fatiga frecuente",     True),
+        ("caida_cabello",    "Caída de cabello",      True),
+        ("meta_energia",     "Objetivo energía",      True),
+    ],
+    "DEFICIT_MAGNESIO": [
+        ("calambres",        "Calambres musculares",  True),
+        ("problemas_sueno",  "Problemas de sueño",   True),
+        ("irritabilidad",    "Nivel de estrés",       True),
     ],
     "BAJA_INMUNIDAD": [
         ("enfermedad_frecuente", "Frecuencia de enfermedades", True),
@@ -87,6 +113,26 @@ CONDITION_FEATURE_MAP: dict[str, list[tuple[str, str, bool]]] = {
         ("irritabilidad",   "Nivel de estrés",       True),
         ("niebla_mental",   "Niebla mental",          True),
         ("problemas_sueno", "Problemas de sueño",    True),
+    ],
+    "RENDIMIENTO_DEPORTIVO": [
+        ("meta_rendimiento", "Objetivo rendimiento",  True),
+        ("dolor_muscular",   "Dolor muscular",         True),
+        ("fatiga_general",   "Fatiga general",         True),
+    ],
+    "SALUD_OSEA": [
+        ("exposicion_solar", "Exposición solar",      False),
+        ("meta_salud_osea",  "Prioridad salud ósea",  True),
+        ("calambres",        "Calambres musculares",  True),
+    ],
+    "SALUD_COGNITIVA": [
+        ("niebla_mental",    "Niebla mental",          True),
+        ("meta_cognitivo",   "Objetivo cognitivo",     True),
+        ("problemas_sueno",  "Problemas de sueño",    True),
+    ],
+    "SALUD_CAPILAR": [
+        ("caida_cabello",    "Caída de cabello",      True),
+        ("meta_belleza",     "Objetivo belleza",       True),
+        ("fatiga_general",   "Fatiga general",         True),
     ],
 }
 

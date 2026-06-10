@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import RecommendationSession, RecommendedPack, RecommendedPackItem
+from app.db.models import CommercialProduct, RecommendationSession, RecommendedPack, RecommendedPackItem
 
 
 class SessionRepository:
@@ -17,7 +17,12 @@ class SessionRepository:
             self.db.scalars(
                 select(RecommendationSession)
                 .options(
+                    selectinload(RecommendationSession.items),
                     selectinload(RecommendationSession.packs).selectinload(RecommendedPack.items),
+                    selectinload(RecommendationSession.packs)
+                    .selectinload(RecommendedPack.items)
+                    .selectinload(RecommendedPackItem.product)
+                    .selectinload(CommercialProduct.pharmacy),
                 )
                 .where(RecommendationSession.user_id == user_id)
                 .order_by(RecommendationSession.created_at.desc())
@@ -29,7 +34,14 @@ class SessionRepository:
     def get_by_recommendation_id(self, recommendation_id: str) -> RecommendationSession | None:
         return self.db.scalar(
             select(RecommendationSession)
-            .options(selectinload(RecommendationSession.packs).selectinload(RecommendedPack.items))
+            .options(
+                selectinload(RecommendationSession.items),
+                selectinload(RecommendationSession.packs).selectinload(RecommendedPack.items),
+                selectinload(RecommendationSession.packs)
+                .selectinload(RecommendedPack.items)
+                .selectinload(RecommendedPackItem.product)
+                .selectinload(CommercialProduct.pharmacy),
+            )
             .where(RecommendationSession.recommendation_id == recommendation_id)
         )
 

@@ -12,11 +12,37 @@ from app.core.config import settings
 
 _artifacts = None
 _ARTIFACTS_PATH = settings.MODEL_DIR / "modelo2_artifacts.pkl"
+_TORCH_CPU_FALLBACK_REGISTERED = False
+
+
+def _register_torch_cpu_fallback() -> None:
+    """Allow artifacts saved on Apple MPS to load in Linux CPU containers."""
+    global _TORCH_CPU_FALLBACK_REGISTERED
+    if _TORCH_CPU_FALLBACK_REGISTERED:
+        return
+
+    try:
+        import torch
+    except ImportError:
+        return
+
+    def _deserialize_to_cpu(storage, location):
+        if isinstance(location, str) and location.startswith("mps"):
+            return storage.cpu()
+        return None
+
+    torch.serialization.register_package(
+        priority=0,
+        tagger=lambda _storage: None,
+        deserializer=_deserialize_to_cpu,
+    )
+    _TORCH_CPU_FALLBACK_REGISTERED = True
 
 
 def _load():
     global _artifacts
     if _artifacts is None:
+        _register_torch_cpu_fallback()
         _artifacts = joblib.load(_ARTIFACTS_PATH)
 
 

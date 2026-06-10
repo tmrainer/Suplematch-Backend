@@ -35,3 +35,10 @@ class SupplementReviewOut(BaseModel):
     verified_purchase: bool
     status: str
     created_at: datetime
+
+
+class SupplementReviewModerationOut(SupplementReviewOut):
+    product_name: str | None = None
+    pharmacy: str | None = None
+    component_name: str | None = None
+    spam_flags: list[str] = Field(default_factory=list)
