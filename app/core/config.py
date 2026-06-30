@@ -32,10 +32,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     SMTP_FROM_EMAIL: str | None = None
     SMTP_USE_TLS: bool = True
-    MODEL_DIR: Path = BASE_DIR / "app/ml/runtime"
-    FEEDBACK_DB_PATH: Path = BASE_DIR / "app/ml/runtime/feedback.sqlite3"
-    DIGEMID_CSV_PATH: Path = BASE_DIR / "data/raw/csv/digemid_limpio.csv"
-    PRODUCT_COMPONENTS_CSV_PATH: Path = BASE_DIR / "data/training/modelo2/product_components.csv"
+    MODEL_DIR: Path = BASE_DIR / "models/runtime"
+    FEEDBACK_DB_PATH: Path = BASE_DIR / "var/legacy/feedback.sqlite3"
+    RECOMMENDATION_EVENTS_PATH: Path = BASE_DIR / "var/legacy/recommendation_events.json"
+    USER_FEEDBACK_EVENTS_PATH: Path = BASE_DIR / "var/legacy/user_feedback_events.json"
+    DIGEMID_CSV_PATH: Path = BASE_DIR / "data/raw/digemid/digemid_limpio.csv"
+    PRODUCT_COMPONENTS_CSV_PATH: Path = BASE_DIR / "data/training/supplement_model/product_components.csv"
     APPROVED_CATALOG_PATH: Path = BASE_DIR / "data/catalog/approved_catalog.csv"
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 60

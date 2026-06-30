@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.db.models import User
 from app.db.session import get_db
-from app.repositories.user_repository import UserRepository, user_roles
+from app.domains.users.repositorio_usuarios import UserRepository, user_roles
 
 
 def db_session() -> Generator[Session, None, None]:

@@ -20,20 +20,20 @@ Crear tablas y roles base:
 
 ```bash
 alembic upgrade head
-python3 scripts/init_postgres_schema.py
+python3 scripts/ops/inicializar_postgres.py
 ```
 
 Importar catálogo aprobado actual:
 
 ```bash
-python3 scripts/import_catalog_to_postgres.py \
+python3 scripts/catalog/importar_catalogo_postgres.py \
   --catalog data/catalog/approved_catalog.csv
 ```
 
 Validar persistencia y efecto en re-ranking:
 
 ```bash
-python3 scripts/validate_postgres_persistence.py
+python3 scripts/validation/validar_persistencia_postgres.py
 ```
 
 Si se usa Docker local:

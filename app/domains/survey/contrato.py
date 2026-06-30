@@ -1,0 +1,183 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+SURVEY_CONTRACT_VERSION = "2026-06-25.1"
+
+SURVEY_ENUMS: dict[str, list[str]] = {
+    "edad_rango": ["menos_18", "18_30", "31_50", "mas_50"],
+    "sexo": ["femenino", "masculino"],
+    "peso_rango": ["menos_50", "50_65", "66_80", "mas_80"],
+    "talla_rango": ["menos_155", "155_165", "166_175", "mas_175"],
+    "tipo_dieta": ["omnivoro", "pescetariano", "vegetariano", "vegano"],
+    "dieta": ["poco_variada", "regular", "bastante_variada", "muy_balanceada"],
+    "exposicion_solar": ["menos_15min", "15_30min", "30_60min", "mas_1h"],
+    "frecuencia_ejercicio": ["casi_nunca", "1_2_semana", "3_4_semana", "diario"],
+    "fatiga": ["casi_nunca", "a_veces", "a_menudo", "siempre"],
+    "horas_sueno": ["menos_5h", "5_7h", "7_9h", "mas_9h"],
+    "frecuencia_enfermedad": ["casi_nunca", "1_2_anio", "3_4_anio", "muy_seguido"],
+    "estres": ["bajo", "moderado", "alto", "muy_alto"],
+    "sintomas": [
+        "ninguno",
+        "dolor_muscular",
+        "dolor_articular",
+        "niebla_mental",
+        "caida_cabello",
+        "piel_seca",
+        "unas_quebradizas",
+        "calambres",
+    ],
+    "objetivo_principal": [
+        "energia",
+        "inmunidad",
+        "suenio_estres",
+        "rendimiento",
+        "salud_osea",
+        "cabello_piel_unas",
+        "salud_visual",
+        "digestion",
+        "hidratacion",
+        "salud_cardiovascular",
+        "salud_cognitiva",
+        "nutricion_general",
+    ],
+    "objetivos": [
+        "energia",
+        "inmunidad",
+        "suenio",
+        "rendimiento",
+        "salud_osea",
+        "cabello_piel_unas",
+        "estres",
+        "salud_visual",
+        "digestion",
+        "hidratacion",
+        "salud_cardiovascular",
+        "salud_cognitiva",
+    ],
+    "digestive_discomfort": ["nunca", "leve", "moderado", "frecuente", "severo"],
+    "sleep_quality": ["buena", "regular", "mala"],
+    "night_wakeups": ["nunca", "1_2", "3_o_mas"],
+    "caffeine_after_3pm": ["no", "a_veces", "si"],
+    "caffeine_sources": ["cafe", "te", "energizante", "preworkout", "gaseosa_cola", "chocolate", "otro"],
+    "iron_anemia_history": ["no", "si", "no_se"],
+    "training_type": ["no_aplica", "fuerza", "cardio", "mixto", "movilidad"],
+    "recovery_difficulty": ["no", "leve", "moderada", "alta"],
+    "alcohol": ["nunca", "raro", "ocasional", "frecuente"],
+    "toma_suplementos": ["no", "si"],
+    "suplementos_actuales": [
+        "vitamina_d",
+        "calcio",
+        "magnesio",
+        "zinc",
+        "vitamina_c",
+        "hierro",
+        "omega_3",
+        "multivitaminico",
+        "proteina",
+        "otro",
+    ],
+    "suplementos_frecuencia": ["diario", "varias_semana", "ocasional", "no_se"],
+    "presupuesto": ["bajo", "medio", "alto", "sin_preferencia"],
+    "restricciones": [
+        "sin_restricciones",
+        "alergia_lacteos",
+        "alergia_soya",
+        "alergia_pescado_mariscos",
+        "evita_gelatina",
+        "sin_gluten",
+    ],
+    "condiciones_seguridad": [
+        "ninguna",
+        "embarazo_lactancia",
+        "enfermedad_renal",
+        "enfermedad_hepatica",
+        "problema_tiroideo",
+        "anticoagulantes",
+        "medicacion_cronica",
+    ],
+}
+
+SURVEY_RULES: dict[str, Any] = {
+    "max_objetivos": 4,
+    "toma_suplementos_si_requires_suplementos_actuales": True,
+    "toma_suplementos_no_requires_empty_suplementos_actuales": True,
+    "exclusive_values": {
+        "restricciones": "sin_restricciones",
+        "condiciones_seguridad": "ninguna",
+    },
+    "incompatible_values": [
+        {
+            "field": "condiciones_seguridad",
+            "value": "embarazo_lactancia",
+            "when": {"sexo": "masculino"},
+        },
+        {
+            "field": "training_type",
+            "value_not_in": ["no_aplica", None],
+            "when": {"exercise_days_week": 0},
+        }
+    ],
+    "hard_safety_values": {
+        "edad_rango": ["menos_18"],
+        "condiciones_seguridad": [
+            "embarazo_lactancia",
+            "enfermedad_renal",
+            "enfermedad_hepatica",
+        ],
+    },
+    "targeted_safety_values": {
+        "condiciones_seguridad": [
+            "problema_tiroideo",
+            "anticoagulantes",
+            "medicacion_cronica",
+        ],
+    },
+    "exact_fields": {
+        "age_years": {"min": 1, "max": 120, "derived_field": "edad_rango"},
+        "weight_value": {"min": 0, "max": 500000, "requires": "weight_unit", "derived_fields": ["weight_kg", "peso_rango"]},
+        "weight_unit": {"values": ["kg", "lb"]},
+        "height_value": {"min": 0, "max": 10000, "requires": "height_unit", "derived_fields": ["height_cm", "talla_rango"]},
+        "height_unit": {"values": ["cm"], "ui_values": ["cm", "ft_in"], "ui_note": "ft_in se convierte a cm antes de enviarse al backend."},
+        "bmi": {"derived_from": ["weight_kg", "height_cm"]},
+    },
+    "optimized_fields": {
+        "fish_servings_week": {"min": 0, "max": 21, "missing_means": "unknown"},
+        "dairy_servings_day": {"min": 0, "max": 10, "missing_means": "unknown"},
+        "dairy_servings_week": {"min": 0, "max": 21, "missing_means": "unknown", "derived_field": "dairy_servings_day"},
+        "legume_servings_week": {"min": 0, "max": 21, "missing_means": "unknown"},
+        "meat_servings_week": {"min": 0, "max": 21, "missing_means": "unknown"},
+        "red_meat_servings_week": {"min": 0, "max": 21, "missing_means": "unknown"},
+        "poultry_servings_week": {"min": 0, "max": 21, "missing_means": "unknown"},
+        "eggs_servings_week": {"min": 0, "max": 21, "missing_means": "unknown"},
+        "no_meat": {"type": "boolean"},
+        "fruit_veg_servings_day": {"min": 0, "max": 20, "missing_means": "unknown"},
+        "protein_g_day_estimate": {"min": 0, "max": 300, "missing_means": "unknown", "ui_note": "Opcional; la app puede estimar desde alimentos semanales."},
+        "iron_anemia_history": {"values": ["no", "si", "no_se"]},
+        "caffeine_servings_day": {"min": 0, "max": 20, "missing_means": "unknown"},
+        "fermented_foods_week": {"min": 0, "max": 21, "missing_means": "unknown"},
+        "water_intake_l_day": {"min": 0, "max": 10, "missing_means": "unknown"},
+        "screen_hours_day": {"min": 0, "max": 24, "missing_means": "unknown"},
+        "heavy_sweat_days_week": {"min": 0, "max": 7, "missing_means": "unknown"},
+        "headache_days_week": {"min": 0, "max": 7, "missing_means": "unknown"},
+        "fatigue_days_week": {"min": 0, "max": 7, "missing_means": "unknown"},
+        "alcohol_drinks_week": {"min": 0, "max": 80, "missing_means": "unknown"},
+        "exercise_days_week": {"min": 0, "max": 7},
+        "suplementos_dosis_conocida": {"type": "boolean"},
+        "preferred_pack_size": {"values": [3, 5], "default": 3},
+    },
+    "response_sections": {
+        "condition_results": "Riesgos nutricionales o biomedicos estimados; no son diagnosticos.",
+        "wellness_priorities": "Prioridades blandas por encuesta, no evaluables con NHANES.",
+        "safety_flags": "Alertas de seguridad que deben mostrarse antes de productos.",
+    },
+}
+
+
+def survey_contract() -> dict[str, Any]:
+    return {
+        "version": SURVEY_CONTRACT_VERSION,
+        "enums": SURVEY_ENUMS,
+        "rules": SURVEY_RULES,
+    }

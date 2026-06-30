@@ -43,10 +43,12 @@ cp .env.example .env
 Variables relevantes:
 
 ```env
-MODEL_DIR=app/ml/runtime
-FEEDBACK_DB_PATH=app/ml/runtime/feedback.sqlite3
-DIGEMID_CSV_PATH=data/raw/csv/digemid_limpio.csv
-PRODUCT_COMPONENTS_CSV_PATH=data/training/modelo2/product_components.csv
+MODEL_DIR=models/runtime
+FEEDBACK_DB_PATH=var/legacy/feedback.sqlite3
+RECOMMENDATION_EVENTS_PATH=var/legacy/recommendation_events.json
+USER_FEEDBACK_EVENTS_PATH=var/legacy/user_feedback_events.json
+DIGEMID_CSV_PATH=data/raw/digemid/digemid_limpio.csv
+PRODUCT_COMPONENTS_CSV_PATH=data/training/supplement_model/product_components.csv
 APPROVED_CATALOG_PATH=data/catalog/approved_catalog.csv
 DATABASE_URL=postgresql+psycopg://suplematch:suplematch@localhost:5432/suplematch
 ```
@@ -218,10 +220,10 @@ data/
 ### Reconstruir catálogo aprobado
 
 ```bash
-python scripts/build_approved_catalog.py \
-  --scraped data/raw/csv/supplements_exhaustive_clean.csv \
-  --digemid data/raw/csv/digemid_limpio.csv \
-  --components data/training/modelo2/product_components.csv \
+python scripts/catalog/construir_catalogo_aprobado.py \
+  --scraped data/raw/pharmacies/supplements_exhaustive_clean.csv \
+  --digemid data/raw/digemid/digemid_limpio.csv \
+  --components data/training/supplement_model/product_components.csv \
   --out data/catalog/approved_catalog.csv
 ```
 
@@ -236,7 +238,7 @@ pytest tests/integration -q
 Validación de calidad del modelo:
 
 ```bash
-python scripts/validate_recommendation_quality.py
+python scripts/validation/validar_calidad_recomendaciones.py
 ```
 
 ---

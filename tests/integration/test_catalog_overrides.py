@@ -2,9 +2,9 @@ from uuid import uuid4
 
 from app.db.models import CommercialProduct, CommercialProductComponent, Component, Pharmacy
 from app.db.session import SessionLocal
-from app.repositories.admin_repository import AdminRepository
-from app.repositories.catalog_repository import CatalogRepository
-from app.schemas.admin import ProductAdminUpdate
+from app.domains.admin.repositorio_admin import AdminRepository
+from app.domains.catalog.repositorio_catalogo import CatalogRepository
+from app.domains.admin.esquemas import ProductAdminUpdate
 
 
 def test_preferred_override_does_not_remove_product_from_ranking():

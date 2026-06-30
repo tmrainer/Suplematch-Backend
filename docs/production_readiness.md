@@ -10,7 +10,7 @@ Estado esperado para abrir beta cerrada o produccion controlada.
 
 ## 2. Safety por ingrediente
 
-- Las reglas base se cargan con `python scripts/seed_database.py`.
+- Las reglas base se cargan con `python scripts/ops/sembrar_base.py`.
 - Admin puede auditar reglas en `GET /api/v1/admin/safety-rules`.
 - Admin puede crear/actualizar reglas en `POST/PATCH /api/v1/admin/safety-rules`.
 - Productos con regla `block` no salen en candidatos comerciales.
@@ -30,6 +30,8 @@ Estado esperado para abrir beta cerrada o produccion controlada.
 ## 5. Observabilidad
 
 - Revisar `/api/v1/health/ready` y `/api/v1/health/ops`.
+- Validar Prometheus, Loki y Grafana con `bash scripts/validate_observability_stack.sh`.
+- Revisar que `/api/v1/metrics` exponga `suplematch_domain_events_total`.
 - Alertar si:
   - `status != ready`.
   - `catalog.products_active == 0`.
@@ -79,6 +81,23 @@ bash scripts/restore_postgres.sh .backups/postgres/suplematch_latest.dump
 
 ## 10. Calidad del recomendador
 
+- Ejecutar `python scripts/validate_model2_quality.py`.
+- Revisar `data/reports/supplement_model/01_model2_summary.json`.
 - Usar feedback, resenas y exposicion para re-ranking antes de reentrenar.
 - Monitorear tasa de perfiles bloqueados, clicks, feedback positivo, diversidad de farmacia y repeticion de producto.
 - Usar biomarcadores solo como señales complementarias; nunca como diagnóstico autónomo.
+
+## 11. OCR de laboratorio
+
+- Ejecutar `python scripts/validate_lab_ocr_quality.py`.
+- Revisar `data/reports/labs/01_ocr_lab_summary.json`.
+- Probar manualmente PDFs/fotos reales anonimizados antes de cualquier demo pública.
+- Mantener `commercial_recommendations_blocked=true` para valores críticos o
+  señales renal/hepática sensibles.
+
+## 12. Datos de salud por usuario
+
+- Probar `GET /api/v1/users/me/health-data/export`.
+- Probar `DELETE /api/v1/users/me/health-data`.
+- Confirmar que el borrado afecta solo al usuario autenticado.
+- No usar estos endpoints desde pantallas admin salvo flujo explícito de soporte.

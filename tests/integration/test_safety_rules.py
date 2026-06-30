@@ -1,4 +1,4 @@
-from app.repositories.safety_rule_repository import SafetyRuleRepository
+from app.domains.catalog.repositorio_reglas_seguridad import SafetyRuleRepository
 from app.db.session import SessionLocal
 
 

@@ -4,7 +4,7 @@ from app.core.security import create_access_token
 from app.db.models import RecommendationSession, User
 from app.db.session import SessionLocal
 from app.main import create_app
-from app.repositories.user_repository import UserRepository
+from app.domains.users.repositorio_usuarios import UserRepository
 from tests.integration.test_health import asgi_request
 
 
@@ -20,6 +20,28 @@ def _survey_payload():
         "estres": "moderado",
         "alcohol": "ocasional",
     }
+
+
+def _auth_headers(email: str) -> dict[str, str]:
+    with SessionLocal() as db:
+        existing_user = db.scalar(select(User).where(User.email == email))
+        if existing_user is not None:
+            db.delete(existing_user)
+            db.commit()
+        user = UserRepository(db).create_user(email=email, password="ChangeMe123!", display_name="Recommend Test")
+        token = create_access_token(str(user.id), {"roles": ["user"]})
+        db.commit()
+    return {"authorization": f"Bearer {token}"}
+
+
+def test_recommend_endpoint_requires_authenticated_user():
+    app = create_app()
+    app.state.models = {"pipeline_vitaminas": lambda _payload, verbose=False: {}}
+
+    status_code, body = asgi_request(app, "POST", "/api/v1/recommend", _survey_payload())
+
+    assert status_code == 401
+    assert body["detail"] == "Token requerido."
 
 
 def test_recommend_endpoint_returns_normalized_response():
@@ -75,7 +97,13 @@ def test_recommend_endpoint_returns_normalized_response():
     app = create_app()
     app.state.models = {"pipeline_vitaminas": pipeline}
 
-    status_code, body = asgi_request(app, "POST", "/api/v1/recommend", _survey_payload())
+    status_code, body = asgi_request(
+        app,
+        "POST",
+        "/api/v1/recommend",
+        _survey_payload(),
+        headers=_auth_headers("recommend-normalized@suplematch.test"),
+    )
 
     assert status_code == 200
     assert body["recommendation_id"] == recommendation_id
@@ -167,14 +195,20 @@ def test_recommend_endpoint_handles_extended_survey_context():
         "toma_suplementos": "si",
         "suplementos_actuales": ["vitamina_d"],
         "restricciones": ["sin_gluten"],
-        "condiciones_seguridad": ["medicacion_cronica"],
+        "condiciones_seguridad": ["enfermedad_renal"],
         "presupuesto": "bajo",
     }
 
     app = create_app()
     app.state.models = {"pipeline_vitaminas": pipeline}
 
-    status_code, body = asgi_request(app, "POST", "/api/v1/recommend", payload)
+    status_code, body = asgi_request(
+        app,
+        "POST",
+        "/api/v1/recommend",
+        payload,
+        headers=_auth_headers("recommend-extended@suplematch.test"),
+    )
 
     assert status_code == 200
     assert body["recommendation_id"] == recommendation_id
@@ -182,13 +216,96 @@ def test_recommend_endpoint_handles_extended_survey_context():
     assert body["safety_level"] == "medical_review_required"
     assert body["safety_actions"]
     assert any("Ya consumes suplementos" in warning for warning in body["profile_warnings"])
-    assert any("interacciones" in warning.lower() for warning in body["profile_warnings"])
+    assert any("renal" in warning.lower() for warning in body["profile_warnings"])
     assert any("Sin gluten" in warning for warning in body["profile_warnings"])
     assert body["recommendations"][0]["already_taking"] is True
     assert body["recommendations"][0]["safety_note"]
     assert body["commercial_recommendations_blocked"] is True
     assert body["recommendations"][0]["products"] == []
     assert body["packs_ranked"][0]["selected_products"] == []
+
+    with SessionLocal() as db:
+        session = db.scalar(
+            select(RecommendationSession).where(RecommendationSession.recommendation_id == recommendation_id)
+        )
+        if session is not None:
+            db.delete(session)
+            db.commit()
+
+
+def test_recommend_endpoint_keeps_targeted_safety_as_caution():
+    recommendation_id = "rec_test_targeted_caution"
+    component_id = "COMP_94DFE28A9A5C"
+
+    with SessionLocal() as db:
+        existing = db.scalar(
+            select(RecommendationSession).where(RecommendationSession.recommendation_id == recommendation_id)
+        )
+        if existing is not None:
+            db.delete(existing)
+            db.commit()
+
+    def pipeline(_payload, verbose=False):
+        return {
+            "recommendation_id": recommendation_id,
+            "condiciones": ["DEFICIT_VIT_D"],
+            "recomendaciones": [
+                {
+                    "component_id": component_id,
+                    "nombre": "Vitamin D",
+                    "condicion": "DEFICIT_VIT_D",
+                    "score": 0.93,
+                    "tipo": "semilla_directa",
+                }
+            ],
+            "packs_ranked": [
+                {
+                    "pack_id": "pack_targeted_caution",
+                    "rank": 1,
+                    "component_ids": [component_id],
+                    "component_names": ["Vitamin D"],
+                    "score_final": 0.91,
+                    "score_gnn": 0.88,
+                    "score_coverage": 1.0,
+                    "score_feedback": 0.7,
+                    "feedback_count": 0,
+                }
+            ],
+            "sinergias": [],
+            "alertas": [],
+            "combo_seguro": True,
+            "mensaje": "OK",
+        }
+
+    payload = {
+        **_survey_payload(),
+        "sexo": "femenino",
+        "tipo_dieta": "omnivoro",
+        "objetivos": ["energia"],
+        "restricciones": [],
+        "condiciones_seguridad": ["anticoagulantes"],
+        "presupuesto": "medio",
+    }
+
+    app = create_app()
+    app.state.models = {"pipeline_vitaminas": pipeline}
+
+    status_code, body = asgi_request(
+        app,
+        "POST",
+        "/api/v1/recommend",
+        payload,
+        headers=_auth_headers("recommend-targeted@suplematch.test"),
+    )
+
+    assert status_code == 200
+    assert body["recommendation_id"] == recommendation_id
+    assert body["safety_level"] == "caution"
+    assert body["commercial_recommendations_blocked"] is False
+    assert any("omega 3, vitamina K" in warning for warning in body["profile_warnings"])
+    assert body["recommendations"][0]["commercial_eligible"] is True
+    assert body["recommendations"][0]["products"]
+    assert body["packs_ranked"][0]["selected_products"]
 
     with SessionLocal() as db:
         session = db.scalar(
@@ -258,7 +375,13 @@ def test_recommend_endpoint_ranks_products_when_profile_is_not_critical():
     app = create_app()
     app.state.models = {"pipeline_vitaminas": pipeline}
 
-    status_code, body = asgi_request(app, "POST", "/api/v1/recommend", payload)
+    status_code, body = asgi_request(
+        app,
+        "POST",
+        "/api/v1/recommend",
+        payload,
+        headers=_auth_headers("recommend-products@suplematch.test"),
+    )
 
     assert status_code == 200
     assert body["commercial_recommendations_blocked"] is False
@@ -323,6 +446,9 @@ def test_recommend_endpoint_persists_extended_survey_for_authenticated_user():
         "restricciones": ["alergia_pescado_mariscos", "sin_gluten"],
         "condiciones_seguridad": ["anticoagulantes"],
         "presupuesto": "bajo",
+        "height_value": 168,
+        "height_unit": "cm",
+        "height_cm": 168,
     }
 
     app = create_app()
@@ -347,6 +473,7 @@ def test_recommend_endpoint_persists_extended_survey_for_authenticated_user():
         assert saved_user.profile.diet_type == "vegetariano"
         assert saved_user.profile.sex == "femenino"
         assert saved_user.profile.activity_level == payload["frecuencia_ejercicio"]
+        assert saved_user.profile.height_cm == 168
         assert saved_user.profile.health_goals["presupuesto"] == "bajo"
         assert saved_user.profile.health_goals["suplementos_actuales"] == ["magnesio", "omega_3"]
         assert saved_user.profile.allergies["restricciones"] == ["alergia_pescado_mariscos", "sin_gluten"]

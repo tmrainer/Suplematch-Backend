@@ -41,9 +41,25 @@ app/ml/runtime/recommendation_events.json
 app/ml/runtime/user_feedback_events.json
 data/feedback/*.json
 
+# Large raw/processed data — no versionar (reproducibles desde scripts)
+data/raw/
+data/processed/
+data/training/
+data/evaluation/
+data/reports/
+
+# Legacy runtime data
+var/legacy/*.json
+var/legacy/*.sqlite3
+var/legacy/*.sqlite3-*
+
 # Heavy model artifacts
 *.joblib
 artifacts/models/
+models/runtime/*.pkl
+models/runtime/*.csv
+models/runtime/*.joblib
+models/backups/
 
 # Keep placeholder/example files if added later
 !.gitkeep

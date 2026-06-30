@@ -8,7 +8,8 @@ Antes de enviar la encuesta, el usuario debe aceptar que:
 
 - La recomendación es informativa y puede ser incorrecta o incompleta.
 - Los suplementos pueden tener contraindicaciones, efectos adversos e interacciones.
-- Si declara embarazo, lactancia, minoría de edad, anticoagulantes, enfermedad renal/hepática o medicación crónica, no se deben mostrar productos comerciales para compra directa.
+- Si declara embarazo, lactancia, minoría de edad o enfermedad renal/hepática, no se deben mostrar productos comerciales para compra directa.
+- Si declara anticoagulantes, problema tiroideo o medicación crónica, se deben mostrar alertas claras y aplicar filtros por ingrediente sin bloquear todo el catálogo.
 - Sus respuestas pueden guardarse si inicia sesión para mejorar historial, perfil y recomendaciones futuras.
 - Las reseñas y feedback pueden usarse como señales agregadas para ranking, moderación y mejora del sistema.
 
@@ -38,11 +39,13 @@ El módulo de exámenes permite:
 - Ingreso manual estructurado de biomarcadores.
 - Pegado de texto de resultados.
 - Upload de PDF o imagen para extracción de texto/OCR.
+- Revision y correccion manual de valores detectados antes de reutilizarlos en recomendaciones.
 
 Reglas obligatorias:
 
 - No interpretar resultados como diagnóstico.
 - Mostrar que unidades y rangos varían por laboratorio.
+- Mostrar confianza baja de OCR y pedir confirmacion de valor, unidad y rango.
 - Guardar solo texto/valores necesarios para el análisis; no usar archivos originales como fuente permanente.
 - Bloquear recomendaciones comerciales si hay valores críticos o señales renal/hepática.
 - Derivar a revisión profesional para patrones sensibles como ferritina baja + hemoglobina baja.
@@ -63,6 +66,13 @@ Biomarcadores soportados inicialmente:
 - Glucosa.
 
 ## Retención, exportación y borrado
+
+Datos personales de cuenta:
+
+- `users` conserva autenticación, email, estado y nombre visible.
+- `user_personal_info` conserva datos identificables opcionales como nombre, teléfono, ubicación, fecha de nacimiento y documento.
+- `user_profiles` conserva edad, peso normalizado, preferencias y contexto de encuesta/salud, separado de los datos personales identificables.
+- `DELETE /api/v1/users/me/personal` limpia la información personal identificable sin borrar la cuenta ni el historial técnico.
 
 Endpoints de usuario autenticado:
 
@@ -89,8 +99,12 @@ Debe bloquearse la recomendación comercial y mostrar solo guía para conversaci
 - Embarazo o lactancia.
 - Enfermedad renal.
 - Enfermedad hepática.
-- Uso de anticoagulantes.
-- Medicación crónica.
+
+Debe mantenerse recomendación comercial con precaución dirigida cuando exista:
+
+- Uso de anticoagulantes: bloquear vitamina K y revisar omega 3 o fórmulas herbales.
+- Problema tiroideo: bloquear yodo, algas, kelp o fórmulas tiroideas.
+- Medicación crónica: mostrar alerta de interacción y priorizar productos simples/trazables.
 
 ## Catálogo comercial
 
@@ -118,7 +132,7 @@ Acciones soportadas:
 Las reglas base se cargan con:
 
 ```bash
-python scripts/seed_database.py
+python scripts/ops/sembrar_base.py
 ```
 
 Ejemplos cubiertos:

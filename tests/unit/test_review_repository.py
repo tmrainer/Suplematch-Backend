@@ -1,4 +1,4 @@
-from app.repositories.review_repository import review_spam_flags
+from app.domains.reviews.repositorio_resenas import review_spam_flags
 
 
 def test_review_spam_flags_detects_links_and_repetition():

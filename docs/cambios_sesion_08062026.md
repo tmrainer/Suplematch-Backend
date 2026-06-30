@@ -61,8 +61,8 @@ DIGEMID_CSV_PATH = BASE_DIR / "digemid_limpio.csv"
 PRODUCT_COMPONENTS_CSV_PATH = BASE_DIR / "product_components.csv"
 
 # Después (paths correctos)
-DIGEMID_CSV_PATH = BASE_DIR / "data/raw/csv/digemid_limpio.csv"
-PRODUCT_COMPONENTS_CSV_PATH = BASE_DIR / "data/training/modelo2/product_components.csv"
+DIGEMID_CSV_PATH = BASE_DIR / "data/raw/digemid/digemid_limpio.csv"
+PRODUCT_COMPONENTS_CSV_PATH = BASE_DIR / "data/training/supplement_model/product_components.csv"
 ```
 
 ---
@@ -77,8 +77,8 @@ El archivo `.gitignore` tenía `*.pkl`, lo que significa que git ignoraba comple
 
 | Archivo | Tamaño | Contenido |
 |---|---|---|
-| `app/ml/runtime/modelo1_pipeline.pkl` | 7.2 MB | Pipeline sklearn completo: preprocesador (ColumnTransformer) + MultiOutputClassifier(RandomForest). Entrena 6 clasificadores binarios, uno por condición. |
-| `app/ml/runtime/modelo2_artifacts.pkl` | 317 KB | Embeddings del grafo GNN, índices de componentes, semillas por condición, pares de sinergias y pares de interacciones riesgosas. |
+| `models/runtime/modelo1_pipeline.pkl` | 7.2 MB | Pipeline sklearn completo: preprocesador (ColumnTransformer) + MultiOutputClassifier(RandomForest). Entrena 6 clasificadores binarios, uno por condición. |
+| `models/runtime/modelo2_artifacts.pkl` | 317 KB | Embeddings del grafo GNN, índices de componentes, semillas por condición, pares de sinergias y pares de interacciones riesgosas. |
 
 ### Solución aplicada
 
@@ -358,10 +358,10 @@ El README original era el template por defecto de Vite (sin información del pro
 | `requirements.txt` | Mejora | Agrega shap>=0.45.0 |
 | `README.md` | Reescrito | Documentación completa y correcta |
 | `.gitignore` | Fix | Elimina *.pkl para versionar modelos |
-| `data/raw/csv/digemid_limpio.csv` | Movido | Desde raíz del proyecto |
-| `data/training/modelo2/product_components.csv` | Movido | Desde raíz del proyecto |
-| `app/ml/runtime/modelo1_pipeline.pkl` | Nuevo en git | Modelo RF entrenado (7.2 MB) |
-| `app/ml/runtime/modelo2_artifacts.pkl` | Nuevo en git | Embeddings GNN entrenados (317 KB) |
+| `data/raw/digemid/digemid_limpio.csv` | Movido | Desde raíz del proyecto |
+| `data/training/supplement_model/product_components.csv` | Movido | Desde raíz del proyecto |
+| `models/runtime/modelo1_pipeline.pkl` | Nuevo en git | Modelo RF entrenado (7.2 MB) |
+| `models/runtime/modelo2_artifacts.pkl` | Nuevo en git | Embeddings GNN entrenados (317 KB) |
 | `docs/plan_mejoras_prototipo_final.md` | Nuevo | Roadmap de mejoras |
 | `docs/cambios_sesion_08062026.md` | Nuevo | Este documento |
 

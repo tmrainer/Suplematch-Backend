@@ -1,0 +1,76 @@
+version,component,age_min,age_max,sex,pregnancy,lactation,reference_intake,reference_unit,reference_type,upper_limit,upper_limit_unit,guidance_note,source_ids
+2026-06-18.2,Vitamina D,19,70,any,no,no,15,mcg/day,RDA,100,mcg/day,Referencia adulta general; no sustituye indicacion basada en 25-OH vitamina D.,nih_ods_vitamin_d_hp
+2026-06-18.2,Vitamina D,71,120,any,no,no,20,mcg/day,RDA,100,mcg/day,Referencia para adultos mayores; revisar laboratorio si existe.,nih_ods_vitamin_d_hp
+2026-06-18.2,Vitamina D,14,50,female,yes,any,15,mcg/day,RDA,100,mcg/day,Embarazo requiere validacion profesional antes de suplementar.,nih_ods_vitamin_d_hp
+2026-06-18.2,Vitamina D,14,50,female,any,yes,15,mcg/day,RDA,100,mcg/day,Lactancia requiere validacion profesional antes de suplementar.,nih_ods_vitamin_d_hp
+2026-06-18.2,Vitamina B12,19,120,any,no,no,2.4,mcg/day,RDA,,,Referencia adulta; mayor relevancia si dieta vegana/vegetariana.,nih_ods_vitamin_b12_hp
+2026-06-18.2,Vitamina B12,14,50,female,yes,any,2.6,mcg/day,RDA,,,Embarazo requiere seguimiento profesional.,nih_ods_vitamin_b12_hp
+2026-06-18.2,Vitamina B12,14,50,female,any,yes,2.8,mcg/day,RDA,,,Lactancia requiere seguimiento profesional.,nih_ods_vitamin_b12_hp
+2026-06-18.2,Hierro,19,50,male,no,no,8,mg/day,RDA,45,mg/day,No recomendar compra directa sin laboratorio o criterio profesional.,nih_ods_iron_hp
+2026-06-18.2,Hierro,19,50,female,no,no,18,mg/day,RDA,45,mg/day,"Depende de menstruacion, ferritina/hemoglobina y causa de anemia.",nih_ods_iron_hp
+2026-06-18.2,Hierro,51,120,any,no,no,8,mg/day,RDA,45,mg/day,Mayor cautela por riesgo de exceso si no hay deficiencia documentada.,nih_ods_iron_hp
+2026-06-18.2,Hierro,14,50,female,yes,any,27,mg/day,RDA,45,mg/day,Embarazo requiere control profesional; no autogestionar dosis.,nih_ods_iron_hp
+2026-06-18.2,Magnesio,19,30,male,no,no,400,mg/day,RDA,350,mg/day from supplements,UL aplica solo a magnesio de suplementos.,nih_ods_magnesium_consumer
+2026-06-18.2,Magnesio,31,120,male,no,no,420,mg/day,RDA,350,mg/day from supplements,UL aplica solo a magnesio de suplementos.,nih_ods_magnesium_consumer
+2026-06-18.2,Magnesio,19,30,female,no,no,310,mg/day,RDA,350,mg/day from supplements,UL aplica solo a magnesio de suplementos.,nih_ods_magnesium_consumer
+2026-06-18.2,Magnesio,31,120,female,no,no,320,mg/day,RDA,350,mg/day from supplements,UL aplica solo a magnesio de suplementos.,nih_ods_magnesium_consumer
+2026-06-18.2,Zinc,19,120,male,no,no,11,mg/day,RDA,40,mg/day,Evitar uso prolongado sin supervision.,nih_ods_zinc_hp
+2026-06-18.2,Zinc,19,120,female,no,no,8,mg/day,RDA,40,mg/day,Evitar uso prolongado sin supervision.,nih_ods_zinc_hp
+2026-06-18.2,Zinc,14,50,female,yes,any,11,mg/day,RDA,40,mg/day,Embarazo requiere validacion profesional.,nih_ods_zinc_hp
+2026-06-18.2,Zinc,14,50,female,any,yes,12,mg/day,RDA,40,mg/day,Lactancia requiere validacion profesional.,nih_ods_zinc_hp
+2026-06-18.2,Calcio,19,50,any,no,no,1000,mg/day,RDA,2500,mg/day,Evaluar ingesta dietaria antes de suplementar.,nih_ods_calcium_hp
+2026-06-18.2,Calcio,51,70,female,no,no,1200,mg/day,RDA,2000,mg/day,Evaluar ingesta dietaria y riesgo renal.,nih_ods_calcium_hp
+2026-06-18.2,Calcio,51,70,male,no,no,1000,mg/day,RDA,2000,mg/day,Evaluar ingesta dietaria y riesgo renal.,nih_ods_calcium_hp
+2026-06-18.2,Calcio,71,120,any,no,no,1200,mg/day,RDA,2000,mg/day,Evaluar ingesta dietaria y riesgo renal.,nih_ods_calcium_hp
+2026-06-18.2,Acido folico,19,120,any,no,no,400,mcg DFE/day,RDA,1000,mcg/day folic acid,UL aplica a acido folico sintetico; revisar B12.,nih_ods_folate_hp
+2026-06-18.2,Acido folico,14,50,female,yes,any,600,mcg DFE/day,RDA,1000,mcg/day folic acid,Embarazo requiere criterio profesional.,nih_ods_folate_hp
+2026-06-18.2,Acido folico,14,50,female,any,yes,500,mcg DFE/day,RDA,1000,mcg/day folic acid,Lactancia requiere criterio profesional.,nih_ods_folate_hp
+2026-06-18.2,Vitamina C,19,120,male,no,no,90,mg/day,RDA,2000,mg/day,Fumadores requieren mayor ingesta; priorizar dieta.,nih_ods_vitamin_c_hp
+2026-06-18.2,Vitamina C,19,120,female,no,no,75,mg/day,RDA,2000,mg/day,Fumadores requieren mayor ingesta; priorizar dieta.,nih_ods_vitamin_c_hp
+2026-06-18.2,Vitamina C,14,50,female,yes,any,85,mg/day,RDA,2000,mg/day,Embarazo requiere criterio profesional.,nih_ods_vitamin_c_hp
+2026-06-18.2,Vitamina C,14,50,female,any,yes,120,mg/day,RDA,2000,mg/day,Lactancia requiere criterio profesional.,nih_ods_vitamin_c_hp
+2026-06-18.2,Omega 3,19,120,male,no,no,1.6,g/day ALA,AI,,,ODS usa AI para ALA; revisar alergia pescado/anticoagulantes.,nih_ods_omega3_hp
+2026-06-18.2,Omega 3,19,120,female,no,no,1.1,g/day ALA,AI,,,ODS usa AI para ALA; revisar alergia pescado/anticoagulantes.,nih_ods_omega3_hp
+2026-06-18.2,Proteina,19,120,any,no,no,0.8,g/kg/day,RDA,,,Referencia general; ajustar por objetivo requiere profesional/nutricionista.,nih_medlineplus_supplements
+2026-06-18.2,Selenio,19,120,any,no,no,55,mcg/day,RDA,400,mcg/day,Evitar exceso por combinacion de multivitaminicos.,nih_ods_selenium_hp
+2026-06-18.2,Vitamina K,19,120,male,no,no,120,mcg/day,AI,,,Mantener ingesta consistente si usa warfarina.,nih_ods_vitamin_k_hp
+2026-06-18.2,Vitamina K,19,120,female,no,no,90,mcg/day,AI,,,Mantener ingesta consistente si usa warfarina.,nih_ods_vitamin_k_hp
+2026-06-18.2,Biotina,19,120,any,no,no,30,mcg/day,AI,,,Puede interferir con pruebas de laboratorio.,nih_ods_biotin_hp
+2026-06-18.2,Melatonina,19,120,any,no,no,,,no_dri,,,"No es nutriente esencial; no hay RDA/UL ODS. Usar solo como contexto, no prescripcion.",nccih_melatonin_sleep
+2026-06-18.2,Yodo,19,120,any,no,no,150,mcg/day,RDA,1100,mcg/day,No recomendar si hay problema tiroideo sin evaluacion profesional.,nih_ods_iodine_hp
+2026-06-18.2,Vitamina A,19,,male,any,any,900,mcg RAE/day,RDA,3000,mcg RAE/day,Referencia adulta masculina; revisar sexo y embarazo.,nih_ods_vitamin_a_hp
+2026-06-18.2,Vitamina E,19,,any,any,any,15,mg/day,RDA,,,Referencia adulta general.,nih_ods_vitamin_e_hp
+2026-06-18.2,Cromo,19,,any,any,any,35,mcg/day,AI,,,AI adulta masculina; varía por sexo y edad.,nih_ods_chromium_hp
+2026-06-18.2,Cobre,19,,any,any,any,900,mcg/day,RDA,,,RDA adulta general.,nih_ods_copper_hp
+2026-06-18.2,Potasio,19,,male,any,any,3400,mg/day,AI,,,AI adulta masculina; no usar como suplemento si hay riesgo renal.,nih_ods_potassium_hp
+2026-06-18.2,Colina,19,,male,any,any,550,mg/day,AI,3500,mg/day,AI adulta masculina; embarazo/lactancia cambia requerimientos.,nih_ods_choline_hp
+2026-06-18.2,Vitamina B6,19,,any,any,any,1.3,mg/day,RDA,,,RDA adulta inicial; varía con edad.,nih_ods_b6_hp
+2026-06-18.2,Riboflavina,19,,any,any,any,1.3,mg/day,RDA,,,RDA adulta masculina.,nih_ods_riboflavin_hp
+2026-06-18.2,Tiamina,19,,any,any,any,1.2,mg/day,RDA,,,RDA adulta masculina.,nih_ods_thiamin_hp
+2026-06-18.2,Niacina,19,,male,any,any,16,mg NE/day,RDA,35,mg/day,RDA adulta masculina; dosis altas son sensibles.,nih_ods_niacin_hp
+2026-06-18.2,Ácido pantoténico,19,,any,any,any,5,mg/day,AI,,,AI adulta general.,nih_ods_pantothenic_hp
+2026-06-18.2,EPA,19,,any,any,any,,contextual,RDA,,,No hay RDA individual EPA; interpretar dentro de omega 3.,nih_ods_omega3_hp
+2026-06-18.2,DHA,19,,any,any,any,,contextual,RDA,,,No hay RDA individual DHA; interpretar dentro de omega 3.,nih_ods_omega3_hp
+2026-06-18.2,Probióticos,18,,any,any,any,,,no_dri,,,No hay ingesta de referencia única; cepa y población importan.,nih_ods_probiotics_hp
+2026-06-18.2,Colágeno,18,,any,any,any,,,no_dri,,,No hay DRI/UL oficial en esta base; revisar alérgenos y fuente.,nih_medlineplus_supplements
+2026-06-18.2,Coenzima Q10,18,,any,any,any,,,no_dri,,,No hay DRI/UL oficial; usar solo como contexto no prescriptivo.,nccih_coq10
+2026-06-18.2,Ashwagandha,18,,any,any,any,,,no_dri,,,No hay DRI/UL; evitar en perfiles sensibles.,nccih_ashwagandha
+2026-06-18.2,Valeriana,18,,any,any,any,,,no_dri,,,No hay DRI/UL; revisar sedación e interacciones.,nccih_valerian
+2026-06-18.2,L-teanina,18,,any,any,any,,,no_dri,,,No hay DRI/UL; contexto blando de estrés.,nih_medlineplus_supplements
+2026-06-18.2,Carnitina,18,,any,any,any,,,no_dri,,,No hay DRI/UL; contexto de rendimiento sin promesa.,nih_medlineplus_supplements
+2026-06-18.2,Cafeína,18,,any,any,any,,,no_dri,,,No hay DRI; limitar por tolerancia y perfil de seguridad.,fda_dietary_supplements
+2026-06-18.2,Té verde,18,,any,any,any,,,no_dri,,,No hay DRI; extractos concentrados requieren cautela hepática.,nih_medlineplus_supplements
+2026-06-19.1,Vitamina A,19,120,female,no,no,700,mcg RAE/day,RDA,3000,mcg RAE/day,Referencia adulta femenina; evitar exceso de vitamina A preformada.,nih_ods_vitamin_a_hp
+2026-06-19.1,Vitamina A,14,50,female,yes,any,770,mcg RAE/day,RDA,3000,mcg RAE/day,Embarazo requiere cautela por exceso de vitamina A preformada.,nih_ods_vitamin_a_hp
+2026-06-19.1,Vitamina A,14,50,female,any,yes,1300,mcg RAE/day,RDA,3000,mcg RAE/day,Lactancia cambia requerimiento; evitar duplicación con retinol/multivitamínicos.,nih_ods_vitamin_a_hp
+2026-06-19.1,Vitamina E,19,120,any,no,no,15,mg/day,RDA,1000,mg/day,Referencia adulta; cautela con anticoagulantes y dosis altas.,nih_ods_vitamin_e_hp
+2026-06-19.1,Potasio,19,120,female,any,any,2600,mg/day,AI,,,AI adulta femenina; no usar como suplemento comercial si hay riesgo renal.,nih_ods_potassium_hp
+2026-06-19.1,Colina,19,120,female,no,no,425,mg/day,AI,3500,mg/day,AI adulta femenina; priorizar dieta y revisar duplicación.,nih_ods_choline_hp
+2026-06-19.1,Colina,14,50,female,yes,any,450,mg/day,AI,3500,mg/day,Embarazo aumenta requerimiento; usar como educación nutricional no prescriptiva.,nih_ods_choline_hp
+2026-06-19.1,Colina,14,50,female,any,yes,550,mg/day,AI,3500,mg/day,Lactancia aumenta requerimiento; usar como educación nutricional no prescriptiva.,nih_ods_choline_hp
+2026-06-19.1,Niacina,19,120,female,no,no,14,mg NE/day,RDA,35,mg/day,RDA adulta femenina; dosis altas son sensibles y no se usan para lípidos desde la app.,nih_ods_niacin_hp
+2026-06-19.1,Riboflavina,19,120,female,no,no,1.1,mg/day,RDA,,,"Referencia adulta femenina; contexto de complejo B.",nih_ods_riboflavin_hp
+2026-06-19.1,Tiamina,19,120,female,no,no,1.1,mg/day,RDA,,,"Referencia adulta femenina; contexto de metabolismo energético.",nih_ods_thiamin_hp
+2026-06-19.1,Vitamina B6,19,50,female,no,no,1.3,mg/day,RDA,100,mg/day,Referencia adulta; evitar dosis altas crónicas.,nih_ods_b6_hp
+2026-06-19.1,Vitamina B6,51,120,female,no,no,1.5,mg/day,RDA,100,mg/day,Referencia para mujeres mayores; evitar dosis altas crónicas.,nih_ods_b6_hp
+2026-06-19.1,Vitamina B6,51,120,male,no,no,1.7,mg/day,RDA,100,mg/day,Referencia para hombres mayores; evitar dosis altas crónicas.,nih_ods_b6_hp

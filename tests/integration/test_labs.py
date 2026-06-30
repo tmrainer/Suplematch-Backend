@@ -1,9 +1,11 @@
 from sqlalchemy import func, select
 from uuid import UUID
 
+from app.core.security import create_access_token
 from app.db.models import LabBiomarkerResult, LabReport, RecommendationSession, User
 from app.db.session import SessionLocal
 from app.main import create_app
+from app.domains.users.repositorio_usuarios import UserRepository
 from tests.integration.test_health import asgi_request
 
 
@@ -69,7 +71,18 @@ def test_authenticated_user_can_export_and_delete_lab_health_data():
         app,
         "POST",
         "/api/v1/auth/register",
-        {"email": email, "password": "LabsTest123", "display_name": "Labs Export"},
+        {
+            "email": email,
+            "password": "LabsTest123",
+            "first_name": "Labs",
+            "last_name": "Export",
+            "age": 30,
+            "weight_value": 154,
+            "weight_unit": "lb",
+            "height_value": 170,
+            "height_unit": "cm",
+            "display_name": "Labs Export",
+        },
     )
     assert status_code == 200
     token = auth_body["access_token"]
@@ -118,6 +131,7 @@ def test_authenticated_user_can_export_and_delete_lab_health_data():
 
 def test_recommendation_uses_lab_results_for_safety_and_signals():
     recommendation_id = "rec_test_lab_results"
+    email = "recommend-labs@suplematch.test"
 
     with SessionLocal() as db:
         existing = db.scalar(
@@ -125,7 +139,13 @@ def test_recommendation_uses_lab_results_for_safety_and_signals():
         )
         if existing is not None:
             db.delete(existing)
-            db.commit()
+        existing_user = db.scalar(select(User).where(User.email == email))
+        if existing_user is not None:
+            db.delete(existing_user)
+        db.commit()
+        user = UserRepository(db).create_user(email=email, password="ChangeMe123!", display_name="Labs Recommend")
+        token = create_access_token(str(user.id), {"roles": ["user"]})
+        db.commit()
 
     def pipeline(_payload, verbose=False):
         return {
@@ -161,7 +181,13 @@ def test_recommendation_uses_lab_results_for_safety_and_signals():
         ],
     }
 
-    status_code, body = asgi_request(app, "POST", "/api/v1/recommend", payload)
+    status_code, body = asgi_request(
+        app,
+        "POST",
+        "/api/v1/recommend",
+        payload,
+        headers={"authorization": f"Bearer {token}"},
+    )
 
     assert status_code == 200
     assert body["lab_analysis"]
@@ -176,4 +202,7 @@ def test_recommendation_uses_lab_results_for_safety_and_signals():
         )
         if session is not None:
             db.delete(session)
-            db.commit()
+        user = db.scalar(select(User).where(User.email == email))
+        if user is not None:
+            db.delete(user)
+        db.commit()

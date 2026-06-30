@@ -1,0 +1,42 @@
+version,source_id,title,organization,url,used_for
+2026-06-16.2,nih_ods_vitamin_d_hp,Vitamin D - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/,DEFICIT_VIT_D|RIESGO_SALUD_OSEA|lab_thresholds|safety_context
+2026-06-16.2,nih_ods_vitamin_b12_hp,Vitamin B12 - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/VitaminB12-HealthProfessional/,DEFICIT_B12|diet_risk|symptom_context
+2026-06-16.2,nih_ods_iron_hp,Iron - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/,DEFICIT_HIERRO|lab_thresholds|safety_context
+2026-06-16.2,nih_ods_magnesium_consumer,Magnesium - Consumer Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Magnesium-Consumer/,DEFICIT_MAGNESIO|symptom_context
+2026-06-16.2,nih_ods_zinc_hp,Zinc - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Zinc-HealthProfessional/,BAJA_INMUNIDAD|symptom_context
+2026-06-16.2,nih_ods_calcium_hp,Calcium - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Calcium-HealthProfessional/,RIESGO_SALUD_OSEA|lab_thresholds
+2026-06-16.2,nih_ods_immune_function,Dietary Supplements for Immune Function and Infectious Diseases,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/ImmuneFunction/,BAJA_INMUNIDAD|vitamin_d|zinc
+2026-06-16.2,nih_medlineplus_supplements,Dietary Supplements,MedlinePlus / NIH,https://medlineplus.gov/dietarysupplements.html,consumer_safety|interaction_context
+2026-06-16.2,fda_dietary_supplements,Dietary Supplements,U.S. Food and Drug Administration,https://www.fda.gov/food/dietary-supplements,consumer_safety|claims_limitations|interaction_context
+2026-06-16.2,digemid_registro_sanitario,Registro Sanitario,DIGEMID Peru,https://www.digemid.minsa.gob.pe/webDigemid/registro-sanitario/,commercial_product_traceability|peru_catalog_validation
+2026-06-16.2,nih_ods_folate_hp,Folate - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Folate-HealthProfessional/,DEFICIT_FOLATO|lab_thresholds
+2026-06-16.2,nih_ods_vitamin_c_hp,Vitamin C - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/VitaminC-HealthProfessional/,RIESGO_VITAMINA_C_BAJA|symptom_context
+2026-06-16.2,nih_ods_omega3_hp,Omega-3 Fatty Acids - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Omega3FattyAcids-HealthProfessional/,RIESGO_OMEGA3_BAJO|diet_risk
+2026-06-16.2,medlineplus_glucose_test,Blood Glucose Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/blood-glucose-test/,RIESGO_METABOLICO_GLUCOSA|lab_thresholds
+2026-06-16.2,medlineplus_cholesterol_tests,Cholesterol Levels,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/cholesterol-levels/,RIESGO_DISLIPIDEMIA|lab_thresholds
+2026-06-16.2,medlineplus_thyroid_tests,Thyroid Tests,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/thyroid-tests/,SAFETY_TIROIDEA|lab_thresholds
+2026-06-16.2,medlineplus_creatinine_test,Creatinine Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/creatinine-test/,SAFETY_RENAL|lab_thresholds
+2026-06-16.2,medlineplus_liver_tests,Liver Function Tests,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/liver-function-tests/,SAFETY_HEPATICA|lab_thresholds
+2026-06-18.1,nih_ods_selenium_hp,Selenium - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Selenium-HealthProfessional/,BAJA_INMUNIDAD|SAFETY_TIROIDEA|component_profile
+2026-06-18.1,nih_ods_vitamin_e_hp,Vitamin E - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/VitaminE-HealthProfessional/,component_profile|interaction_context
+2026-06-18.1,nih_ods_iodine_hp,Iodine - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Iodine-HealthProfessional/,SAFETY_TIROIDEA|component_profile
+2026-06-18.1,nih_ods_biotin_hp,Biotin - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Biotin-HealthProfessional/,RIESGO_CABELLO_PIEL_UNAS|component_profile
+2026-06-18.1,nih_ods_vitamin_k_hp,Vitamin K - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/VitaminK-HealthProfessional/,RIESGO_SALUD_OSEA|anticoagulants|component_profile
+2026-06-18.1,nih_ods_probiotics_hp,Probiotics - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Probiotics-HealthProfessional/,BAJA_INMUNIDAD|digestive_support|component_profile
+2026-06-18.1,nih_ods_choline_hp,Choline - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Choline-HealthProfessional/,component_profile
+2026-06-18.1,nccih_melatonin_sleep,Melatonin: What You Need To Know,NIH National Center for Complementary and Integrative Health,https://www.nccih.nih.gov/health/melatonin-what-you-need-to-know,ESTRES_SUENO|sleep_context|component_profile
+2026-06-18.2,nih_ods_vitamin_a_hp,Vitamin A and Carotenoids - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/VitaminA-HealthProfessional/,vitamin_a|skin_eye_context|safety_context
+2026-06-18.2,nih_ods_chromium_hp,Chromium - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Chromium-HealthProfessional/,glucose_metabolic_context
+2026-06-18.2,nih_ods_copper_hp,Copper - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Copper-HealthProfessional/,mineral_context|hair_skin_context
+2026-06-18.2,nih_ods_potassium_hp,Potassium - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Potassium-HealthProfessional/,electrolyte_context|renal_safety
+2026-06-18.2,nih_ods_b6_hp,Vitamin B6 - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/VitaminB6-HealthProfessional/,b_vitamin_context|magnesium_context
+2026-06-18.2,nih_ods_riboflavin_hp,Riboflavin - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Riboflavin-HealthProfessional/,b_vitamin_context|energy_metabolism
+2026-06-18.2,nih_ods_thiamin_hp,Thiamin - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Thiamin-HealthProfessional/,b_vitamin_context|energy_metabolism
+2026-06-18.2,nih_ods_niacin_hp,Niacin - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Niacin-HealthProfessional/,b_vitamin_context|lipid_safety_context
+2026-06-18.2,nih_ods_pantothenic_hp,Pantothenic Acid - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/PantothenicAcid-HealthProfessional/,b_vitamin_context|energy_metabolism
+2026-06-24.2,nih_ods_manganese_hp,Manganese - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/Manganese-HealthProfessional/,bone_matrix_context|component_profile
+2026-06-18.2,nccih_ashwagandha,Ashwagandha: Usefulness and Safety,NIH National Center for Complementary and Integrative Health,https://www.nccih.nih.gov/health/ashwagandha,stress_sleep_context|safety_context
+2026-06-18.2,nccih_valerian,Valerian,NIH National Center for Complementary and Integrative Health,https://www.nccih.nih.gov/health/valerian,sleep_context|safety_context
+2026-06-18.2,nccih_turmeric,Turmeric,NIH National Center for Complementary and Integrative Health,https://www.nccih.nih.gov/health/turmeric,inflammation_context|safety_context
+2026-06-18.2,nccih_coq10,Coenzyme Q10,NIH National Center for Complementary and Integrative Health,https://www.nccih.nih.gov/health/coenzyme-q10,lipid_context|energy_context|interaction_context
+2026-06-18.3,nih_ods_exercise_performance_hp,Dietary Supplements for Exercise and Athletic Performance - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/ExerciseAndAthleticPerformance-HealthProfessional/,creatine|performance_context|safety_context

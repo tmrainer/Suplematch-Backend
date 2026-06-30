@@ -6,20 +6,86 @@ import pandas as pd
 import joblib
 from app.core.config import settings
 from app.ml.explainability import get_condition_scores, build_explainability
+from app.ml.runtime.condition_mvp_inference import predict_condition_probabilities
 from app.ml.runtime.modelo2_inference import recomendar_suplementos
 from app.ml.runtime.feedback_reranker import rerank_packs
 from app.ml.runtime.feedback_store import save_recommendation_event
 
 _MODEL_DIR = settings.MODEL_DIR
-_m1 = joblib.load(_MODEL_DIR / "modelo1_pipeline.pkl")
-_pipe_m1 = _m1["pipeline"]
-_labels   = _m1["labels"]
-_cat_cols = _m1["cat_cols"]
-_num_cols = _m1["num_cols"]
+try:
+    _m1 = joblib.load(_MODEL_DIR / "modelo1_pipeline.pkl")
+    _pipe_m1 = _m1["pipeline"]
+    _labels = _m1["labels"]
+    _cat_cols = _m1["cat_cols"]
+    _num_cols = _m1["num_cols"]
+except Exception:
+    _m1 = None
+    _pipe_m1 = None
+    _labels = []
+    _cat_cols = []
+    _num_cols = []
 
 
-def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float], pd.DataFrame]:
+def _condition_mvp_available() -> bool:
+    return (_MODEL_DIR / "condition_mvp_model.pkl").exists()
+
+
+_SIGNAL_GROUP_IMPACT: dict[str, str] = {
+    "observed_lab":           "alto",
+    "medical_safety":         "alto",
+    "self_reported_symptoms": "medio",
+    "declared_diet":          "medio",
+    "profile_context":        "bajo",
+    "survey_context":         "bajo",
+    "derived_soft_signal":    "bajo",
+}
+
+
+def _explainability_from_condition_mvp(condition_details: list[dict]) -> list[dict]:
+    explanations = []
+    for item in condition_details:
+        if not item.get("positive"):
+            continue
+        primary_group = item.get("primary_signal_group", "")
+        signal_groups = item.get("signal_groups", {})
+        drivers = [
+            {
+                "feature": field,
+                "label": field.replace("_", " ").title(),
+                "value": "",
+                "value_label": signal_groups.get(primary_group, {}).get("strength", ""),
+                "impact": _SIGNAL_GROUP_IMPACT.get(primary_group, "bajo"),
+            }
+            for field in item.get("drivers", [])[:6]
+        ]
+        explanations.append(
+            {
+                "condition": item["condition"],
+                "probability": item["probability"],
+                "drivers": drivers,
+            }
+        )
+    return explanations
+
+
+def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float], pd.DataFrame | None, list[dict]]:
     """Modelo 1: encuesta → condiciones detectadas + probabilidades reales + row_df."""
+    if _condition_mvp_available():
+        condition_details = predict_condition_probabilities(usuario)
+        condition_scores = {
+            item["condition"]: float(item["probability"])
+            for item in condition_details
+        }
+        detected = [
+            item["condition"]
+            for item in condition_details
+            if item["positive"]
+        ]
+        return (detected if detected else ["SALUDABLE"], condition_scores, None, condition_details)
+
+    if _pipe_m1 is None:
+        raise RuntimeError("No hay modelo 1 disponible.")
+
     cols = _cat_cols + _num_cols
     row  = pd.DataFrame([usuario])[cols]
 
@@ -31,10 +97,10 @@ def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float], pd.D
         pred = _pipe_m1.predict(row)[0]
         detected = [_labels[i] for i, v in enumerate(pred) if v == 1]
 
-    return (detected if detected else ["SALUDABLE"]), condition_scores, row
+    return (detected if detected else ["SALUDABLE"]), condition_scores, row, []
 
 
-def pipeline_vitaminas(usuario: dict, verbose: bool = True) -> dict:
+def pipeline_vitaminas(usuario: dict, verbose: bool = False) -> dict:
     """
     Pipeline completo.
 
@@ -49,14 +115,22 @@ def pipeline_vitaminas(usuario: dict, verbose: bool = True) -> dict:
         packs_ranked      : list[dict]
         mensaje           : str
     """
-    condiciones, condition_scores, row_df = predecir_condicion(usuario)
+    condiciones, condition_scores, row_df, condition_details = predecir_condicion(usuario)
 
-    resultado = recomendar_suplementos(condiciones)
+    resultado = recomendar_suplementos(
+        condiciones,
+        condition_scores=condition_scores,
+        user_context=usuario,
+    )
     resultado["condiciones"]      = condiciones
     resultado["condition_scores"] = condition_scores
-    resultado["explainability"]   = build_explainability(
-        _pipe_m1, _labels, row_df, condition_scores, usuario
-    )
+    resultado["condition_details"] = condition_details
+    if condition_details:
+        resultado["explainability"] = _explainability_from_condition_mvp(condition_details)
+    else:
+        resultado["explainability"] = build_explainability(
+            _pipe_m1, _labels, row_df, condition_scores, usuario
+        )
 
     packs_ranked = rerank_packs(
         recomendaciones=resultado.get("recomendaciones", []),
@@ -96,13 +170,19 @@ def pipeline_vitaminas(usuario: dict, verbose: bool = True) -> dict:
             if resultado["sinergias"]:
                 print(f"  Sinergias ({len(resultado['sinergias'])}):")
                 for s in resultado["sinergias"][:5]:
-                    print(f"    ✓ {s[0]}  ↔  {s[1]}  [{s[2]}]")
+                    if isinstance(s, dict):
+                        print(f"    ✓ {s['component_a']}  ↔  {s['component_b']}  [{s['type']}]")
+                    else:
+                        print(f"    ✓ {s[0]}  ↔  {s[1]}  [{s[2]}]")
                 print()
 
             if resultado["alertas"]:
                 print(f"  ⚠  ALERTAS DE SEGURIDAD:")
                 for a in resultado["alertas"]:
-                    print(f"    ✗ {a[0]}  +  {a[1]}  → {a[2]}")
+                    if isinstance(a, dict):
+                        print(f"    ✗ {a['component_a']}  +  {a['component_b']}  → {a['type']}")
+                    else:
+                        print(f"    ✗ {a[0]}  +  {a[1]}  → {a[2]}")
                 print()
 
             seguro = "Sí" if resultado["combo_seguro"] else "NO — revisar alertas"

@@ -1,4 +1,4 @@
-from app.services.product_safety import (
+from app.domains.catalog.seguridad_productos import (
     evaluate_ingredient_safety,
     infer_restriction_flags,
     product_restriction_flags,

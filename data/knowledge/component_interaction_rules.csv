@@ -1,0 +1,51 @@
+version,component,interaction_type,trigger_field,trigger_value,severity,action,message,source_ids
+2026-06-18.2,Vitamina K,medication,condiciones_seguridad,anticoagulantes,high,warn_or_block,Vitamina K requiere consistencia y revision profesional si usa anticoagulantes tipo warfarina.,nih_ods_vitamin_k_hp|fda_dietary_supplements
+2026-06-18.2,Omega 3,medication,condiciones_seguridad,anticoagulantes,medium,warn,Omega 3 puede requerir cautela si usa anticoagulantes o antes de cirugia.,nih_ods_omega3_hp|fda_dietary_supplements
+2026-06-18.2,Hierro,missing_lab,requires_lab,required,high,downgrade,Hierro no debe empujarse comercialmente sin ferritina/hemoglobina u otra señal objetiva.,nih_ods_iron_hp
+2026-06-18.2,Yodo,condition,condiciones_seguridad,problema_tiroideo,high,block_commercial,Yodo es sensible en problemas tiroideos; requiere evaluacion profesional.,nih_ods_iodine_hp|medlineplus_thyroid_tests
+2026-06-18.2,Magnesio,condition,condiciones_seguridad,enfermedad_renal,high,block_commercial,Magnesio requiere cautela en enfermedad renal.,nih_ods_magnesium_consumer|fda_dietary_supplements
+2026-06-18.2,Calcio,condition,condiciones_seguridad,enfermedad_renal,high,block_commercial,Calcio requiere cautela en enfermedad renal o antecedentes de calculos.,nih_ods_calcium_hp|fda_dietary_supplements
+2026-06-18.2,Proteina,condition,condiciones_seguridad,enfermedad_renal,high,block_commercial,Proteina suplementaria requiere evaluacion si hay enfermedad renal.,nih_medlineplus_supplements
+2026-06-18.2,Biotina,lab_interference,lab_results,any,medium,warn,Biotina puede interferir con algunos resultados de laboratorio; informar uso antes de examenes.,nih_ods_biotin_hp
+2026-06-18.2,Melatonina,special_population,condiciones_seguridad,embarazo_lactancia,high,block_commercial,Melatonina no debe recomendarse comercialmente en embarazo/lactancia sin evaluacion profesional.,nccih_melatonin_sleep
+2026-06-18.2,Vitamina A,condition,condiciones_seguridad,embarazo,high,block_or_warn,Evitar vitamina A preformada sin evaluación profesional durante embarazo.,nih_ods_vitamin_a_hp
+2026-06-18.2,Vitamina A,condition,condiciones_seguridad,enfermedad_hepatica,high,block_or_warn,Bandera hepática: no sugerir vitamina A suplementaria como producto comercial.,nih_ods_vitamin_a_hp|medlineplus_liver_tests
+2026-06-18.2,Vitamina E,medication,condiciones_seguridad,anticoagulantes,high,block_or_warn,Vitamina E requiere cautela con anticoagulantes o trastornos de sangrado.,nih_ods_vitamin_e_hp
+2026-06-18.2,Vitamina K,medication,condiciones_seguridad,anticoagulantes,high,block_or_warn,Vitamina K puede interferir con anticoagulantes tipo warfarina.,nih_ods_vitamin_k_hp
+2026-06-18.2,Potasio,condition,condiciones_seguridad,enfermedad_renal,high,block,Riesgo renal: no sugerir potasio suplementario sin evaluación médica.,nih_ods_potassium_hp|medlineplus_creatinine_test
+2026-06-18.2,Cromo,medication,condiciones_seguridad,diabetes_medicada,high,block_or_warn,Cromo requiere cautela si usa medicación para glucosa.,nih_ods_chromium_hp
+2026-06-18.2,Cobre,condition,condiciones_seguridad,enfermedad_hepatica,high,block_or_warn,Cobre requiere cautela en enfermedad hepática o trastornos de acumulación.,nih_ods_copper_hp
+2026-06-18.2,Probióticos,condition,condiciones_seguridad,inmunosupresion,high,warn,Probióticos requieren cautela si hay inmunosupresión o enfermedad grave.,nih_ods_probiotics_hp
+2026-06-24.2,Sodio,condition,condiciones_seguridad,enfermedad_renal,high,block,Sodio/electrolitos no deben sugerirse como suplemento libre en enfermedad renal.,nih_ods_potassium_hp
+2026-06-24.2,Sodio,condition,condiciones_seguridad,medicacion_cronica,medium,warn,Electrolitos pueden requerir revisión si hay medicación crónica o presión arterial sensible.,nih_ods_potassium_hp
+2026-06-24.2,Bacillus coagulans,condition,condiciones_seguridad,medicacion_cronica,medium,warn,Probióticos requieren cautela en perfiles médicos o inmunológicos sensibles.,nih_ods_probiotics_hp
+2026-06-24.2,Bifidobacterium longum,condition,condiciones_seguridad,medicacion_cronica,medium,warn,Probióticos requieren cautela en perfiles médicos o inmunológicos sensibles.,nih_ods_probiotics_hp
+2026-06-18.2,Colágeno,allergy,restricciones_alergias,pescado_mariscos,medium,warn,Revisar origen del colágeno; algunos productos son marinos.,nih_medlineplus_supplements
+2026-06-18.2,Coenzima Q10,medication,condiciones_seguridad,anticoagulantes,high,block_or_warn,CoQ10 requiere cautela con anticoagulantes.,nccih_coq10
+2026-06-18.2,Ashwagandha,condition,condiciones_seguridad,embarazo,high,block,No sugerir ashwagandha durante embarazo/lactancia sin evaluación profesional.,nccih_ashwagandha
+2026-06-18.2,Ashwagandha,condition,condiciones_seguridad,enfermedad_hepatica,high,block_or_warn,Ashwagandha requiere cautela por reportes de seguridad hepática.,nccih_ashwagandha
+2026-06-18.2,Ashwagandha,condition,condiciones_seguridad,tiroides,medium,warn,Ashwagandha puede ser sensible en perfiles tiroideos.,nccih_ashwagandha
+2026-06-18.2,Valeriana,medication,condiciones_seguridad,sedantes,high,warn,Valeriana puede aumentar sedación con fármacos sedantes o alcohol.,nccih_valerian
+2026-06-18.2,L-teanina,medication,condiciones_seguridad,sedantes,medium,warn,L-teanina se mantiene con cautela si hay sedantes o somnolencia marcada.,nih_medlineplus_supplements
+2026-06-18.2,Vitamina B6,dose,condiciones_seguridad,neuropatia,medium,warn,Evitar dosis altas de B6 si hay neuropatía o síntomas neurológicos.,nih_ods_b6_hp
+2026-06-18.2,Niacina,condition,condiciones_seguridad,enfermedad_hepatica,high,block_or_warn,No usar niacina como estrategia de lípidos desde la app; cautela hepática.,nih_ods_niacin_hp|medlineplus_liver_tests
+2026-06-18.2,Cafeína,condition,condiciones_seguridad,insomnio,medium,warn,Cafeína puede empeorar insomnio o ansiedad.,fda_dietary_supplements
+2026-06-18.2,Cafeína,condition,condiciones_seguridad,hipertension,medium,warn,"Cafeína requiere cautela si hay hipertensión, palpitaciones o arritmias.",fda_dietary_supplements
+2026-06-18.2,EPA,medication,condiciones_seguridad,anticoagulantes,medium,warn,EPA/DHA requieren cautela con anticoagulantes o cirugía cercana.,nih_ods_omega3_hp
+2026-06-18.2,DHA,allergy,restricciones_alergias,pescado_mariscos,high,block_or_warn,DHA marino debe evitarse o revisarse si hay alergia a pescado/mariscos.,nih_ods_omega3_hp
+2026-06-24.3,EPA,allergy,restricciones_alergias,pescado_mariscos,high,block_or_warn,EPA de origen marino debe evitarse o revisarse si hay alergia a pescado/mariscos.,nih_ods_omega3_hp
+2026-06-24.3,Omega 3,allergy,restricciones_alergias,pescado_mariscos,high,block_or_warn,Omega 3 marino debe evitarse o revisarse si hay alergia a pescado/mariscos.,nih_ods_omega3_hp
+2026-06-18.3,Creatina,condition,condiciones_seguridad,enfermedad_renal,high,block_commercial,Creatina no debe adjuntar productos comerciales si hay enfermedad renal o señal renal crítica.,nih_ods_exercise_performance_hp|medlineplus_creatinine_test
+2026-06-18.3,Creatina,condition,condiciones_seguridad,embarazo_lactancia,high,block_or_warn,Creatina requiere revisión profesional durante embarazo o lactancia.,nih_ods_exercise_performance_hp
+2026-06-19.1,Vitamina D,condition,condiciones_seguridad,enfermedad_renal,high,block_or_warn,Vitamina D suplementaria requiere revisión profesional si hay enfermedad renal o alteraciones de calcio/fósforo.,nih_ods_vitamin_d_hp|medlineplus_creatinine_test
+2026-06-19.1,Calcio,condition,condiciones_seguridad,enfermedad_renal,high,block_or_warn,Calcio suplementario requiere cautela en enfermedad renal o antecedentes de cálculos/hipercalcemia.,nih_ods_calcium_hp|medlineplus_creatinine_test
+2026-06-19.1,Calcio,medication,condiciones_seguridad,medicacion_cronica,medium,warn,Calcio puede interferir con algunos medicamentos; revisar horarios y tratamiento actual.,nih_ods_calcium_hp
+2026-06-19.1,Hierro,medication,condiciones_seguridad,medicacion_cronica,medium,warn,Hierro puede interferir con levotiroxina y algunos antibióticos; requiere revisión si hay medicación crónica.,nih_ods_iron_hp
+2026-06-19.1,Magnesio,medication,condiciones_seguridad,medicacion_cronica,medium,warn,Magnesio puede interferir con algunos antibióticos y bisfosfonatos; revisar medicación actual.,nih_ods_magnesium_consumer
+2026-06-19.1,Zinc,medication,condiciones_seguridad,medicacion_cronica,medium,warn,Zinc puede interferir con algunos antibióticos; revisar medicación actual.,nih_ods_zinc_hp
+2026-06-19.1,Selenio,condition,condiciones_seguridad,problema_tiroideo,medium,warn,Selenio debe manejarse con cautela si hay patología tiroidea o tratamiento relacionado.,nih_ods_selenium_hp|medlineplus_thyroid_tests
+2026-06-19.1,Yodo,condition,condiciones_seguridad,problema_tiroideo,high,block_or_warn,Yodo suplementario no debe sugerirse comercialmente desde una bandera tiroidea sin evaluación profesional.,nih_ods_iodine_hp|medlineplus_thyroid_tests
+2026-06-19.1,Melatonina,medication,condiciones_seguridad,sedantes,medium,warn,Melatonina puede aumentar somnolencia si hay sedantes u otros fármacos que deprimen el sistema nervioso.,nih_medlineplus_supplements
+2026-06-19.1,Cafeína,condition,condiciones_seguridad,embarazo_lactancia,medium,warn,Cafeína requiere cautela durante embarazo o lactancia y debe limitarse por tolerancia individual.,fda_dietary_supplements
+2026-06-19.1,Té verde,condition,condiciones_seguridad,enfermedad_hepatica,high,block_or_warn,Extractos concentrados de té verde requieren cautela hepática; no sugerir si hay bandera hepática.,nih_medlineplus_supplements|medlineplus_liver_tests
+2026-06-19.1,Ashwagandha,condition,condiciones_seguridad,problema_tiroideo,medium,warn,Ashwagandha requiere cautela en perfiles tiroideos o uso de medicación relacionada.,nccih_ashwagandha|medlineplus_thyroid_tests

@@ -11,10 +11,8 @@ from typing import Any
 from app.core.config import settings
 
 
-RUNTIME_DIR = Path(__file__).resolve().parent
-
-RECOMMENDATION_EVENTS_PATH = RUNTIME_DIR / "recommendation_events.json"
-USER_FEEDBACK_EVENTS_PATH = RUNTIME_DIR / "user_feedback_events.json"
+RECOMMENDATION_EVENTS_PATH = settings.RECOMMENDATION_EVENTS_PATH
+USER_FEEDBACK_EVENTS_PATH = settings.USER_FEEDBACK_EVENTS_PATH
 FEEDBACK_DB_PATH = settings.FEEDBACK_DB_PATH
 
 
@@ -55,12 +53,18 @@ def _json_loads(value: str | None, default: Any) -> Any:
     return data
 
 
+_MIGRATED_DB_PATHS: set[str] = set()
+
+
 def _connect() -> sqlite3.Connection:
     Path(FEEDBACK_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(FEEDBACK_DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     _ensure_db(conn)
-    _migrate_json_events(conn)
+    migration_key = str(Path(FEEDBACK_DB_PATH).resolve())
+    if migration_key not in _MIGRATED_DB_PATHS:
+        _migrate_json_events(conn)
+        _MIGRATED_DB_PATHS.add(migration_key)
     return conn
 
 

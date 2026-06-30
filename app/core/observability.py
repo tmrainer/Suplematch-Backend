@@ -28,12 +28,17 @@ class InMemoryMetrics:
         self._lock = Lock()
         self._started_at = time.time()
         self._http = HttpMetrics()
+        self._domain_events: Counter[tuple[str, str]] = Counter()
 
     def record_http_request(self, method: str, path: str, status_code: int, duration_ms: float) -> None:
         with self._lock:
             self._http.requests_total += 1
             self._http.duration_ms_total += duration_ms
             self._http.by_route[(method, path, status_code)] += 1
+
+    def record_domain_event(self, event: str, status: str = "ok") -> None:
+        with self._lock:
+            self._domain_events[(event, status)] += 1
 
     def prometheus_text(self) -> str:
         with self._lock:
@@ -42,6 +47,7 @@ class InMemoryMetrics:
             duration_total = self._http.duration_ms_total
             avg_duration = duration_total / total if total else 0.0
             by_route = dict(self._http.by_route)
+            domain_events = dict(self._domain_events)
 
         lines = [
             "# HELP suplematch_app_uptime_seconds Process uptime in seconds.",
@@ -63,6 +69,18 @@ class InMemoryMetrics:
             safe_path = path.replace("\\", "\\\\").replace('"', '\\"')
             lines.append(
                 f'suplematch_http_requests_by_route_total{{method="{method}",path="{safe_path}",status="{status_code}"}} {count}'
+            )
+        lines.extend(
+            [
+                "# HELP suplematch_domain_events_total Domain events grouped by event and status.",
+                "# TYPE suplematch_domain_events_total counter",
+            ]
+        )
+        for (event, status), count in sorted(domain_events.items()):
+            safe_event = event.replace("\\", "\\\\").replace('"', '\\"')
+            safe_status = status.replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(
+                f'suplematch_domain_events_total{{event="{safe_event}",status="{safe_status}"}} {count}'
             )
         lines.append("")
         return "\n".join(lines)

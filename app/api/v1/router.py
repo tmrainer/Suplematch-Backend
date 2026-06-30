@@ -1,20 +1,17 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import (
-    admin,
-    auth,
-    components,
-    debug,
-    feedback,
-    health,
-    history,
-    labs,
-    prices,
-    recommend,
-    reviews,
-    survey_contract,
-    users,
-)
+from app.api.v1.endpoints import debug, health
+from app.domains.admin import rutas as admin
+from app.domains.auth import rutas as auth
+from app.domains.catalog import rutas_componentes as components
+from app.domains.catalog import rutas_precios as prices
+from app.domains.feedback import rutas as feedback
+from app.domains.history import rutas as history
+from app.domains.labs import rutas as labs
+from app.domains.recommendations import rutas as recommend
+from app.domains.reviews import rutas as reviews
+from app.domains.survey import rutas as survey_contract
+from app.domains.users import rutas as users
 
 api_router = APIRouter()
 

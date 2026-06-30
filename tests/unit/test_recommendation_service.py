@@ -1,7 +1,7 @@
-from app.schemas.encuesta import EncuestaInput
-from app.schemas.recomendacion import RecommendationResponse
+from app.domains.survey.esquemas_encuesta import EncuestaInput
+from app.domains.recommendations.esquemas import RecommendationResponse
 from app.core.errors import RECOMMENDATION_ERROR_DETAIL, RecommendationError
-from app.services.recommendation_service import RecommendationService
+from app.domains.recommendations.servicio_recomendaciones import RecommendationService
 
 
 def _encuesta() -> EncuestaInput:
@@ -103,7 +103,83 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
             "type": "INTERACCION_RIESGOSA",
         }
     ]
+    assert response["condition_results"][0]["code"] == "DEFICIT_VIT_D"
+    assert response["condition_results"][0]["kind"] == "nutrition_risk"
     assert response["disclaimer"]
+
+
+def test_recommendation_response_separates_risks_wellness_and_safety():
+    def pipeline(_payload, verbose=False):
+        return {
+            "recommendation_id": "rec_taxonomy",
+            "condiciones": ["DEFICIT_B12", "PROBLEMAS_SUENO", "SAFETY_RENAL"],
+            "condition_scores": {
+                "DEFICIT_B12": 0.77,
+                "PROBLEMAS_SUENO": 0.82,
+                "SAFETY_RENAL": 0.91,
+            },
+            "recomendaciones": [],
+            "packs_ranked": [],
+            "sinergias": [],
+            "alertas": [],
+            "combo_seguro": True,
+            "mensaje": "OK",
+        }
+
+    service = RecommendationService(models={"pipeline_vitaminas": pipeline})
+    response = service.recommend(_encuesta())
+
+    RecommendationResponse.model_validate(response)
+
+    assert response["condition_results"][0] | {
+        "primary_signal_group": "unknown",
+        "signal_strength": "baja",
+        "signal_groups": {},
+        "drivers": [],
+        "missing_data": [],
+        "model_probability": None,
+        "rule_score": None,
+        "calibrated_by_rules": False,
+    } == response["condition_results"][0]
+    assert {
+        key: response["condition_results"][0][key]
+        for key in (
+            "code",
+            "display_name",
+            "kind",
+            "probability",
+            "level",
+            "evidence_group",
+            "confidence_label",
+            "recommendation_strength",
+            "benchmark_status",
+            "validation_source",
+            "allowed_for_commercial_recommendation",
+            "requires_disclaimer",
+            "explanation",
+        )
+    } == {
+        "code": "DEFICIT_B12",
+        "display_name": "Déficit de vitamina B12",
+        "kind": "nutrition_risk",
+        "probability": 0.77,
+        "level": "Alta prioridad",
+        "evidence_group": "diet_or_lab",
+        "confidence_label": "alta",
+        "recommendation_strength": "alta",
+        "benchmark_status": "evaluated_with_nhanes_when_data_available",
+        "validation_source": "nhanes_multi_cycle_diet_lab_rules",
+        "allowed_for_commercial_recommendation": True,
+        "requires_disclaimer": True,
+        "explanation": "Riesgo estimado por señales estructuradas de encuesta, dieta o laboratorio cuando están disponibles.",
+    }
+    assert response["wellness_priorities"][0]["code"] == "ESTRES_SUENO"
+    assert response["wellness_priorities"][0]["kind"] == "wellness_priority"
+    assert response["wellness_priorities"][0]["benchmark_status"] == "not_evaluable_with_nhanes_use_survey_golden_cases"
+    assert response["wellness_priorities"][0]["recommendation_strength"] == "no_convertir"
+    assert response["wellness_priorities"][0]["allowed_for_commercial_recommendation"] is False
+    assert response["safety_flags"][0]["code"] == "SAFETY_RENAL"
+    assert response["safety_flags"][0]["allowed_for_commercial_recommendation"] is False
 
 
 def test_recommendation_fails_cleanly_when_model_is_missing():

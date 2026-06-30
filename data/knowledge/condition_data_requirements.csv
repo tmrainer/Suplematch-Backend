@@ -1,0 +1,21 @@
+condition_code,kind,needs_survey_fields,needs_lab_fields,needs_safety_fields,interpretation
+DEFICIT_VIT_D,recommendable,exposicion_solar|edad|tipo_dieta|fatiga_general|meta_salud_osea,vitamin_d,,Riesgo probable de vitamina D baja; se fortalece con 25-OH vitamina D baja.
+DEFICIT_B12,recommendable,tipo_dieta|edad|fatiga_general|niebla_mental,b12,,Riesgo probable de B12 baja; se fortalece con B12 baja.
+DEFICIT_HIERRO,recommendable,sexo|fatiga_general|caida_cabello|nivel_actividad|meat_servings_week,ferritin|hemoglobin,,Riesgo probable de hierro/ferritina baja; hierro requiere cautela y mejor evidencia de laboratorio.
+DEFICIT_MAGNESIO,recommendable,calambres|dolor_muscular|problemas_sueno|irritabilidad|nivel_actividad,magnesium,,Riesgo probable de magnesio bajo o prioridad de magnesio.
+BAJA_INMUNIDAD,recommendable,enfermedad_frecuente|dieta_deficiente|problemas_sueno|estres_alto,zinc,,Riesgo de soporte inmune insuficiente; no confirma inmunodeficiencia.
+RIESGO_SALUD_OSEA,recommendable,edad|exposicion_solar|meta_salud_osea|tipo_dieta,calcium|vitamin_d,,Prioridad de salud osea; se fortalece con calcio o vitamina D bajos.
+ESTRES_SUENO,recommendable,problemas_sueno|irritabilidad|niebla_mental|fatiga_general|meta_cognitivo,,,Riesgo contextual de estres/sueno insuficiente.
+RENDIMIENTO_DEPORTIVO,recommendable,nivel_actividad|meta_rendimiento|dolor_muscular|calambres|fatiga_general,,,Prioridad de rendimiento y recuperacion.
+DEFICIT_FOLATO,recommendable,dieta_deficiente|fatiga_general|sexo|legume_servings_week,folate,,Riesgo probable de folato bajo; se fortalece con folato bajo.
+DEFICIT_ZINC,recommendable,enfermedad_frecuente|piel_seca|dieta_deficiente,zinc,,Riesgo probable de zinc bajo; se fortalece con zinc bajo.
+DEFICIT_CALCIO,recommendable,edad|meta_salud_osea|tipo_dieta|dairy_servings_day,calcium,,Riesgo probable de calcio bajo; se fortalece con calcio bajo.
+RIESGO_VITAMINA_C_BAJA,recommendable,dieta_deficiente|fruit_veg_servings_day|vitamin_c_diet_signal|enfermedad_frecuente|piel_seca|fatiga_general|meta_inmunidad,,,Riesgo de ingesta baja de vitamina C; evidencia principalmente dietaria/sintomatica.
+RIESGO_OMEGA3_BAJO,recommendable,tipo_dieta|dieta_deficiente|fish_servings_week|meta_cognitivo|irritabilidad|piel_seca,,,Riesgo de baja ingesta de omega 3; mejora con pregunta directa de consumo de pescado.
+RIESGO_PROTEINA_INSUFICIENTE,recommendable,dieta_deficiente|protein_g_day_estimate|protein_insufficient_signal|protein_gap_g_day|nivel_actividad|meta_rendimiento|fatiga_general|dolor_muscular,,,Riesgo de proteina insuficiente para objetivo; usa ingesta diaria aproximada.
+RIESGO_CABELLO_PIEL_UNAS,recommendable,meta_belleza|caida_cabello|piel_seca|unas_quebradizas|hair_skin_nails_cluster,zinc|ferritin,,Prioridad de cabello piel y unas; puede reforzarse con zinc/ferritina.
+RIESGO_METABOLICO_GLUCOSA,safety_context,edad|bmi,glucose,,Senal metabolica por glucosa elevada; no genera recomendacion comercial directa.
+RIESGO_DISLIPIDEMIA,safety_context,edad|bmi,total_cholesterol|ldl|hdl|triglycerides,,Senal de perfil lipidico alterado; no genera recomendacion comercial directa.
+SAFETY_RENAL,safety,,creatinine|egfr,enfermedad_renal,Senal renal o condicion declarada; debe bloquear compra directa.
+SAFETY_HEPATICA,safety,,alt|ast,enfermedad_hepatica,Senal hepatica o condicion declarada; debe bloquear compra directa.
+SAFETY_TIROIDEA,safety,,tsh,disfuncion_tiroidea,Senal tiroidea por TSH alterada; requiere revision profesional.

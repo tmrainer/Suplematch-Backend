@@ -1,0 +1,27 @@
+version,condition_code,display_name,positive_threshold,source_ids
+2026-06-16.2,DEFICIT_VIT_D,Riesgo de vitamina D baja,0.55,nih_ods_vitamin_d_hp|nih_ods_immune_function
+2026-06-16.2,DEFICIT_B12,Riesgo de vitamina B12 baja,0.55,nih_ods_vitamin_b12_hp
+2026-06-16.2,DEFICIT_HIERRO,Riesgo de hierro/ferritina baja,0.58,nih_ods_iron_hp
+2026-06-16.2,DEFICIT_MAGNESIO,Riesgo de magnesio bajo,0.56,nih_ods_magnesium_consumer
+2026-06-16.2,BAJA_INMUNIDAD,Riesgo de soporte inmune insuficiente,0.55,nih_ods_zinc_hp|nih_ods_immune_function
+2026-06-16.2,RIESGO_SALUD_OSEA,Riesgo de salud osea a priorizar,0.55,nih_ods_calcium_hp|nih_ods_vitamin_d_hp
+2026-06-16.2,ESTRES_SUENO,Riesgo por estres y sueno insuficiente,0.55,nih_medlineplus_supplements
+2026-06-16.2,RENDIMIENTO_DEPORTIVO,Prioridad de rendimiento y recuperacion,0.55,nih_ods_magnesium_consumer
+2026-06-16.2,DEFICIT_FOLATO,Riesgo de folato bajo,0.56,nih_ods_folate_hp
+2026-06-16.2,DEFICIT_ZINC,Riesgo de zinc bajo,0.55,nih_ods_zinc_hp|nih_ods_immune_function
+2026-06-16.2,DEFICIT_CALCIO,Riesgo de calcio bajo,0.56,nih_ods_calcium_hp
+2026-06-16.2,RIESGO_VITAMINA_C_BAJA,Riesgo de ingesta baja de vitamina C,0.58,nih_ods_vitamin_c_hp
+2026-06-16.2,RIESGO_OMEGA3_BAJO,Riesgo de baja ingesta de omega 3,0.55,nih_ods_omega3_hp
+2026-06-16.2,RIESGO_PROTEINA_INSUFICIENTE,Riesgo de proteina insuficiente para objetivo,0.57,nih_medlineplus_supplements
+2026-06-16.2,RIESGO_CABELLO_PIEL_UNAS,Riesgo de soporte para cabello piel y unas,0.55,nih_ods_zinc_hp|nih_ods_iron_hp
+2026-06-16.2,RIESGO_METABOLICO_GLUCOSA,Riesgo metabolico por glucosa elevada,0.60,medlineplus_glucose_test
+2026-06-16.2,RIESGO_DISLIPIDEMIA,Riesgo por perfil lipidico alterado,0.60,medlineplus_cholesterol_tests
+2026-06-16.2,SAFETY_RENAL,Senal renal que requiere revision profesional,0.50,medlineplus_creatinine_test|fda_dietary_supplements
+2026-06-16.2,SAFETY_HEPATICA,Senal hepatica que requiere revision profesional,0.50,medlineplus_liver_tests|fda_dietary_supplements
+2026-06-16.2,SAFETY_TIROIDEA,Senal tiroidea que requiere revision profesional,0.50,medlineplus_thyroid_tests
+2026-06-24.2,SALUD_VISUAL,Prioridad contextual de salud visual,0.55,nih_ods_vitamin_a_hp
+2026-06-24.2,SALUD_DIGESTIVA,Prioridad contextual de salud digestiva,0.55,nih_ods_probiotics_hp
+2026-06-24.2,FATIGA_NUTRICIONAL,Prioridad contextual de energia y fatiga nutricional,0.55,nih_ods_thiamin_hp|nih_ods_riboflavin_hp|nih_ods_niacin_hp
+2026-06-24.2,HIDRATACION_ELECTROLITOS,Prioridad contextual de hidratacion y electrolitos,0.55,nih_ods_magnesium_consumer|nih_ods_potassium_hp
+2026-06-24.2,SALUD_CARDIOVASCULAR_CONTEXTUAL,Prioridad contextual cardiovascular,0.55,nih_ods_omega3_hp|nccih_coq10
+2026-06-24.2,SALUD_COGNITIVA,Prioridad contextual cognitiva,0.55,nih_ods_choline_hp|nih_ods_omega3_hp|nih_medlineplus_supplements

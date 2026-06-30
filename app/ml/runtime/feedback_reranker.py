@@ -47,6 +47,8 @@ def _make_candidate_packs(recomendaciones: list[dict[str, Any]]) -> list[list[di
         cid = str(rec.get("component_id", "")).strip()
         if not cid or cid in seen:
             continue
+        if not _is_pack_eligible(rec):
+            continue
 
         seen.add(cid)
         recs.append(rec)
@@ -62,6 +64,28 @@ def _make_candidate_packs(recomendaciones: list[dict[str, Any]]) -> list[list[di
         packs.append(list(combo))
 
     return packs[:10]
+
+
+def _is_pack_eligible(recommendation: dict[str, Any]) -> bool:
+    if recommendation.get("recommendation_role") == "safety_context":
+        return False
+    if recommendation.get("tipo") == "contexto_seguridad" or recommendation.get("type") == "contexto_seguridad":
+        return False
+    if recommendation.get("commercial_eligible") is False:
+        return False
+
+    for interaction in recommendation.get("interaction_rules") or []:
+        if not isinstance(interaction, dict):
+            continue
+        if interaction.get("severity") == "high" and interaction.get("action") in {
+            "block",
+            "block_commercial",
+            "block_or_warn",
+            "warn_or_block",
+        }:
+            return False
+
+    return True
 
 
 def rerank_packs(

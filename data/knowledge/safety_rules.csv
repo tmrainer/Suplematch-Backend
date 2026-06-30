@@ -1,0 +1,6 @@
+version,rule_code,field,operator,value,action,severity,message,source_ids
+2026-06-16.2,minor_block_commercial,age_years,lt,18,block_commercial_recommendations,high,Menor de edad: requiere supervision profesional antes de iniciar suplementos.,fda_dietary_supplements|nih_medlineplus_supplements
+2026-06-16.2,pregnancy_lactation_block_commercial,condiciones_seguridad,contains,embarazo_lactancia,block_commercial_recommendations,high,Embarazo/lactancia: validar suplementos con profesional.,fda_dietary_supplements|nih_medlineplus_supplements
+2026-06-16.2,renal_block_commercial,condiciones_seguridad,contains,enfermedad_renal,block_commercial_recommendations,high,Enfermedad renal declarada: no mostrar compra directa.,fda_dietary_supplements|nih_medlineplus_supplements
+2026-06-16.2,hepatic_block_commercial,condiciones_seguridad,contains,enfermedad_hepatica,block_commercial_recommendations,high,Enfermedad hepatica declarada: no mostrar compra directa.,fda_dietary_supplements|nih_medlineplus_supplements
+2026-06-16.2,anticoagulants_block_sensitive_components,condiciones_seguridad,contains,anticoagulantes,block_or_warn_component,high,Anticoagulantes: revisar interacciones antes de recomendar suplementos.,fda_dietary_supplements|nih_medlineplus_supplements

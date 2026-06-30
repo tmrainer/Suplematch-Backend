@@ -83,13 +83,20 @@ Nota actualizada: la exposicion publica no debe depender de ngrok manual. Para s
 docker compose --env-file .env.staging -f docker-compose.staging.yml --profile tunnel up -d --build
 ```
 
-El hostname publico se configura en Cloudflare apuntando al servicio interno `http://frontend:80`.
+El hostname publico se configura en Cloudflare con dos rutas internas del mismo tunnel:
+
+```txt
+/api/* -> http://backend:8000
+/      -> http://frontend:80
+```
+
+La ruta `/api/*` debe quedar antes que `/`. El proxy `/api` del frontend queda como fallback/local.
 
 El comando de Cloudflare tipo `docker run ... --token TOKEN` se tradujo a Compose usando `CLOUDFLARE_TUNNEL_TOKEN`, para que el token no aparezca en argumentos de proceso.
 
 ### 5.1 Auth con refresh tokens rotativos
 
-**Archivos:** `app/services/auth_service.py`, `app/api/v1/endpoints/auth.py`, `app/db/models.py`
+**Archivos:** `app/domains/auth/servicio_autenticacion.py`, `app/domains/auth/rutas.py`, `app/db/models.py`
 
 Se agrego tabla `refresh_tokens`, migracion Alembic y endpoints:
 

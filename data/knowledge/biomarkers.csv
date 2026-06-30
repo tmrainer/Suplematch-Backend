@@ -1,0 +1,19 @@
+version,biomarker_code,display_name,unit,low,borderline,critical_low,high,critical_high,condition_code,safety_condition,source_ids
+2026-06-16.2,vitamin_d,Vitamina D 25-OH,ng/mL,20,30,12,,,DEFICIT_VIT_D,,nih_ods_vitamin_d_hp
+2026-06-16.2,b12,Vitamina B12,pg/mL,200,300,150,,,DEFICIT_B12,,nih_ods_vitamin_b12_hp
+2026-06-16.2,ferritin,Ferritina,ng/mL,30,,10,,,DEFICIT_HIERRO,,nih_ods_iron_hp
+2026-06-16.2,hemoglobin,Hemoglobina,g/dL,12,,8,,,DEFICIT_HIERRO,,nih_ods_iron_hp
+2026-06-16.2,magnesium,Magnesio,mg/dL,1.7,,1.2,,,DEFICIT_MAGNESIO,,nih_ods_magnesium_consumer
+2026-06-16.2,zinc,Zinc,ug/dL,70,,50,,,BAJA_INMUNIDAD,,nih_ods_zinc_hp|nih_ods_immune_function
+2026-06-16.2,calcium,Calcio serico,mg/dL,8.6,,7.5,,,RIESGO_SALUD_OSEA,,nih_ods_calcium_hp
+2026-06-16.2,creatinine,Creatinina,mg/dL,,,,1.3,2.0,,enfermedad_renal,nih_medlineplus_supplements|fda_dietary_supplements
+2026-06-16.2,alt,ALT/TGP,U/L,,,,40,200,,enfermedad_hepatica,nih_medlineplus_supplements|fda_dietary_supplements
+2026-06-16.2,folate,Folato,ng/mL,3,,2,,,DEFICIT_FOLATO,,nih_ods_folate_hp
+2026-06-16.2,glucose,Glucosa,mg/dL,,,,100,250,RIESGO_METABOLICO_GLUCOSA,,medlineplus_glucose_test
+2026-06-16.2,tsh,TSH,mUI/L,0.4,,0.1,4,10,,disfuncion_tiroidea,medlineplus_thyroid_tests
+2026-06-16.2,total_cholesterol,Colesterol total,mg/dL,,,,200,300,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
+2026-06-16.2,ldl,Colesterol LDL,mg/dL,,,,130,190,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
+2026-06-16.2,hdl,Colesterol HDL,mg/dL,40,,30,,,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
+2026-06-16.2,triglycerides,Trigliceridos,mg/dL,,,,150,500,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
+2026-06-16.2,ast,AST/TGO,U/L,,,,40,200,,enfermedad_hepatica,medlineplus_liver_tests|fda_dietary_supplements
+2026-06-16.2,egfr,TFG/eGFR,mL/min/1.73m2,90,,60,,,,enfermedad_renal,medlineplus_creatinine_test|fda_dietary_supplements

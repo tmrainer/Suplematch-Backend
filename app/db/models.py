@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -30,6 +30,11 @@ class User(Base):
 
     roles: Mapped[list[UserRole]] = relationship(back_populates="user", cascade="all, delete-orphan")
     profile: Mapped[UserProfile | None] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    personal_info: Mapped[UserPersonalInfo | None] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         uselist=False,
@@ -68,6 +73,13 @@ class UserProfile(Base):
     sex: Mapped[str | None] = mapped_column(String(32))
     diet_type: Mapped[str | None] = mapped_column(String(64))
     activity_level: Mapped[str | None] = mapped_column(String(64))
+    age_years: Mapped[int | None] = mapped_column(Integer)
+    weight_value: Mapped[float | None] = mapped_column(Float)
+    weight_unit: Mapped[str | None] = mapped_column(String(24))
+    weight_kg: Mapped[float | None] = mapped_column(Float)
+    height_value: Mapped[float | None] = mapped_column(Float)
+    height_unit: Mapped[str | None] = mapped_column(String(24))
+    height_cm: Mapped[float | None] = mapped_column(Float)
     health_goals: Mapped[dict] = mapped_column(JSONB, default=dict)
     allergies: Mapped[dict] = mapped_column(JSONB, default=dict)
     medical_warnings: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -75,6 +87,27 @@ class UserProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user: Mapped[User] = relationship(back_populates="profile")
+
+
+class UserPersonalInfo(Base):
+    __tablename__ = "user_personal_info"
+
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    first_name: Mapped[str | None] = mapped_column(String(120))
+    last_name: Mapped[str | None] = mapped_column(String(160))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    country: Mapped[str | None] = mapped_column(String(80))
+    city: Mapped[str | None] = mapped_column(String(120))
+    district: Mapped[str | None] = mapped_column(String(120))
+    address_line: Mapped[str | None] = mapped_column(Text)
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    document_type: Mapped[str | None] = mapped_column(String(40))
+    document_number: Mapped[str | None] = mapped_column(String(80))
+    preferences_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="personal_info")
 
 
 class PasswordResetToken(Base):
@@ -142,7 +175,7 @@ class CommercialProduct(Base):
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    pharmacy_id: Mapped[UUID] = mapped_column(ForeignKey("pharmacies.id"), index=True)
+    pharmacy_id: Mapped[UUID] = mapped_column(ForeignKey("pharmacies.id", ondelete="RESTRICT"), index=True)
     sku: Mapped[str | None] = mapped_column(String(160), index=True)
     commercial_name: Mapped[str] = mapped_column(Text)
     formal_name: Mapped[str | None] = mapped_column(Text)
@@ -176,7 +209,7 @@ class CommercialProductComponent(Base):
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     product_id: Mapped[UUID] = mapped_column(ForeignKey("commercial_products.id", ondelete="CASCADE"), index=True)
-    component_id: Mapped[UUID] = mapped_column(ForeignKey("components.id"), index=True)
+    component_id: Mapped[UUID] = mapped_column(ForeignKey("components.id", ondelete="RESTRICT"), index=True)
     ingredient: Mapped[str | None] = mapped_column(Text)
     amount: Mapped[str | None] = mapped_column(String(80))
     unit: Mapped[str | None] = mapped_column(String(40))
@@ -239,6 +272,52 @@ class CatalogImportRun(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
 
+class CatalogJob(Base):
+    __tablename__ = "catalog_jobs"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    cancelled_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    mode: Mapped[str] = mapped_column(String(40), index=True)
+    status: Mapped[str] = mapped_column(String(40), default="queued", index=True)
+    pid: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    returncode: Mapped[int | None] = mapped_column(Integer)
+    log_path: Mapped[str | None] = mapped_column(Text)
+    requested_params_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    result_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    diff_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ProductPriceSnapshot(Base):
+    __tablename__ = "product_price_snapshots"
+    __table_args__ = (
+        Index("ix_product_price_snapshots_product_seen", "product_id", "seen_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    product_id: Mapped[UUID | None] = mapped_column(ForeignKey("commercial_products.id", ondelete="SET NULL"), index=True)
+    catalog_job_id: Mapped[UUID | None] = mapped_column(ForeignKey("catalog_jobs.id", ondelete="SET NULL"), index=True)
+    pharmacy: Mapped[str] = mapped_column(String(160), index=True)
+    sku: Mapped[str | None] = mapped_column(String(160), index=True)
+    url: Mapped[str | None] = mapped_column(Text)
+    commercial_name: Mapped[str | None] = mapped_column(Text)
+    price: Mapped[float | None] = mapped_column(Float)
+    currency: Mapped[str | None] = mapped_column(String(8))
+    availability: Mapped[str | None] = mapped_column(String(40), index=True)
+    stock: Mapped[int | None] = mapped_column(Integer)
+    registro_sanitario: Mapped[str | None] = mapped_column(String(80), index=True)
+    raw_payload_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
 class CatalogImportError(Base):
     __tablename__ = "catalog_import_errors"
 
@@ -254,6 +333,9 @@ class CatalogImportError(Base):
 
 class RecommendationSession(Base):
     __tablename__ = "recommendation_sessions"
+    __table_args__ = (
+        Index("ix_recommendation_sessions_user_created", "user_id", "created_at"),
+    )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
@@ -389,12 +471,17 @@ class RecommendationFeedback(Base):
     recommended_pack_id: Mapped[UUID | None] = mapped_column(ForeignKey("recommended_packs.id", ondelete="SET NULL"), index=True)
     pack_key: Mapped[str | None] = mapped_column(String(160), index=True)
     component_ids_json: Mapped[list] = mapped_column(JSONB, default=list)
+    selected_product_ids_json: Mapped[list] = mapped_column(JSONB, default=list)
+    chosen_product_id: Mapped[UUID | None] = mapped_column(ForeignKey("commercial_products.id", ondelete="SET NULL"), index=True)
+    product_context_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     conditions_context_json: Mapped[list] = mapped_column(JSONB, default=list)
     rating: Mapped[int | None] = mapped_column(Integer)
     was_relevant: Mapped[bool | None] = mapped_column(Boolean)
     would_follow: Mapped[bool | None] = mapped_column(Boolean)
     comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    chosen_product: Mapped[CommercialProduct | None] = relationship()
 
 
 class SupplementReview(Base):
