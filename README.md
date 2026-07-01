@@ -6,17 +6,14 @@ Tecnologias principales:
 
 - Python 3.12 como lenguaje principal.
 - FastAPI para exponer endpoints HTTP.
-- Uvicorn y Gunicorn para ejecucion local y despliegue en contenedor.
+- Uvicorn para ejecucion local y despliegue en contenedor.
 - PostgreSQL como base de datos principal.
 - SQLAlchemy 2 para modelos, consultas y persistencia.
-- Alembic para migraciones de base de datos.
 - Pydantic y pydantic-settings para validacion de datos y configuracion por entorno.
 - passlib, bcrypt y python-jose para autenticacion, hash de contrasenas y manejo de JWT.
 - scikit-learn 1.5, numpy, scipy, pandas, joblib y pyarrow para procesamiento de datos, features, entrenamiento e inferencia del modelo tabular.
 - PyTorch y PyTorch Geometric para el modelo de grafo (GraphSAGE).
-- SHAP para explicabilidad del modelo cuando esta disponible.
 - Tesseract OCR, pytesseract, pypdf, pdf2image y Pillow para extraccion de datos desde examenes de laboratorio.
-- Playwright para validaciones automatizadas que requieren navegador.
 - Docker y Docker Compose para ejecucion reproducible en desarrollo y staging local.
 
 ## 2. Despliegue
