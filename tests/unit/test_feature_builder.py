@@ -87,3 +87,10 @@ def test_builder_payload_never_emits_unknown_category() -> None:
         for col in CAT_COLS:
             value = payload.get(col, MISSING_CATEGORY)
             assert isinstance(value, str) and value != "unknown", (col, value)
+
+
+def test_short_sleep_is_judged_by_age() -> None:
+    # Adolescentes necesitan 8-10 h (CDC; AASM): 5-7 h cuenta como el "menos de 5 h" de un adulto.
+    assert _build(edad_rango="menos_18", horas_sueno="5_7h")["problemas_sueno"] == 5
+    assert _build(edad_rango="31_50", horas_sueno="5_7h")["problemas_sueno"] == 4
+    assert _build(edad_rango="menos_18", horas_sueno="7_9h")["problemas_sueno"] == 1

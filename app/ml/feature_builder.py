@@ -252,6 +252,9 @@ class FeatureBuilder:
     def build_pipeline_payload(self, encuesta: EncuestaInput) -> dict:
         edad = int(encuesta.age_years) if getattr(encuesta, "age_years", None) is not None else self.EDAD_MAP[encuesta.edad_rango]
         problemas_sueno = self.SUENO_MAP[encuesta.horas_sueno]
+        # Adolescentes necesitan 8-10 h (CDC; AASM): 5-7 h les falta tanto como menos de 5 h a un adulto (7 h o mas).
+        if edad < 18 and encuesta.horas_sueno == "5_7h":
+            problemas_sueno = self.SUENO_MAP["menos_5h"]
         nivel_actividad = self.EJERCICIO_MAP[encuesta.frecuencia_ejercicio]
         fatiga_general = self.FATIGA_MAP[encuesta.fatiga]
         exposicion_solar = self.SOL_MAP[encuesta.exposicion_solar]

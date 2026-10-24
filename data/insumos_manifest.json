@@ -37,8 +37,8 @@
       "path": "models/runtime/condition_mvp_model.pkl",
       "versioned": false,
       "origen": "Entrenado con datos sinteticos.",
-      "generador": "python scripts/training/entrenar_modelo_condiciones.py --rows 2500 --seed 42",
-      "sha256": "2bcb4c1eee0b31dac445702e4aa53e1f594ca12dcaaf00b4a6703c709222c304",
+      "generador": "python scripts/training/entrenar_modelo_condiciones.py --rows 10000 --seed 42",
+      "sha256": "c7aef6c829ef9bdd09dd213d25cfaa6c3b05f9b1c4022872431062469191b0c2",
       "nota": ""
     },
     {
@@ -94,7 +94,7 @@
       "versioned": true,
       "origen": "Reglas heuristicas (weight_basis=expert_heuristic).",
       "generador": null,
-      "sha256": "6e9d5d85b7146ad426d9c5e1411e168ef87733bbf1b6cab33d35bc9505ae3d2c",
+      "sha256": "fdb4b31e969954d13bfdd909a46d6b6eac1d746062d05c48eb71f1f10fa1d127",
       "nota": ""
     },
     {

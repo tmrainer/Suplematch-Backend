@@ -262,3 +262,17 @@ Todo nombre visible va en lenguaje común: suplementos en español con la vitami
 3. Tests con nombre de archivo repetido: `tests/integration/test_catalog_rs_review.py` pasa a
    `test_catalog_rs_review_api.py`; `tests/unit/test_test_layout.py` impide otro par. `pytest tests` corre unit e
    integración juntos: **592 passed, 11 skipped**.
+
+### Escenarios de calidad: 16/16 (2026-10-24)
+
+Los 4 que fallaban, uno por uno:
+
+| Escenario | Causa | Cambio |
+|---|---|---|
+| `mayor_50_activo_sol_bajo` | Edad ≥ 50 (0.12) + poco sol (0.30) = 0.42 < 0.55: los dos grupos de riesgo de NIH ODS juntos no marcaban vitamina D | **Regla**: `DEFICIT_VIT_D edad>=50` 0.12 → 0.25. Paquete clínico: vitamina D 21 → 25 de 120 (solo reglas 5 → 12), resto igual. Modelo 1 reentrenado (`--rows 10000 --seed 42`, f1_macro 0.849 → 0.850). **Pendiente de revisión del nutricionista** (nota en `clinical_rules_manifest.json`). |
+| `adolescente_fatiga_inmunidad` | 5-7 h de sueño contaban igual a cualquier edad; 3-4 resfríos al año son normales en adolescentes (CDC) | `feature_builder`: en menores 5-7 h equivale a "menos de 5 h" (CDC/AASM: 8-10 h a esa edad). Detecta Estrés y sueño. Foco esperado corregido a `ESTRES_SUENO`. |
+| `fatiga_cronica_estres_sueno_bajo` | Expectativa heredada de `FATIGA_CRONICA`: con dieta regular la fatiga se explica por dormir < 5 h con estrés muy alto | Foco esperado acepta `ESTRES_SUENO` (lo que el sistema ya detectaba). |
+| `rendimiento_deportivo_activo` | Persona activa, sana y sin síntomas: hacer ejercicio no es una condición | Pasa a **control negativo** (`SALUDABLE`, sin packs). Nuevo `deportista_calambres_dolor_muscular` cubre el caso con síntomas (detecta Hidratación y electrolitos). |
+
+El validador ahora limpia el feedback después de cada escenario: dos escenarios con el mismo pack se contaminaban la
+línea base. Aparte: el manifiesto decía `--rows 2500` para el Modelo 1, pero el modelo servido usaba 10 000 filas.

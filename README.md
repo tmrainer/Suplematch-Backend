@@ -27,7 +27,7 @@ Los `.pkl` de `models/runtime/` no se versionan en git. Sin ellos el endpoint `/
 responde error y `/health/ready` reporta `models=false`. Para generarlos:
 
 ```bash
-python3 scripts/training/entrenar_modelo_condiciones.py --rows 2500 --seed 42   # condition_mvp_model.pkl
+python3 scripts/training/entrenar_modelo_condiciones.py --rows 10000 --seed 42   # condition_mvp_model.pkl
 python3 scripts/training/modelo2_train.py                                          # modelo2_artifacts.pkl (requiere torch-geometric y CSVs en SUPPLEMENT_MODEL_DATA_DIR)
 python3 scripts/training/entrenar_condiciones_nhanes.py                            # condition_lab_model.pkl (descarga NHANES)
 ```

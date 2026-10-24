@@ -1,6 +1,6 @@
 {
   "model": "condition_mvp_model",
-  "sha256_16": "2bcb4c1eee0b31da",
+  "sha256_16": "c7aef6c829ef9bdd",
   "task": "Indice de riesgo por condicion a partir de la encuesta (+ laboratorios opcionales). Reproduce reglas curadas; no diagnostica.",
   "clinical_validity": "none_synthetic",
   "data": {
@@ -23,7 +23,7 @@
   "algorithm": "OneVsRestClassifier(Calibrated LogisticRegression); umbral por F1 en validacion interna (candidatos 0.20-0.80)",
   "threshold_selection": "internal_validation_split",
   "thresholds": {
-    "DEFICIT_VIT_D": 0.48,
+    "DEFICIT_VIT_D": 0.32,
     "DEFICIT_B12": 0.41,
     "DEFICIT_HIERRO": 0.31,
     "DEFICIT_MAGNESIO": 0.37,
@@ -52,18 +52,18 @@
   },
   "metrics_test": {
     "hamming_loss": 0.0385,
-    "f1_macro": 0.8487,
-    "f1_samples": 0.8138,
-    "f1_macro_no_labs": 0.8356,
+    "f1_macro": 0.8502,
+    "f1_samples": 0.8154,
+    "f1_macro_no_labs": 0.8387,
     "f1_macro_with_labs": 0.8388,
     "per_label": {
       "DEFICIT_VIT_D": {
-        "prediction_threshold": 0.48,
-        "prevalence_test": 0.1105,
-        "roc_auc": 0.9907,
-        "f1": 0.8333,
-        "f1_no_labs": 0.7899,
-        "roc_auc_no_labs": 0.9888
+        "prediction_threshold": 0.32,
+        "prevalence_test": 0.1336,
+        "roc_auc": 0.9928,
+        "f1": 0.8698,
+        "f1_no_labs": 0.8556,
+        "roc_auc_no_labs": 0.9929
       },
       "DEFICIT_B12": {
         "prediction_threshold": 0.41,
@@ -278,6 +278,6 @@
     "Los umbrales se eligen en una particion de validacion interna del train; el benchmark NHANES semi-curado (scripts/training/calibrar_thresholds_condiciones.py) puede sobrescribirlos con --apply.",
     "Para riesgo de laboratorio con datos reales ver condition_lab_model (NHANES) y su model card."
   ],
-  "trained_at": "2026-10-24T06:49:55+00:00",
-  "generated_at": "2026-10-24T06:49:55+00:00"
+  "trained_at": "2026-10-24T22:48:04+00:00",
+  "generated_at": "2026-10-24T22:48:04+00:00"
 }

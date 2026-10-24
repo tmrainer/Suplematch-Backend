@@ -1,6 +1,6 @@
 condition_code,field,operator,value,weight,source_ids,weight_basis
 DEFICIT_VIT_D,exposicion_solar,eq,baja,0.30,nih_ods_vitamin_d_hp|nih_ods_immune_function,expert_heuristic
-DEFICIT_VIT_D,edad,gte,50,0.12,nih_ods_vitamin_d_hp|nih_ods_immune_function,expert_heuristic
+DEFICIT_VIT_D,edad,gte,50,0.25,nih_ods_vitamin_d_hp|nih_ods_immune_function,expert_heuristic
 DEFICIT_VIT_D,tipo_dieta,in,vegano|vegetariano,0.10,nih_ods_vitamin_d_hp|nih_ods_immune_function,expert_heuristic
 DEFICIT_VIT_D,fatiga_general,gte,4,0.10,nih_ods_vitamin_d_hp|nih_ods_immune_function,expert_heuristic
 DEFICIT_VIT_D,meta_salud_osea,eq,1,0.12,nih_ods_vitamin_d_hp|nih_ods_immune_function,expert_heuristic
