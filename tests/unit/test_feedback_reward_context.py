@@ -93,19 +93,19 @@ def test_bayesian_score_shrinks_towards_prior_with_few_votes():
 
 
 def test_select_feedback_stats_prefers_context_when_enough_votes():
-    result = select_feedback_stats((0.9, 3), (0.2, 40))
+    result = select_feedback_stats((0.9, 5), (0.2, 40))
     assert result["source"] == "context"
-    assert result["feedback_count"] == 3
-    assert result["feedback_context_count"] == 3
+    assert result["feedback_count"] == 5
+    assert result["feedback_context_count"] == 5
     assert result["feedback_global_count"] == 40
     assert result["score"] > FEEDBACK_PRIOR
 
 
 def test_select_feedback_stats_falls_back_to_global_when_context_too_small():
-    result = select_feedback_stats((0.9, 2), (0.2, 40))
+    result = select_feedback_stats((0.9, 4), (0.2, 40))
     assert result["source"] == "global"
     assert result["feedback_count"] == 40
-    assert result["feedback_context_count"] == 2
+    assert result["feedback_context_count"] == 4
     assert result["score"] < FEEDBACK_PRIOR
 
 
@@ -119,3 +119,15 @@ def test_select_feedback_stats_without_data_returns_prior():
         "feedback_global_count": 0,
     }
     assert select_feedback_stats((None, 0), (None, 0))["source"] == "none"
+
+
+def test_few_votes_do_not_move_the_ranking():
+    # Un voto (o cuatro) no alcanzan MIN_FEEDBACK_TO_RERANK: el score queda en el prior y se reporta "insufficient".
+    from app.domains.feedback.contexto import MIN_FEEDBACK_TO_RERANK
+
+    for n in range(1, MIN_FEEDBACK_TO_RERANK):
+        result = select_feedback_stats((0.0, n), (0.0, n))
+        assert result["score"] == FEEDBACK_PRIOR
+        assert result["source"] == "insufficient"
+        assert result["feedback_global_count"] == n
+    assert select_feedback_stats(None, (0.0, MIN_FEEDBACK_TO_RERANK))["score"] < FEEDBACK_PRIOR

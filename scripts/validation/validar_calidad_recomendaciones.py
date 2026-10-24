@@ -21,6 +21,7 @@ from sqlalchemy import delete, select
 
 from app.db.models import RecommendationFeedback, RecommendationSession
 from app.db.session import SessionLocal
+from app.domains.feedback.contexto import MIN_FEEDBACK_TO_RERANK
 from app.domains.feedback.esquemas import FeedbackInput
 from app.domains.feedback.repositorio_feedback import FeedbackRepository
 from app.ml.model_loader import load_all_models
@@ -304,16 +305,22 @@ def _run_scenario(service: RecommendationService, scenario: dict[str, Any], crea
     baseline_pack = _top_pack(baseline)
 
     if baseline_pack:
-        FeedbackRepository(service.db).save_feedback(
-            FeedbackInput(
-                recommendation_id=baseline["recommendation_id"],
-                pack_id=baseline_pack["pack_id"],
-                component_ids=baseline_pack.get("component_ids", []),
-                rating=scenario["feedback_rating"],
-                conditions=baseline.get("conditions", []),
-                comment=f"quality validation: {scenario['name']}",
+        # El feedback solo mueve el ranking desde MIN_FEEDBACK_TO_RERANK votos: un voto por recomendacion nueva.
+        voted = baseline
+        for vote in range(MIN_FEEDBACK_TO_RERANK):
+            if vote:
+                voted = service.recommend(EncuestaInput(**scenario["payload"]))
+                created.append(voted["recommendation_id"])
+            FeedbackRepository(service.db).save_feedback(
+                FeedbackInput(
+                    recommendation_id=voted["recommendation_id"],
+                    pack_id=baseline_pack["pack_id"],
+                    component_ids=baseline_pack.get("component_ids", []),
+                    rating=scenario["feedback_rating"],
+                    conditions=baseline.get("conditions", []),
+                    comment=f"quality validation: {scenario['name']}",
+                )
             )
-        )
 
     after_feedback = service.recommend(EncuestaInput(**scenario["payload"]))
     created.append(after_feedback["recommendation_id"])
@@ -426,7 +433,7 @@ def _evaluate(records: list[dict[str, Any]]) -> dict[str, Any]:
             failures.append(f"{record['scenario']}: no hay score_feedback comparable")
             continue
 
-        if rated_after["feedback_count"] is None or rated_after["feedback_count"] < baseline["feedback_count"] + 1:
+        if rated_after["feedback_count"] is None or rated_after["feedback_count"] < baseline["feedback_count"] + MIN_FEEDBACK_TO_RERANK:
             failures.append(f"{record['scenario']}: feedback_count no subió después del feedback")
 
         if after_feedback != before_feedback or after_final != before_final:

@@ -10,7 +10,8 @@ Lo que se midió el 2026-10-24 (`tests/integration/test_feedback_ranking.py`, `s
 1. **El feedback por pack es muy escaso y muy sensible a la vez.** El `pack_key` es un hash de los 3 componentes:
    cada combinación distinta es un ítem nuevo sin historia. Con los modelos reales, **un solo voto negativo** saca al
    pack principal del primer puesto (score_feedback 0.70 → 0.62), porque los packs candidatos tienen scores casi
-   iguales. Un voto de un usuario cambia el orden para todos los usuarios con ese pack.
+   iguales. Un voto de un usuario cambiaba el orden para todos los usuarios con ese pack. Mitigado el
+   2026-10-24 con `MIN_FEEDBACK_TO_RERANK = 5` (con menos votos el score queda en el prior).
 2. **Un voto a un pack no dice qué suplemento falló.** Si a alguien le cae mal el magnesio, "Vitamina D + Calcio +
    Magnesio" baja entero, y la vitamina D pierde puntos que no merecía.
 3. **Los packs ya no cubren a todos.** En 5 de 15 escenarios no hay pack comercial por diseño (solo prioridades

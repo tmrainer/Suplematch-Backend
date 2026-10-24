@@ -12,12 +12,21 @@ from uuid import uuid4
 from sqlalchemy import delete, select
 
 from app.db.models import RecommendationFeedback, RecommendationSession
+from app.domains.feedback.contexto import MIN_FEEDBACK_TO_RERANK
 from app.db.session import SessionLocal
 from app.main import create_app
 from tests.integration.test_health import asgi_request
 from tests.integration.test_recommend_endpoint import _auth_headers, _survey_payload, needs_models
 
 MAX_VOTES = 15
+
+
+def _assert_moves_only_after_minimum(scores: list[float], direction: int) -> None:
+    """Sin cambio hasta MIN_FEEDBACK_TO_RERANK votos; desde ahi, monotono en `direction` (+1 sube, -1 baja)."""
+    before_minimum = scores[:MIN_FEEDBACK_TO_RERANK]
+    assert len(set(before_minimum)) == 1, f"el feedback se movio antes de {MIN_FEEDBACK_TO_RERANK} votos: {scores}"
+    after = scores[MIN_FEEDBACK_TO_RERANK - 1 :]
+    assert all((b - a) * direction > 0 for a, b in zip(after, after[1:])), scores
 
 
 def _stub_pipeline(prefix: str, pack_a: str, pack_b: str):
@@ -119,14 +128,14 @@ def test_negative_feedback_moves_pack_down_and_positive_moves_it_up():
 
     # Negativo al primero: baja su score_feedback y pierde el primer puesto.
     votes, scores, body = _vote_until_top_changes(app, headers, rating=1, target_rank=1)
-    assert votes <= MAX_VOTES, f"el pack siguio primero tras {MAX_VOTES} votos negativos: {scores}"
-    assert all(after < before for before, after in zip(scores, scores[1:])), scores
+    assert MIN_FEEDBACK_TO_RERANK <= votes <= MAX_VOTES, f"votos={votes}, score_feedback={scores}"
+    _assert_moves_only_after_minimum(scores, direction=-1)
     assert body["packs_ranked"][0]["pack_id"] == pack_b
 
     # Positivo al segundo: sube su score_feedback y gana el primer puesto.
     votes, scores, body = _vote_until_top_changes(app, headers, rating=5, target_rank=2)
-    assert votes <= MAX_VOTES, f"el pack siguio segundo tras {MAX_VOTES} votos positivos: {scores}"
-    assert all(after > before for before, after in zip(scores, scores[1:])), scores
+    assert MIN_FEEDBACK_TO_RERANK <= votes <= MAX_VOTES, f"votos={votes}, score_feedback={scores}"
+    _assert_moves_only_after_minimum(scores, direction=+1)
     assert body["packs_ranked"][0]["pack_id"] == pack_b
 
 
@@ -144,6 +153,6 @@ def test_negative_feedback_reorders_packs_with_real_models():
     assert len(baseline["packs_ranked"]) >= 2, "el perfil de prueba necesita al menos dos packs"
 
     votes, scores, body = _vote_until_top_changes(app, headers, rating=1, target_rank=1)
-    assert all(after < before for before, after in zip(scores, scores[1:])), scores
-    assert votes <= MAX_VOTES, f"el pack siguio primero tras {MAX_VOTES} votos negativos: {scores}"
+    assert MIN_FEEDBACK_TO_RERANK <= votes <= MAX_VOTES, f"votos={votes}, score_feedback={scores}"
+    _assert_moves_only_after_minimum(scores, direction=-1)
     print(f"votos negativos necesarios para cambiar el primer pack: {votes}; score_feedback {scores}")

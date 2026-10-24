@@ -22,8 +22,11 @@ PRINCIPAL_CONDITIONS_LIMIT = 3
 CONTEXT_SEPARATOR = "|"
 CONDITION_JOINER = "+"
 
+# Minimo de votos para que el feedback mueva el ranking. Con menos, el score queda en el prior: un solo voto
+# sacaba al pack principal del primer puesto para todos los usuarios (tests/integration/test_feedback_ranking.py).
+MIN_FEEDBACK_TO_RERANK = 5
 # Minimo de feedback contextual para confiar en el contexto antes de caer al pack global.
-MIN_CONTEXT_FEEDBACK = 3
+MIN_CONTEXT_FEEDBACK = MIN_FEEDBACK_TO_RERANK
 # Prior y pseudo-conteo del score bayesiano (alineados con feedback_reranker).
 FEEDBACK_PRIOR = 0.70
 FEEDBACK_BAYES_M = 8
@@ -123,13 +126,15 @@ def select_feedback_stats(
     global_stats: tuple[float | None, int] | None,
     *,
     min_context_n: int = MIN_CONTEXT_FEEDBACK,
+    min_global_n: int = MIN_FEEDBACK_TO_RERANK,
     prior: float = FEEDBACK_PRIOR,
     m: int = FEEDBACK_BAYES_M,
 ) -> dict[str, Any]:
-    """Elige la fuente de feedback: contexto si tiene al menos `min_context_n` votos, si no el pack global.
+    """Elige la fuente de feedback: contexto si tiene al menos `min_context_n` votos, si no el pack global si tiene
+    al menos `min_global_n`; con menos votos el score queda en el prior (fuente "insufficient").
 
     `context_stats` y `global_stats` son `(avg_reward, n)`. Devuelve score bayesiano, fuente usada
-    ("context" | "global" | "none") y ambos conteos para exponerlos en la respuesta.
+    ("context" | "global" | "insufficient" | "none") y ambos conteos para exponerlos en la respuesta.
     """
     ctx_avg, ctx_n = context_stats if context_stats else (None, 0)
     glob_avg, glob_n = global_stats if global_stats else (None, 0)
@@ -138,8 +143,10 @@ def select_feedback_stats(
 
     if ctx_n >= min_context_n and ctx_avg is not None:
         score, source, used = bayesian_feedback_score(ctx_avg, ctx_n, prior=prior, m=m), "context", ctx_n
-    elif glob_n > 0 and glob_avg is not None:
+    elif glob_n >= min_global_n and glob_avg is not None:
         score, source, used = bayesian_feedback_score(glob_avg, glob_n, prior=prior, m=m), "global", glob_n
+    elif glob_n > 0 or ctx_n > 0:
+        score, source, used = float(prior), "insufficient", 0
     else:
         score, source, used = float(prior), "none", 0
 

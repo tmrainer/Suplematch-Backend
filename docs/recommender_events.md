@@ -98,11 +98,14 @@ Ejemplo: `pack_9f1c2a|DEFICIT_VIT_D+ESTRES_CRONICO`.
 `apply_metrics_to_packs(packs, conditions)` calcula el feedback de cada pack en dos niveles:
 
 1. **Contextual**: feedback con el mismo `context_key` (usuarios con las mismas condiciones). Se usa
-   si tiene al menos `MIN_CONTEXT_FEEDBACK = 3` votos.
-2. **Global**: si no, el `pack_key` sin importar condiciones.
+   si tiene al menos `MIN_CONTEXT_FEEDBACK` votos.
+2. **Global**: si no, el `pack_key` sin importar condiciones, también desde `MIN_FEEDBACK_TO_RERANK` votos.
+3. **Insuficiente**: con menos votos el score queda en el prior (0.70) y el orden no cambia.
 
-Cada pack expone `feedback_count` (el usado), `feedback_context_count`, `feedback_global_count`,
-`feedback_source` (`context` | `global` | `none`) y `feedback_context_key`. La selección es pura
+`MIN_FEEDBACK_TO_RERANK = MIN_CONTEXT_FEEDBACK = 5` desde el 2026-10-24: con 1 voto bastaba para sacar al pack
+principal del primer puesto para todos los usuarios (`tests/integration/test_feedback_ranking.py` lo prueba de
+punta a punta). Cada pack expone `feedback_count` (el usado), `feedback_context_count`, `feedback_global_count`,
+`feedback_source` (`context` | `global` | `insufficient` | `none`) y `feedback_context_key`. La selección es pura
 (`select_feedback_stats`) y se testea sin Postgres.
 
 El reranker (`feedback_reranker.rerank_packs`) no cambió de firma: su `feedback_stats` debe
