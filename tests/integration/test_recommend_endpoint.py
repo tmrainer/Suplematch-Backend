@@ -6,7 +6,20 @@ from app.db.session import SessionLocal
 from app.main import create_app
 from app.domains.users.repositorio_usuarios import UserRepository
 from tests.integration.test_health import asgi_request
+import pytest
 
+
+
+# /recommend necesita los .pkl (no versionados) y torch. En CI limpio estos tests se omiten.
+def _models_ready() -> bool:
+    import importlib.util
+
+    from app.ml.model_loader import check_model_artifacts
+
+    return bool(check_model_artifacts()["ready"]) and importlib.util.find_spec("torch") is not None
+
+
+needs_models = pytest.mark.skipif(not _models_ready(), reason="artefactos de modelo o torch no disponibles")
 
 def _survey_payload():
     return {
@@ -44,6 +57,7 @@ def test_recommend_endpoint_requires_authenticated_user():
     assert body["detail"] == "Token requerido."
 
 
+@needs_models
 def test_recommend_endpoint_returns_normalized_response():
     recommendation_id = "rec_test_normalized_response"
 
@@ -133,6 +147,7 @@ def test_recommend_endpoint_returns_normalized_response():
             db.commit()
 
 
+@needs_models
 def test_recommend_endpoint_handles_extended_survey_context():
     recommendation_id = "rec_test_extended_survey"
     component_id = "COMP_94DFE28A9A5C"
@@ -233,6 +248,7 @@ def test_recommend_endpoint_handles_extended_survey_context():
             db.commit()
 
 
+@needs_models
 def test_recommend_endpoint_keeps_targeted_safety_as_caution():
     recommendation_id = "rec_test_targeted_caution"
     component_id = "COMP_94DFE28A9A5C"
@@ -316,6 +332,7 @@ def test_recommend_endpoint_keeps_targeted_safety_as_caution():
             db.commit()
 
 
+@needs_models
 def test_recommend_endpoint_ranks_products_when_profile_is_not_critical():
     recommendation_id = "rec_test_non_critical_products"
     component_id = "COMP_94DFE28A9A5C"
@@ -399,6 +416,7 @@ def test_recommend_endpoint_ranks_products_when_profile_is_not_critical():
             db.commit()
 
 
+@needs_models
 def test_recommend_endpoint_persists_extended_survey_for_authenticated_user():
     recommendation_id = "rec_test_profile_persistence"
     email = "profile-persistence@suplematch.test"

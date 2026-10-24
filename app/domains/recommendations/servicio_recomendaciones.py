@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from app.domains.survey.esquemas_encuesta import EncuestaInput
 from app.db.models import User
 from app.ml.feature_builder import FeatureBuilder
+from app.ml.model_loader import artifact_fingerprints
+from app.ml.runtime.condition_lab_inference import predict_lab_risks
+from app.ml.runtime.condition_mvp_inference import second_opinion_from_lab_risks
 from app.core.errors import ModelNotLoadedError, RecommendationGenerationError
 from app.core.observability import log_event, metrics
 from app.domains.recommendations.repositorio_metricas_recomendacion import RecommendationMetricsRepository
@@ -25,6 +28,7 @@ from app.domains.recommendations.reglas_presentacion import (
     CONDITION_LABELS,
     CURRENT_SUPPLEMENT_KEYWORDS,
     DISCLAIMER,
+    GOAL_CONDITIONS,
     HARD_SAFETY_CONDITIONS,
     NUTRITION_RISK_CONDITIONS,
     RESTRICTION_WARNING_LABELS,
@@ -244,13 +248,37 @@ def _product_current_supplement_match(product: dict[str, Any], current_supplemen
     return _current_supplement_match(text, current_supplements)
 
 
+def _derived_safety_context(encuesta: EncuestaInput) -> list[str]:
+    """Codigos de seguridad derivados de la encuesta para las reglas de interaccion del Modelo 2.
+
+    `insomnio`: sueno de mala calidad, 3+ despertares o <5 h. No es diagnostico ni cambia safety_level;
+    solo activa reglas como "cafeina puede empeorar insomnio".
+    """
+    derived: list[str] = []
+    if (
+        getattr(encuesta, "sleep_quality", None) == "mala"
+        or getattr(encuesta, "night_wakeups", None) == "3_o_mas"
+        or getattr(encuesta, "horas_sueno", None) == "menos_5h"
+    ):
+        derived.append("insomnio")
+    return derived
+
+
+def _is_minor(encuesta: EncuestaInput) -> bool:
+    """Menor de edad por edad numerica si existe; el rango categorico es el respaldo."""
+    age_years = getattr(encuesta, "age_years", None)
+    if age_years is not None:
+        return int(age_years) < 18
+    return getattr(encuesta, "edad_rango", None) == "menos_18"
+
+
 def _profile_warnings(encuesta: EncuestaInput) -> list[str]:
     warnings = []
     current_supplements = getattr(encuesta, "suplementos_actuales", []) or []
     if current_supplements:
         warnings.append("Ya consumes suplementos: evita duplicar dosis sin revisar etiqueta y dosis total diaria.")
 
-    for item in getattr(encuesta, "condiciones_seguridad", []) or []:
+    for item in [*(getattr(encuesta, "condiciones_seguridad", []) or []), *_derived_safety_context(encuesta)]:
         warning = SECURITY_WARNING_LABELS.get(item)
         if warning and warning not in warnings:
             warnings.append(warning)
@@ -260,14 +288,14 @@ def _profile_warnings(encuesta: EncuestaInput) -> list[str]:
         if warning and warning not in warnings:
             warnings.append(warning)
 
-    if getattr(encuesta, "edad_rango", None) == "menos_18":
+    if _is_minor(encuesta):
         warnings.append("Menor de edad: las recomendaciones requieren supervisión de un adulto y profesional de salud.")
 
     return warnings
 
 
 def _safety_level(encuesta: EncuestaInput) -> str:
-    if getattr(encuesta, "edad_rango", None) == "menos_18":
+    if _is_minor(encuesta):
         return "medical_review_required"
 
     conditions = set(getattr(encuesta, "condiciones_seguridad", []) or [])
@@ -300,11 +328,29 @@ def _safety_actions(encuesta: EncuestaInput) -> list[str]:
     return actions
 
 
+def _lab_patient_context(encuesta: EncuestaInput) -> dict[str, Any]:
+    """Sexo, edad aproximada y embarazo para elegir rangos de referencia (ej. hemoglobina OMS 2024)."""
+    edad = getattr(encuesta, "edad", None)
+    if edad is None:
+        edad = FeatureBuilder.EDAD_MAP.get(str(getattr(encuesta, "edad_rango", "")), None)
+    safety = list(getattr(encuesta, "condiciones_seguridad", []) or [])
+    return {
+        "sex": getattr(encuesta, "sexo", None),
+        "age": edad,
+        "pregnant": True if "embarazo_lactancia" in safety else None,
+    }
+
+
 def _lab_analysis_for_survey(encuesta: EncuestaInput) -> dict[str, Any] | None:
     lab_results = getattr(encuesta, "lab_results", []) or []
     if not lab_results:
         return None
-    return LabAnalysisService().analyze_manual(lab_results, persist=False, source_note="survey_lab_results")
+    return LabAnalysisService().analyze_manual(
+        lab_results,
+        persist=False,
+        source_note="survey_lab_results",
+        context=_lab_patient_context(encuesta),
+    )
 
 
 def _combine_safety_level(survey_level: str, lab_analysis: dict[str, Any] | None) -> str:
@@ -624,6 +670,8 @@ def _categorized_condition_results(
             "display_name": _condition_display_name(condition),
             "kind": kind,
             "probability": probability,
+            "risk_index": probability,
+            "score_semantics": "indice_riesgo_reglas",
             "level": _condition_level(probability),
             "evidence_group": evidence_group,
             "confidence_label": _confidence_label(probability, kind, evidence_group),
@@ -638,6 +686,7 @@ def _categorized_condition_results(
             "model_probability": detail.get("model_probability"),
             "rule_score": detail.get("rule_score"),
             "calibrated_by_rules": bool(detail.get("calibrated_by_rules")),
+            "score_basis": str(detail.get("score_basis") or ("rules_only" if not detail else "model")),
             "allowed_for_commercial_recommendation": kind not in {"safety_flag", "wellness_priority"},
             "requires_disclaimer": True,
             "explanation": _condition_result_explanation(condition, kind),
@@ -680,6 +729,35 @@ def _recommendation_reason_with_score(
     return "Recomendado para el perfil evaluado."
 
 
+def _goal_conditions(objetivos: list[str] | None) -> set[str]:
+    return {condition for objetivo in objetivos or [] for condition in GOAL_CONDITIONS.get(objetivo, set())}
+
+
+def _order_conditions_by_goals(conditions: list[str], objetivos: list[str] | None) -> list[str]:
+    """Pone primero (orden estable) las condiciones detectadas que coinciden con los objetivos elegidos, siempre
+    detras de las alertas de seguridad. Los objetivos no agregan ni quitan condiciones: solo deciden el orden."""
+    wanted = _goal_conditions(objetivos)
+    if not wanted:
+        return conditions
+    safety = SAFETY_FLAG_CONDITIONS | HARD_SAFETY_CONDITIONS
+    return sorted(conditions, key=lambda condition: (condition not in safety, condition not in wanted))
+
+
+def _order_recommendations_by_goals(recommendations: list[dict[str, Any]], objetivos: list[str] | None) -> list[dict[str, Any]]:
+    """Dentro de cada grupo de prioridad (principal, complementaria...) sube los componentes cuya condicion coincide
+    con un objetivo. No mueve componentes entre grupos: un complementario nunca pasa delante de uno principal."""
+    wanted = _goal_conditions(objetivos)
+    if not wanted:
+        return recommendations
+    group_order: dict[Any, int] = {}
+    for item in recommendations:
+        group_order.setdefault(item.get("priority"), len(group_order))
+    return sorted(
+        recommendations,
+        key=lambda item: (group_order[item.get("priority")], item.get("condition") not in wanted),
+    )
+
+
 def _normalize_conditions(values: Any) -> list[str]:
     if not isinstance(values, list):
         values = [values]
@@ -713,6 +791,8 @@ def _normalize_conditions_display(
                 scores.get(condition, _condition_probability_fallback(index, total))
             ),
             "probability": scores.get(condition, _condition_probability_fallback(index, total)),
+            "risk_index": scores.get(condition, _condition_probability_fallback(index, total)),
+            "score_semantics": "indice_riesgo_reglas",
             "icon_key": "check" if condition == "SALUDABLE" else "activity",
         }
         for index, condition in enumerate(conditions)
@@ -787,6 +867,7 @@ def _normalize_recommendations(values: Any, condition_scores: dict[str, float] |
             "icon_key": _component_icon_key(name),
             "condition_probability": _clean_float(item.get("condition_probability")) if isinstance(item, dict) else condition_score,
             "evidence_strength": _clean_text(item.get("evidence_strength")) if isinstance(item, dict) else None,
+            "evidence_grade": _clean_text(item.get("evidence_grade")) if isinstance(item, dict) else None,
             "evidence_type": _clean_text(item.get("evidence_type")) if isinstance(item, dict) else None,
             "evidence_weight": _clean_float(item.get("evidence_weight")) if isinstance(item, dict) else None,
             "evidence_score": _clean_float(item.get("evidence_score")) if isinstance(item, dict) else None,
@@ -1094,8 +1175,15 @@ class RecommendationService:
                 for bm in lab_analysis.get("biomarkers") or []:
                     payload[f"lab_{bm['code']}_status"] = bm.get("status", "missing")
             # Pass security context so Model 2 interaction rules evaluate correctly
-            payload["condiciones_seguridad"] = list(getattr(encuesta, "condiciones_seguridad", []) or [])
+            payload["condiciones_seguridad"] = [
+                *list(getattr(encuesta, "condiciones_seguridad", []) or []),
+                *_derived_safety_context(encuesta),
+            ]
+            payload["condiciones_seguridad_derivadas"] = _derived_safety_context(encuesta)
             payload["restricciones"] = list(getattr(encuesta, "restricciones", []) or [])
+            # Modelo real (NHANES): se calcula una vez; desempata condiciones limitrofes y se devuelve al cliente.
+            lab_risk_estimates = predict_lab_risks(encuesta)
+            payload["_second_opinion"] = second_opinion_from_lab_risks(lab_risk_estimates)
             payload["restricciones_alergias"] = list(getattr(encuesta, "restricciones", []) or [])
             payload["suplementos_actuales"] = list(getattr(encuesta, "suplementos_actuales", []) or [])
             resultado = pipeline(payload, verbose=False)
@@ -1112,6 +1200,7 @@ class RecommendationService:
         conditions = _normalize_conditions(
             _first_present(resultado.get("condiciones"), resultado.get("conditions"), [])
         )
+        conditions = _order_conditions_by_goals(conditions, getattr(encuesta, "objetivos", None))
         condition_results, wellness_priorities, safety_flags = _categorized_condition_results(
             conditions,
             condition_scores,
@@ -1154,17 +1243,22 @@ class RecommendationService:
                 self.product_catalog,
             )
             if self.db is not None:
-                packs_ranked = RecommendationMetricsRepository(self.db).apply_metrics_to_packs(packs_ranked)
+                packs_ranked = RecommendationMetricsRepository(self.db).apply_metrics_to_packs(packs_ranked, conditions=conditions)
         recommendations = _annotate_current_supplements(recommendations, encuesta)
+        recommendations = _order_recommendations_by_goals(recommendations, getattr(encuesta, "objetivos", None))
         packs_ranked = _filter_pack_products_for_current_supplements(packs_ranked, encuesta)
 
         session_id = f"ses_{uuid4().hex}"
         recommendation_id = _clean_text(resultado.get("recommendation_id")) or f"rec_{uuid4().hex}"
+        artifact_versions = artifact_fingerprints()
         model_versions = {
-            "model1": "condition_mvp_model.pkl" if condition_details else "modelo1_pipeline.pkl",
+            "model1": "condition_mvp_model.pkl",
+            "model1_sha256": artifact_versions.get("condition_mvp_model.pkl"),
             "model2": "modelo2_artifacts.pkl",
+            "model2_sha256": artifact_versions.get("modelo2_artifacts.pkl"),
             "model2_ranker": str(resultado.get("model2_ranker_version") or "component_ranker_v2"),
             "reranker": "feedback_reranker.py",
+            "knowledge": artifact_versions.get("knowledge"),
         }
         profile_warnings = _profile_warnings(encuesta)
         if lab_analysis:
@@ -1198,6 +1292,7 @@ class RecommendationService:
             "wellness_priorities": wellness_priorities,
             "safety_flags": safety_flags,
             "lab_analysis": lab_analysis,
+            "lab_risk_estimates": lab_risk_estimates,
             "model_versions": model_versions,
         }
 

@@ -1,6 +1,13 @@
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
+# Semantica del score por condicion. Mientras el Modelo 1 se entrene con datos sinteticos derivados de
+# condition_rules.csv, su salida es un indice de riesgo basado en reglas, NO una probabilidad clinica
+# (plan de fiabilidad, Fase 3). Solo `lab_risk_estimates` (modelo real NHANES) expone probabilidades calibradas.
+ScoreSemantics = Literal["indice_riesgo_reglas", "probabilidad_calibrada_real"]
+RULE_RISK_INDEX_LABEL = "Índice de riesgo basado en reglas"
+RULE_RISK_INDEX_SEMANTICS: ScoreSemantics = "indice_riesgo_reglas"
+
 
 class FeatureDriver(BaseModel):
     feature: str
@@ -12,23 +19,40 @@ class FeatureDriver(BaseModel):
 
 class ConditionExplanation(BaseModel):
     condition: str
-    probability: float
+    probability: float = Field(description="Obsoleto: mismo valor que risk_index. Se conserva por compatibilidad del frontend.")
+    risk_index: float | None = None
+    score_semantics: ScoreSemantics = RULE_RISK_INDEX_SEMANTICS
     drivers: list[FeatureDriver]
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.risk_index is None:
+            self.risk_index = self.probability
 
 
 class ConditionDisplay(BaseModel):
     code: str
     display_name: str
     level: str
-    probability: float
+    probability: float = Field(description="Obsoleto: mismo valor que risk_index. Se conserva por compatibilidad del frontend.")
+    risk_index: float | None = None
+    score_semantics: ScoreSemantics = RULE_RISK_INDEX_SEMANTICS
+    score_label: str = RULE_RISK_INDEX_LABEL
     icon_key: str
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.risk_index is None:
+            self.risk_index = self.probability
 
 
 class CategorizedConditionResult(BaseModel):
     code: str
     display_name: str
     kind: Literal["biomedical_risk", "nutrition_risk", "wellness_priority", "safety_flag", "context"]
-    probability: float | None = None
+    probability: float | None = Field(default=None, description="Obsoleto: mismo valor que risk_index. Se conserva por compatibilidad del frontend.")
+    # Nombre honesto del score (Fase 3): indice de riesgo basado en reglas, no probabilidad clinica.
+    risk_index: float | None = None
+    score_semantics: ScoreSemantics = RULE_RISK_INDEX_SEMANTICS
+    score_label: str = RULE_RISK_INDEX_LABEL
     level: str
     evidence_group: str = "unknown"
     confidence_label: Literal["baja", "media", "alta"] = "baja"
@@ -43,9 +67,14 @@ class CategorizedConditionResult(BaseModel):
     model_probability: float | None = None
     rule_score: float | None = None
     calibrated_by_rules: bool = False
+    score_basis: Literal["model", "model+rules", "rules_only"] = "model"
     allowed_for_commercial_recommendation: bool = True
     requires_disclaimer: bool = True
     explanation: str
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.risk_index is None:
+            self.risk_index = self.probability
 
 
 class RecommendationItem(BaseModel):
@@ -66,6 +95,7 @@ class RecommendationItem(BaseModel):
     safety_note: str | None = None
     condition_probability: float | None = None
     evidence_strength: str | None = None
+    evidence_grade: str | None = None
     evidence_type: str | None = None
     evidence_weight: float | None = None
     evidence_score: float | None = None
@@ -213,6 +243,8 @@ class RecommendedProduct(BaseModel):
     label_verification_source: str | None = None
     selection_reasons: list[str] = Field(default_factory=list)
     selection_metrics: dict[str, Any] = Field(default_factory=dict)
+    # Estado en la cola de revision humana del RS (Postgres): not_required | pending | approved | needs_info.
+    rs_review_status: str = "not_required"
 
 
 class RecommendationResponse(BaseModel):
@@ -236,4 +268,10 @@ class RecommendationResponse(BaseModel):
     wellness_priorities: list[CategorizedConditionResult] = Field(default_factory=list)
     safety_flags: list[CategorizedConditionResult] = Field(default_factory=list)
     lab_analysis: dict[str, Any] | None = None
-    model_versions: dict[str, str]
+    model_versions: dict[str, str | None]
+    # Modelo real (NHANES): probabilidad calibrada de laboratorio fuera de rango desde la encuesta
+    # (score_semantics="probabilidad_calibrada_real"). Vacio si no hay artefacto.
+    lab_risk_estimates: list[dict[str, Any]] = Field(default_factory=list)
+    # Como leer `probability`/`risk_index` en condition_results, wellness_priorities y safety_flags.
+    condition_score_semantics: ScoreSemantics = RULE_RISK_INDEX_SEMANTICS
+    condition_score_label: str = RULE_RISK_INDEX_LABEL

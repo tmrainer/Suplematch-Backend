@@ -30,6 +30,8 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
                     "condicion": "DEFICIT_VIT_D",
                     "score": 1.0,
                     "tipo": "semilla_directa",
+                    "evidence_strength": "high",
+                    "evidence_grade": "moderate",
                 },
                 {
                     "component_id": "cmp_calcium",
@@ -71,6 +73,8 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
     assert response["recommendations"][0]["reason"] == "Relacionado con déficit de vitamina d."
     assert response["recommendations"][0]["dosage_hint"]
     assert response["recommendations"][0]["priority"] == "principal"
+    # evidence_grade (fuente de verdad del peso de evidencia) debe llegar al cliente, no solo evidence_strength.
+    assert response["recommendations"][0]["evidence_grade"] == "moderate"
     assert response["recommendations"][1]["type_display"] == "Soporte complementario"
     assert response["packs_ranked"][0]["title"] == "Vitamin D + Calcium"
     assert response["packs_ranked"][0]["components"] == [

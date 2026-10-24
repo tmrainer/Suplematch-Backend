@@ -167,6 +167,11 @@ SECURITY_WARNING_LABELS = {
     "problema_tiroideo": "Problema tiroideo: revisa yodo, algas y fórmulas tiroideas antes de consumir.",
     "anticoagulantes": "Uso de anticoagulantes: revisa interacciones, especialmente con omega 3, vitamina K y fórmulas herbales.",
     "medicacion_cronica": "Medicación crónica: confirmar posibles interacciones antes de iniciar suplementos.",
+    "diabetes_medicada": "Medicación para glucosa: cromo, canela y otros suplementos pueden alterar el control glucémico; validar con tu médico.",
+    "inmunosupresion": "Inmunosupresión o enfermedad grave: probióticos y fórmulas herbales requieren evaluación médica previa.",
+    "sedantes": "Uso de sedantes o alcohol frecuente: melatonina, valeriana y L-teanina pueden aumentar la somnolencia.",
+    "hipertension": "Hipertensión o arritmias: cafeína, energizantes y preworkouts requieren cautela.",
+    "insomnio": "Señales de sueño insuficiente en la encuesta: se evitan componentes estimulantes como la cafeína.",
 }
 
 RESTRICTION_WARNING_LABELS = {
@@ -181,13 +186,20 @@ HARD_SAFETY_CONDITIONS = {
     "embarazo_lactancia",
     "enfermedad_renal",
     "enfermedad_hepatica",
+    "inmunosupresion",
 }
 
 TARGETED_SAFETY_CONDITIONS = {
     "problema_tiroideo",
     "anticoagulantes",
     "medicacion_cronica",
+    "diabetes_medicada",
+    "sedantes",
+    "hipertension",
 }
+
+# Codigos derivados por el backend desde otras respuestas (ver contrato.SURVEY_RULES["derived_safety_values"]).
+DERIVED_SAFETY_CONDITIONS = {"insomnio"}
 
 CONDITION_ALIASES = {
     "ESTRES": "ESTRES_SUENO",
@@ -213,6 +225,24 @@ BIOMEDICAL_RISK_CONDITIONS = {
     "RIESGO_DISLIPIDEMIA",
     "RIESGO_SALUD_OSEA",
     "SALUD_OSEA",
+}
+
+# Objetivo elegido en la encuesta -> condiciones que ese objetivo pone primero. Desde el contrato 2026-10-24.1 los
+# objetivos NO influyen en la deteccion (FeatureBuilder ya no los usa en las banderas meta_*); solo ordenan lo
+# que el modelo y las reglas ya detectaron.
+GOAL_CONDITIONS: dict[str, set[str]] = {
+    "energia": {"FATIGA_NUTRICIONAL", "DEFICIT_B12", "DEFICIT_HIERRO", "RIESGO_PROTEINA_INSUFICIENTE"},
+    "inmunidad": {"BAJA_INMUNIDAD", "RIESGO_VITAMINA_C_BAJA", "DEFICIT_ZINC", "DEFICIT_VIT_D"},
+    "suenio": {"ESTRES_SUENO", "DEFICIT_MAGNESIO"},
+    "estres": {"ESTRES_SUENO", "DEFICIT_MAGNESIO"},
+    "rendimiento": {"RENDIMIENTO_DEPORTIVO", "RIESGO_PROTEINA_INSUFICIENTE", "HIDRATACION_ELECTROLITOS"},
+    "salud_osea": {"RIESGO_SALUD_OSEA", "DEFICIT_VIT_D", "DEFICIT_CALCIO"},
+    "cabello_piel_unas": {"RIESGO_CABELLO_PIEL_UNAS", "DEFICIT_ZINC", "DEFICIT_HIERRO"},
+    "salud_visual": {"SALUD_VISUAL"},
+    "digestion": {"SALUD_DIGESTIVA"},
+    "hidratacion": {"HIDRATACION_ELECTROLITOS"},
+    "salud_cardiovascular": {"SALUD_CARDIOVASCULAR_CONTEXTUAL", "RIESGO_OMEGA3_BAJO", "RIESGO_DISLIPIDEMIA"},
+    "salud_cognitiva": {"SALUD_COGNITIVA", "RIESGO_OMEGA3_BAJO", "DEFICIT_B12"},
 }
 
 WELLNESS_PRIORITY_CONDITIONS = {
