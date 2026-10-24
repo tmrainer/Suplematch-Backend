@@ -224,3 +224,15 @@ Resultado (paquete clínico de punta a punta): 5.0 condiciones por caso (11.2 el
 
 
 `pytest tests/unit` (2026-10-24, tarde, Python 3.12 con torch): **464 passed, 9 skipped, 0 failed**. Integración: **38 passed**. E2E frontend: **8/8**.
+
+## Vitamina D, feedback → ranking y fuentes reales (2026-10-24, noche)
+
+1. **Vitamina D**: los escenarios con solo poco sol fallaban porque la confirmación exigía dos familias de la encuesta y la segunda opinión NHANES solo actuaba cerca del umbral. NHANES no ve la exposición solar, así que poco sol + estimación positiva de NHANES son dos evidencias independientes: nueva vía `complementary_family` en `apply_second_opinion` (sin cambiar pesos de `condition_rules.csv`). Paquete clínico: vitamina D 19 → 27 de 120 casos, 4.97 → 5.04 condiciones por caso. Escenarios de calidad 8/15 → 11/15 (quedan rendimiento deportivo, adolescente con fatiga, fatiga sin sueño corto y mayor de 50 con NHANES 0.32 < 0.34).
+2. **Bug**: `/recommend` respondía 500 cuando actuaba la segunda opinión (`score_basis="rules+second_opinion_nhanes"` no estaba en el esquema). Corregido, con test de regresión.
+3. **Bug**: sin componentes elegibles para pack (solo prioridades blandas) el reranker emitía un pack vacío con id `pack_d41d8cd98f` (md5 de "") compartido entre perfiles, que mezclaba su feedback. Ahora no hay pack.
+4. **Feedback → ranking probado de punta a punta** (`tests/integration/test_feedback_ranking.py`): /recommend → /feedback → /recommend contra Postgres, con pipeline falso (corre en CI) y con modelos reales. Con modelos reales **un voto negativo** saca al pack principal del primer puesto (score_feedback 0.70 → 0.62): el ranking es demasiado sensible con pocos votos. Ver propuesta.
+5. `validar_calidad_recomendaciones.py` usa Postgres (antes el store SQLite legado, apagado por defecto), separa "por diseño" (perfil crítico, solo prioridades blandas) de fallos y cambia `FATIGA_CRONICA` por `FATIGA_NUTRICIONAL`.
+6. **Fuentes reales**: `docs/fuentes_datos_reales.md`. Validación externa NHANES 2021-2023 sin reentrenar (`validar_condiciones_nhanes_externo.py`): vitamina D AUC 0.811 (0.815 en test), glucosa 0.752, HDL 0.752.
+7. **Propuesta** de suplementos individuales con 1-5 estrellas: `docs/propuesta_recomendacion_por_suplemento.md` (no implementada).
+
+`pytest tests/unit` (2026-10-24, noche, Python 3.12 con torch): **470 passed, 9 skipped, 0 failed**. Integración: **40 passed**. Copia limpia como CI: 431 passed / 48 skipped, integración 33 passed / 7 skipped.

@@ -38,7 +38,7 @@
       "versioned": false,
       "origen": "Entrenado con datos sinteticos.",
       "generador": "python scripts/training/entrenar_modelo_condiciones.py --rows 2500 --seed 42",
-      "sha256": "0ba356a8e1477b55f43b902172e02dd4aefdf9699d7809d340e8df089f1f03b3",
+      "sha256": "2bcb4c1eee0b31dac445702e4aa53e1f594ca12dcaaf00b4a6703c709222c304",
       "nota": ""
     },
     {
@@ -46,7 +46,7 @@
       "versioned": false,
       "origen": "Embeddings GraphSAGE + pares.",
       "generador": "python scripts/training/modelo2_train.py",
-      "sha256": "bfd698699bb726120bad019c3a9b1f325d45a2b10bbdaf3568eead9d706de927",
+      "sha256": "5718b0cf3716c7cc353df5c2a9b85add698dd4deaf0291fbb137aab81dfbcf0d",
       "nota": ""
     },
     {
@@ -94,7 +94,7 @@
       "versioned": true,
       "origen": "Reglas heuristicas (weight_basis=expert_heuristic).",
       "generador": null,
-      "sha256": "9c2a62684e3928556c7ff90176ee0e0c4b97fd9ca4d2b246f8e70f14fe6a20ca",
+      "sha256": "6e9d5d85b7146ad426d9c5e1411e168ef87733bbf1b6cab33d35bc9505ae3d2c",
       "nota": ""
     },
     {

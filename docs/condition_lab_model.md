@@ -34,6 +34,13 @@ sugerir que sí.
 - `lab_risk_estimates[]`: `target`, `condition` asociada, `probability` calibrada, `threshold`, `positive`, `score_basis="model_real"`, nota de población.
 - No cambia qué componentes se recomiendan (eso sigue en reglas + evidencia). Sirve para priorizar y para decir
   "conviene confirmar con un examen de X".
+- **Segunda opinión para `DEFICIT_VIT_D`** (`apply_second_opinion`): una condición no detectada pasa a positiva si
+  el modelo real la estima positiva y además (a) la encuesta la confirma con dos familias y queda a menos de 0.15 de
+  su umbral (`borderline`), o (b) la encuesta aporta poco sol o barrera solar, que NHANES no ve
+  (`complementary_family`, desde 2026-10-24). El modelo real nunca marca solo. La vía queda en
+  `second_opinion_reason`. Efecto medido en los 120 casos del paquete clínico: vitamina D 19 → 27 casos,
+  condiciones por caso 4.97 → 5.04; escenarios de calidad 8/15 → 11/15.
+- Validación externa en NHANES 2021-2023 sin reentrenar: vitamina D AUC 0.811 (ver `docs/fuentes_datos_reales.md`).
 - El Modelo 1 sintético (`condition_mvp`) sigue operando como índice de riesgo basado en reglas; la salida de ambos
   se distingue por `score_basis`.
 
