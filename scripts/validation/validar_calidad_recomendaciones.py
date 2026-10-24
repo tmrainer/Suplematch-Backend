@@ -83,7 +83,9 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "fatiga_cronica_estres_sueno_bajo",
-        "expected_focus": ["FATIGA_NUTRICIONAL"],
+        # Dieta regular y sin señal nutricional: la fatiga se explica por dormir menos de 5 h con estres muy alto.
+        # FATIGA_CRONICA se dividio en FATIGA_NUTRICIONAL y ESTRES_SUENO; aqui corresponde la segunda.
+        "expected_focus": ["FATIGA_NUTRICIONAL", "ESTRES_SUENO"],
         "feedback_rating": 1,
         "payload": {
             "edad_rango": "31_50",
@@ -115,7 +117,9 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "rendimiento_deportivo_activo",
-        "expected_focus": ["RENDIMIENTO_DEPORTIVO"],
+        # Control negativo: activo, dieta variada, buen sueño y sin sintomas. Hacer ejercicio no es una condicion
+        # (feature_builder: los objetivos y la actividad sola no crean condiciones); no debe recomendar suplementos.
+        "expected_focus": ["SALUDABLE"],
         "feedback_rating": 5,
         "payload": {
             "edad_rango": "mas_50",
@@ -179,7 +183,9 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "adolescente_fatiga_inmunidad",
-        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_NUTRICIONAL"],
+        # 3-4 resfrios al año son habituales a esta edad (CDC: los niños tienen mas que los 2-3 de un adulto), asi
+        # que no bastan para BAJA_INMUNIDAD. Si cuenta dormir 5-7 h: un adolescente necesita 8-10 h (CDC; AASM).
+        "expected_focus": ["ESTRES_SUENO"],
         "feedback_rating": 5,
         "payload": {
             "edad_rango": "menos_18",
@@ -191,6 +197,24 @@ SCENARIOS: list[dict[str, Any]] = [
             "frecuencia_enfermedad": "3_4_anio",
             "estres": "moderado",
             "alcohol": "nunca",
+        },
+    },
+    {
+        "name": "deportista_calambres_dolor_muscular",
+        "expected_focus": ["RENDIMIENTO_DEPORTIVO", "HIDRATACION_ELECTROLITOS"],
+        "feedback_rating": 5,
+        "payload": {
+            "edad_rango": "31_50",
+            "horas_sueno": "7_9h",
+            "frecuencia_ejercicio": "diario",
+            "dieta": "regular",
+            "fatiga": "a_veces",
+            "exposicion_solar": "15_30min",
+            "frecuencia_enfermedad": "1_2_anio",
+            "estres": "moderado",
+            "alcohol": "raro",
+            "dolor_muscular": "frecuente",
+            "calambres": "frecuente",
         },
     },
     {
@@ -397,6 +421,14 @@ def _evaluate(records: list[dict[str, Any]]) -> dict[str, Any]:
         all_supplements.update(baseline["top_pack"])
         all_supplements.update(after["top_pack"])
 
+        if expected_focus == {"SALUDABLE"}:
+            # Control negativo: no debe detectar condiciones ni empujar productos.
+            if baseline["conditions"] not in ([], ["SALUDABLE"]):
+                failures.append(f"{record['scenario']}: perfil sano con condiciones {baseline['conditions']}")
+            if baseline["pack_count"]:
+                failures.append(f"{record['scenario']}: perfil sano recibio {baseline['pack_count']} pack(s)")
+            continue
+
         if not baseline["conditions"] or baseline["conditions"] == ["SALUDABLE"]:
             failures.append(f"{record['scenario']}: no detectó condición accionable")
 
@@ -475,13 +507,17 @@ def run_validation() -> dict[str, Any]:
     if models.get("pipeline_vitaminas") is None:
         raise RuntimeError("pipeline_vitaminas no está cargado")
 
-    created: list[str] = []
+    records = []
     with SessionLocal() as db:
-        try:
-            service = RecommendationService(models, db=db)
-            records = [_run_scenario(service, scenario, created) for scenario in SCENARIOS]
-        finally:
-            _cleanup(db, created)
+        service = RecommendationService(models, db=db)
+        # Limpieza por escenario: dos escenarios pueden compartir pack y contexto, y el feedback del primero
+        # cambiaria la linea base del segundo.
+        for scenario in SCENARIOS:
+            created: list[str] = []
+            try:
+                records.append(_run_scenario(service, scenario, created))
+            finally:
+                _cleanup(db, created)
     evaluation = _evaluate(records)
 
     return {
