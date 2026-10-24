@@ -112,18 +112,36 @@ Recuperación de registro sanitario:
 Flags útiles:
 
 ```bash
---fetch-detail-pages     # recomendado para staging/semanal
---ocr-product-images     # más lento; usar para corrida dirigida o revisión
---infer-registro         # fallback por nombre contra DIGEMID con umbral alto
---download-product-images # descarga la imagen principal detectada
+--fetch-detail-pages      # recomendado para staging/semanal
+--ocr-product-images      # más lento; usar para corrida dirigida o revisión
+--infer-registro          # fallback por nombre contra DIGEMID con umbral alto
+--download-product-images # opt-in explícito; por defecto NO descarga imágenes
+--ignore-robots           # SOLO pruebas locales; por defecto se respeta robots.txt
 ```
 
-Imágenes de producto:
+## Higiene HTTP (robots.txt, reintentos, pausa)
+
+Todo el tráfico de los scrapers sale por `BaseScraper._request()` (clase `PoliteHttp`):
+
+- **robots.txt por host**: se descarga una vez por host y se cachea (`urllib.robotparser`). Si prohíbe la URL para nuestro User-Agent, la URL se salta, se loguea `warning robots_disallow url=...` y se cuenta en `http.robots_disallow_skipped` del resumen JSON final. `--ignore-robots` desactiva la verificación y existe solo para pruebas locales.
+- **Reintentos**: 3 intentos con backoff exponencial (base 1 s, jitter) ante 429, 500/502/503/504 y errores de red. Si el servidor envía `Retry-After` (segundos o fecha HTTP), se respeta (tope 60 s).
+- **Pausa**: `--delay` segundos tras cada request real (default 0.25).
+- **User-Agent honesto**: `SupleMatch research price crawler/1.0 (+weekly catalog validation)`. No se suplanta un navegador.
+
+### Credenciales Algolia (Inkafarma/Mifarma)
+
+Inkafarma y Mifarma se consultan vía el índice Algolia que usa su frontend. Las credenciales **no están en el código**; se leen de `INKAFARMA_ALGOLIA_APP_ID` e `INKAFARMA_ALGOLIA_API_KEY` (ver `.env.example`). Son credenciales del frontend de un tercero (InRetail): antes de usarlas deben revisarse sus términos de uso. Si faltan, esas dos farmacias se saltan con `warning scraper_skipped=<farmacia> reason=missing_algolia_credentials` y el resto de la corrida continúa.
+
+## Imágenes de producto
+
+Columnas:
 
 - `image_url`: URL pública de la primera imagen válida detectada en card o detalle.
 - `image_source`: origen de la imagen, normalmente `card` o `detail`.
 - `image_local_path`: ruta relativa dentro del backend cuando se usa descarga local.
 - `image_downloaded_at`: fecha UTC de descarga.
+
+**La descarga es opt-in** (`--download-product-images`, default desactivado; en el worker semanal `SCRAPER_DOWNLOAD_PRODUCT_IMAGES=0`). Las imágenes son propiedad de las farmacias/marcas: **SupleMatch no las redistribuye** ni las sirve desde la API o el frontend. La descarga local existe únicamente para revisión interna y OCR de etiquetas (`--ocr-product-images`), los archivos quedan fuera de git bajo `data/raw/` y deben borrarse cuando dejen de ser necesarios. Si el `robots.txt` del host de la imagen prohíbe la URL, no se descarga (`images.robots_disallow` en el resumen). La URL pública (`image_url`) sí se guarda como referencia.
 
 La descarga local guarda archivos en:
 
@@ -131,7 +149,7 @@ La descarga local guarda archivos en:
 data/raw/pharmacies/product_images/
 ```
 
-Ejemplo con imágenes:
+Ejemplo con imágenes (solo revisión interna):
 
 ```bash
 python3 scripts/scraping/scraper_suplementos.py \
@@ -475,6 +493,8 @@ python3 scripts/validation/validar_pipeline_catalogo.py \
 ## Notas
 
 Algunas tiendas no publican el registro sanitario en el listado. En esos casos `--infer-registro` intenta encontrarlo por similitud contra `digemid_limpio.csv`; los matches se mantienen exigentes para evitar falsos positivos.
+
+Los nombres derivados de la URL (Boticas Perú) se decodifican con `urllib.parse.unquote` antes de construirse, de modo que `%2B`, `%26` o `%2C` no aparecen en `commercial_name`.
 
 En staging Docker se montan `data/catalog`, `data/raw` y `data/reports` como
 volúmenes del host. Así el panel admin puede leer rechazos, componentes

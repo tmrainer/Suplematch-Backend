@@ -34,19 +34,22 @@ if [[ "${DIGEMID_VISUAL_SCRAPER_ENABLED:-0}" == "1" ]]; then
   if [[ -n "${DIGEMID_VISUAL_MAX_PAGES_PER_QUERY:-}" ]]; then
     VISUAL_ARGS+=(--max-pages-per-query "${DIGEMID_VISUAL_MAX_PAGES_PER_QUERY}")
   fi
-  if [[ -n "${DIGEMID_VISUAL_STORAGE_STATE:-}" ]]; then
-    VISUAL_ARGS+=(--storage-state "${DIGEMID_VISUAL_STORAGE_STATE}")
-  fi
-  if [[ -n "${DIGEMID_VISUAL_SAVE_STORAGE_STATE:-}" ]]; then
-    VISUAL_ARGS+=(--save-storage-state "${DIGEMID_VISUAL_SAVE_STORAGE_STATE}")
-  fi
 
   echo "digemid_visual_worker=starting report=${VISUAL_REPORT_OUT}"
-  "${PYTHON_BIN}" "${VISUAL_ARGS[@]}" || echo "digemid_visual_worker=failed_or_unavailable report=${VISUAL_REPORT_OUT}"
+  set +e
+  "${PYTHON_BIN}" "${VISUAL_ARGS[@]}"
+  VISUAL_STATUS=$?
+  set -e
+  if [[ "${VISUAL_STATUS}" == "3" ]]; then
+    echo "digemid_visual_worker=blocked report=${VISUAL_REPORT_OUT} (portal bloqueado; no se evade, no se promueven candidatos)"
+  elif [[ "${VISUAL_STATUS}" != "0" ]]; then
+    echo "digemid_visual_worker=failed_or_unavailable report=${VISUAL_REPORT_OUT}"
+  fi
 
-  if [[ "${DIGEMID_VISUAL_PROMOTE_TO_SOURCE:-0}" == "1" && -s "${VISUAL_CANDIDATES_CSV}" ]]; then
+  # Promoción al maestro: usa el mínimo normal de filas (DIGEMID_MIN_ROWS, default 1000 en el script Python).
+  # No se rebaja el mínimo a 1: una extracción visual parcial no debe pasar como fuente completa.
+  if [[ "${DIGEMID_VISUAL_PROMOTE_TO_SOURCE:-0}" == "1" && "${VISUAL_STATUS}" == "0" && -s "${VISUAL_CANDIDATES_CSV}" ]]; then
     export DIGEMID_SOURCE_FILE="${VISUAL_CANDIDATES_CSV}"
-    export DIGEMID_MIN_ROWS="${DIGEMID_VISUAL_MIN_PROMOTE_ROWS:-1}"
   fi
 fi
 

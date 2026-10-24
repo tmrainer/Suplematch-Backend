@@ -61,3 +61,28 @@ def test_load_queries_dedupes_inline_and_file_values(tmp_path) -> None:
     queries = load_queries(["Valeriana, Ashwagandha"], query_file)
 
     assert queries == ["Valeriana", "Ashwagandha", "L-teanina"]
+
+
+def test_user_agent_is_honest_and_does_not_impersonate_a_browser() -> None:
+    from scripts.digemid.scrapear_digemid_visual import USER_AGENT
+
+    assert USER_AGENT.startswith("SupleMatch DIGEMID reader/")
+    assert "contacto" in USER_AGENT
+    for token in ("Mozilla", "Chrome", "Safari", "AppleWebKit"):
+        assert token not in USER_AGENT
+
+
+def test_parser_has_no_cookie_reuse_or_challenge_wait_options() -> None:
+    from scripts.digemid.scrapear_digemid_visual import build_parser
+
+    options = {action.dest for action in build_parser()._actions}
+    assert "storage_state" not in options
+    assert "save_storage_state" not in options
+    assert "challenge_wait_ms" not in options
+
+
+def test_updater_user_agent_is_honest() -> None:
+    from scripts.digemid.actualizar_digemid import USER_AGENT
+
+    assert USER_AGENT.startswith("SupleMatch DIGEMID reader/")
+    assert "Mozilla" not in USER_AGENT

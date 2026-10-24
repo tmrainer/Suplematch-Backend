@@ -125,12 +125,15 @@ def write_csv_rows(path: Path, rows: list[dict[str, str]], columns: list[str]) -
         writer.writerows(rows)
 
 
+USER_AGENT = (
+    "SupleMatch DIGEMID reader/1.0 "
+    f"(proyecto universitario; contacto: {os.getenv('DIGEMID_VISUAL_CONTACT') or 'equipo SupleMatch'})"
+)
+
+
 def fetch_url(url: str, timeout: int) -> tuple[bytes, str]:
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 SupleMatchCatalogBot/1.0 "
-            "(university project; contact: local-admin)"
-        ),
+        "User-Agent": USER_AGENT,
         "Accept": "text/csv,application/vnd.ms-excel,application/json,text/html;q=0.8,*/*;q=0.5",
     }
     with httpx.Client(follow_redirects=True, timeout=timeout, headers=headers) as client:
@@ -296,6 +299,51 @@ def atomic_replace_csv(out_path: Path, rows: list[dict[str, str]], columns: list
     tmp_path.replace(out_path)
 
 
+def merge_rows(
+    existing: list[dict[str, str]],
+    incoming: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], dict[str, int]]:
+    """Fusiona el maestro existente con filas nuevas por RS normalizado.
+
+    - Filas nuevas (RS no presente) se agregan al final.
+    - Filas existentes se actualizan columna a columna con los valores no vacíos de la
+      fuente; un valor vacío en la fuente NO borra el dato previo.
+    - Nada se elimina: un RS ausente en la fuente se conserva tal cual.
+    """
+    merged: dict[str, dict[str, str]] = {}
+    for row in existing:
+        rs = normalize_rs(row.get("item"))
+        if not rs:
+            continue
+        normalized = {column: clean(row.get(column, "")) for column in OUTPUT_COLUMNS}
+        normalized["item"] = rs
+        merged.setdefault(rs, normalized)
+
+    stats = {"existing_rows": len(merged), "incoming_rows": 0, "added": 0, "updated": 0, "unchanged": 0}
+    for row in incoming:
+        rs = normalize_rs(row.get("item"))
+        if not rs:
+            continue
+        stats["incoming_rows"] += 1
+        candidate = {column: clean(row.get(column, "")) for column in OUTPUT_COLUMNS}
+        candidate["item"] = rs
+        current = merged.get(rs)
+        if current is None:
+            merged[rs] = candidate
+            stats["added"] += 1
+            continue
+        changed = False
+        for column in OUTPUT_COLUMNS:
+            value = candidate[column]
+            if value and value != current[column]:
+                current[column] = value
+                changed = True
+        stats["updated" if changed else "unchanged"] += 1
+
+    stats["total_rows"] = len(merged)
+    return list(merged.values()), stats
+
+
 def update_from_source(
     *,
     source_file: Path | None,
@@ -305,6 +353,7 @@ def update_from_source(
     components_path: Path,
     min_rows: int,
     timeout: int,
+    merge_existing: bool = True,
 ) -> dict[str, Any]:
     if source_file:
         columns, records = table_from_file(source_file)
@@ -327,9 +376,14 @@ def update_from_source(
     else:
         raise DigemidUpdateError("no_source_configured")
 
-    rows = normalize_table(columns, records)
-    if len(rows) < min_rows:
-        raise DigemidUpdateError(f"too_few_rows:{len(rows)}<min_rows:{min_rows}")
+    incoming_rows = normalize_table(columns, records)
+    if len(incoming_rows) < min_rows:
+        raise DigemidUpdateError(f"too_few_rows:{len(incoming_rows)}<min_rows:{min_rows}")
+
+    existing_rows: list[dict[str, str]] = []
+    if merge_existing and out_path.exists():
+        existing_rows = read_csv_rows(out_path)
+    rows, merge_stats = merge_rows(existing_rows, incoming_rows)
 
     now = utc_now()
     snapshot_dir.mkdir(parents=True, exist_ok=True)
@@ -347,6 +401,8 @@ def update_from_source(
     report.update(
         {
             "status": "updated",
+            "mode": "merge" if merge_existing else "replace",
+            "merge": merge_stats,
             "source": source,
             "updated_at": now.isoformat(),
             "out": str(out_path),
@@ -374,6 +430,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=int(os.getenv("DIGEMID_TIMEOUT_SECONDS", "45")))
     parser.add_argument("--fail-on-no-source", action="store_true")
     parser.add_argument("--fail-on-fetch-error", action="store_true")
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Reemplaza el maestro en vez de fusionarlo (solo para re-cargar un export oficial completo).",
+    )
     return parser
 
 
@@ -388,6 +449,7 @@ def main() -> int:
             components_path=args.components,
             min_rows=args.min_rows,
             timeout=args.timeout,
+            merge_existing=not args.replace,
         )
         write_report(args.report_out, report)
         print(json.dumps(report, ensure_ascii=False, indent=2))

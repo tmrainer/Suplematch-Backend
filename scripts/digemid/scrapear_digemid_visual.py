@@ -16,6 +16,16 @@ DEFAULT_URL = "https://www.digemid.minsa.gob.pe/rsProductosFarmaceuticos/"
 DEFAULT_OUT = ROOT_DIR / "data/reports/digemid/digemid_visual_candidates.csv"
 DEFAULT_REPORT = ROOT_DIR / "data/reports/digemid/digemid_visual_scrape_report.json"
 DEFAULT_EVIDENCE_DIR = ROOT_DIR / "data/reports/digemid/visual_html"
+# User-Agent honesto: identifica al proyecto y deja un contacto. No suplanta un navegador.
+USER_AGENT = (
+    "SupleMatch DIGEMID reader/1.0 "
+    f"(proyecto universitario; contacto: {os.getenv('DIGEMID_VISUAL_CONTACT') or 'equipo SupleMatch'})"
+)
+BLOCKED_MESSAGE = (
+    "El portal DIGEMID respondió bloqueado (Cloudflare u otra protección). "
+    "No se intenta evadir: se aborta la corrida. Alternativa: solicitar el padrón por acceso a la "
+    "información pública o cargar un export manual con DIGEMID_SOURCE_FILE (ver docs/digemid_weekly_update.md)."
+)
 
 OUTPUT_COLUMNS = [
     "item",
@@ -328,31 +338,26 @@ def run_visual_scrape(args: argparse.Namespace) -> dict[str, Any]:
                 "generated_at": utc_now(),
             }
 
-        context_kwargs = {
-            "user_agent": (
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "locale": "es-PE",
-        }
-        if args.storage_state and args.storage_state.exists():
-            context_kwargs["storage_state"] = str(args.storage_state)
-        context = browser.new_context(**context_kwargs)
+        # Sesión limpia en cada corrida: sin cookies reutilizadas ni estado de navegador persistido.
+        context = browser.new_context(user_agent=USER_AGENT, locale="es-PE")
         page = context.new_page()
         page.set_default_timeout(args.timeout_ms)
+        blocked_evidence: str | None = None
 
         for query_index, query in enumerate(queries[: args.max_queries], start=1):
             query_report = {"query": query, "status": "started", "rows": 0}
             try:
                 page.goto(args.url, wait_until="domcontentloaded", timeout=args.navigation_timeout_ms)
-                page.wait_for_timeout(args.challenge_wait_ms)
                 html = page.content()
                 if detect_blocked_html(html):
                     evidence = args.evidence_dir / f"blocked_{query_index:03d}.html"
                     evidence.write_text(html, encoding="utf-8")
                     query_report.update({"status": "blocked", "evidence": str(evidence)})
                     query_reports.append(query_report)
-                    continue
+                    blocked_evidence = str(evidence)
+                    print(f"digemid_visual=blocked evidence={evidence}", file=sys.stderr, flush=True)
+                    print(BLOCKED_MESSAGE, file=sys.stderr, flush=True)
+                    break
 
                 input_element = choose_input(page)
                 if input_element is None:
@@ -376,6 +381,7 @@ def run_visual_scrape(args: argparse.Namespace) -> dict[str, Any]:
                     evidence.write_text(html, encoding="utf-8")
                     if detect_blocked_html(html):
                         query_report.update({"status": "blocked_after_submit", "evidence": str(evidence)})
+                        blocked_evidence = str(evidence)
                         break
 
                     raw_records = page.evaluate(extraction_script())
@@ -399,18 +405,29 @@ def run_visual_scrape(args: argparse.Namespace) -> dict[str, Any]:
             except Exception as exc:
                 query_report.update({"status": "failed", "error": f"{type(exc).__name__}: {exc}"})
             query_reports.append(query_report)
+            if blocked_evidence:
+                print(f"digemid_visual=blocked evidence={blocked_evidence}", file=sys.stderr, flush=True)
+                print(BLOCKED_MESSAGE, file=sys.stderr, flush=True)
+                break
 
-        if args.save_storage_state:
-            args.save_storage_state.parent.mkdir(parents=True, exist_ok=True)
-            context.storage_state(path=str(args.save_storage_state))
         context.close()
         browser.close()
 
     all_rows = dedupe_rows(all_rows)
     write_csv(args.out, all_rows)
     complete_rows = sum(1 for row in all_rows if row.get("extraction_status") == "complete")
+    if blocked_evidence:
+        status = "blocked"
+    elif all_rows:
+        status = "passed"
+    else:
+        status = "no_rows"
     report = {
-        "status": "passed" if all_rows else "no_rows",
+        "status": status,
+        "reason": "portal_blocked" if blocked_evidence else None,
+        "message": BLOCKED_MESSAGE if blocked_evidence else None,
+        "blocked_evidence": blocked_evidence,
+        "user_agent": USER_AGENT,
         "generated_at": utc_now(),
         "url": args.url,
         "queries": len(queries[: args.max_queries]),
@@ -436,11 +453,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-pages-per-query", type=int, default=int(os.getenv("DIGEMID_VISUAL_MAX_PAGES_PER_QUERY", "3")))
     parser.add_argument("--timeout-ms", type=int, default=int(os.getenv("DIGEMID_VISUAL_TIMEOUT_MS", "10000")))
     parser.add_argument("--navigation-timeout-ms", type=int, default=int(os.getenv("DIGEMID_VISUAL_NAVIGATION_TIMEOUT_MS", "30000")))
-    parser.add_argument("--challenge-wait-ms", type=int, default=int(os.getenv("DIGEMID_VISUAL_CHALLENGE_WAIT_MS", "8000")))
     parser.add_argument("--after-submit-wait-ms", type=int, default=int(os.getenv("DIGEMID_VISUAL_AFTER_SUBMIT_WAIT_MS", "3000")))
     parser.add_argument("--headed", action="store_true")
-    parser.add_argument("--storage-state", type=Path, default=os.getenv("DIGEMID_VISUAL_STORAGE_STATE"))
-    parser.add_argument("--save-storage-state", type=Path, default=os.getenv("DIGEMID_VISUAL_SAVE_STORAGE_STATE"))
     return parser
 
 
@@ -449,6 +463,8 @@ def main() -> int:
     report = run_visual_scrape(args)
     write_json(args.report_out, report)
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    if report["status"] == "blocked":
+        return 3
     return 0 if report["status"] in {"passed", "no_rows", "skipped"} else 2
 
 

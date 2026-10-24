@@ -7,14 +7,18 @@ import hashlib
 import html
 import io
 import json
+import os
+import random
 import re
 import shutil
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote_plus, urljoin, urlparse
+from urllib import robotparser
+from urllib.parse import quote_plus, unquote, urljoin, urlparse
 from xml.etree import ElementTree
 
 import httpx
@@ -28,6 +32,13 @@ DEFAULT_COMPONENTS = ROOT_DIR / "data/training/supplement_model/product_componen
 DEFAULT_COMPONENT_MASTER = ROOT_DIR / "data/training/supplement_model/Component_Master_Clean.csv"
 DEFAULT_IMAGE_DIR = ROOT_DIR / "data/raw/pharmacies/product_images"
 REQUEST_TIMEOUT = httpx.Timeout(12.0, connect=5.0, read=8.0, write=5.0, pool=5.0)
+USER_AGENT = "SupleMatch research price crawler/1.0 (+weekly catalog validation)"
+MAX_RETRIES = 3
+RETRY_BASE_SECONDS = 1.0
+RETRY_MAX_SLEEP_SECONDS = 60.0
+RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+ALGOLIA_APP_ID_ENV = "INKAFARMA_ALGOLIA_APP_ID"
+ALGOLIA_API_KEY_ENV = "INKAFARMA_ALGOLIA_API_KEY"
 DETAIL_TEXT_LIMIT = 6000
 OCR_IMAGE_BYTE_LIMIT = 4_000_000
 NAME_MATCH_THRESHOLD = 0.94
@@ -319,10 +330,24 @@ MANUAL_COMPONENT_ALIASES = {
     ],
 }
 
+# Codigos de registro sanitario DIGEMID. Formatos reales observados:
+#   DE-03502, DE4606, N-12345, EE-00123            (letras + digitos)
+#   I4100524E/NAABLB, P2802921E/NKPSFR              (letra + digitos + letra + "/" + sufijo)
+# La version anterior aceptaba [A-Z0-9]{3,12} con IGNORECASE, de modo que palabras comunes como
+# "para" o "Nutricion" se tomaban como RS. Ahora el codigo debe contener al menos 3 digitos y se acepta:
+#   a) tras un marcador explicito ("R.S.", "RS:", "Registro Sanitario", "Reg. San."), o
+#   b) en mayusculas, sin marcador, siempre que no le siga una unidad de medida
+#      (evita "VITAMINA C DE 500 MG" -> "DE500").
+RS_PREFIXES = r"(?:DE|EE|PNE|PN|DM|DB|N|I|P|E|Q|A)"
+_RS_BODY = r"[-\s]?\d{3,8}[A-Z]{0,3}(?:/[A-Z0-9]{2,8})?"
+RS_CODE_RE = re.compile(RS_PREFIXES + _RS_BODY)
 REGISTRO_RE = re.compile(
-    r"(?:R\.?\s*S\.?\s*[:#-]?\s*)?\b(?:DE|EE|PNE|PN|DM|DB|N|I|P|E|Q|A)[-\s]?"
-    r"[A-Z0-9]{3,12}(?:[/-]?[A-Z0-9]{2,12})?\b",
-    re.IGNORECASE,
+    r"(?:"
+    r"(?i:(?:N[°ºo]?\.?\s*)?(?:R\.?\s*S\.?|REG(?:ISTRO)?\.?\s+SAN(?:ITARIO)?\.?)\s*(?:N[°ºo]?\.?)?\s*[:#-]?\s*)"
+    + RS_PREFIXES + _RS_BODY + r"\b"
+    r"|"
+    r"\b" + RS_PREFIXES + r"-?\d{3,8}[A-Z]{0,3}(?:/[A-Z0-9]{2,8})?\b(?!\s*(?:MG|MCG|G|GR|ML|L|KG|UI|IU|%)\b)"
+    r")"
 )
 
 
@@ -398,6 +423,36 @@ def contains_alias_phrase(haystack: str, alias_key: str) -> bool:
     return re.search(pattern, haystack) is not None
 
 
+def score_name_match(query: str, query_tokens: set[str], digemid_name: str) -> float:
+    """Puntua la similitud entre un nombre comercial normalizado y un nombre de producto DIGEMID.
+
+    Reglas (todas exigen coincidencia por tokens completos, nunca substring):
+    - Nombre DIGEMID de un solo token ("MAGNESIO", "PRO", "BIOTINA"): solo coincide si el nombre
+      comercial, ya normalizado, es exactamente ese token. Antes, `"PRO" in query` asignaba el RS
+      de "PRO" a Pantene Pro-V o Babylac Pro.
+    - Nombre DIGEMID multi-token contenido como frase completa en el nombre comercial: 1.0.
+    - Nombre comercial contenido como frase completa en el nombre DIGEMID (>= 2 tokens): 1.0.
+    - Resto: al menos 2 tokens compartidos y ratio de SequenceMatcher.
+    """
+    digemid_tokens = name_tokens(digemid_name)
+    if not digemid_tokens or not query_tokens:
+        return 0.0
+
+    if len(digemid_tokens) < 2:
+        return 1.0 if query_tokens == digemid_tokens else 0.0
+
+    shared = query_tokens.intersection(digemid_tokens)
+    if len(shared) < 2:
+        return 0.0
+
+    if contains_alias_phrase(query, digemid_name):
+        return 1.0
+    if len(query_tokens) >= 2 and contains_alias_phrase(digemid_name, query):
+        return 1.0
+
+    return difflib.SequenceMatcher(None, query, digemid_name).ratio()
+
+
 def parse_price(value: Any) -> str:
     if value is None:
         return ""
@@ -425,13 +480,12 @@ def price_from_minor_units(value: Any, minor_unit: int = 2) -> str:
 
 
 def extract_registro(text: str) -> str:
-    matches = [
-        normalize_rs(re.sub(r"^R\.?\s*S\.?\s*[:#-]?\s*", "", m.group(0), flags=re.IGNORECASE))
-        for m in REGISTRO_RE.finditer(text or "")
-    ]
-    if not matches:
-        return ""
-    return matches[0]
+    """Devuelve el primer codigo RS encontrado en el texto, normalizado (sin guiones ni espacios)."""
+    for match in REGISTRO_RE.finditer(text or ""):
+        code = RS_CODE_RE.search(match.group(0).upper())
+        if code:
+            return normalize_rs(code.group(0))
+    return ""
 
 
 def append_text(*values: Any, limit: int = DETAIL_TEXT_LIMIT) -> str:
@@ -530,14 +584,15 @@ def image_extension(image_url: str, content_type: str = "") -> str:
     return ".jpg"
 
 
-def image_ocr_text(client: httpx.Client, image_url: str) -> str:
+def image_ocr_text(client: httpx.Client, image_url: str, http: "PoliteHttp | None" = None) -> str:
     if shutil.which("tesseract") is None:
         return ""
     try:
         from PIL import Image, ImageOps
         import pytesseract
 
-        response = client.get(image_url, timeout=REQUEST_TIMEOUT)
+        http = http or PoliteHttp(client, delay=0.0)
+        response = http.request(image_url)
         if response.status_code != 200 or not response.content or len(response.content) > OCR_IMAGE_BYTE_LIMIT:
             return ""
         image = Image.open(io.BytesIO(response.content))
@@ -551,9 +606,12 @@ def image_ocr_text(client: httpx.Client, image_url: str) -> str:
         return ""
 
 
-def first_registro_from_images(client: httpx.Client, image_urls: list[str]) -> str:
+def first_registro_from_images(client: httpx.Client, image_urls: list[str], http: "PoliteHttp | None" = None) -> str:
     for image_url in image_urls:
-        text = image_ocr_text(client, image_url)
+        try:
+            text = image_ocr_text(client, image_url, http=http)
+        except RobotsDisallowed:
+            continue
         registro = extract_registro(text)
         if registro:
             return registro
@@ -739,13 +797,7 @@ class RegistryMatcher:
             rs_key, digemid_name = self.names[idx]
             if not digemid_name:
                 continue
-            if digemid_name in query or query in digemid_name:
-                score = 1.0
-            else:
-                shared = tokens.intersection(name_tokens(digemid_name))
-                if len(shared) < 2:
-                    continue
-                score = difflib.SequenceMatcher(None, query, digemid_name).ratio()
+            score = score_name_match(query, tokens, digemid_name)
             if score > best_score:
                 best_rs = rs_key
                 best_score = score
@@ -753,28 +805,178 @@ class RegistryMatcher:
         return self.digemid_by_rs.get(best_rs, {}).get("item", "") if best_score >= NAME_MATCH_THRESHOLD else ""
 
 
+class RobotsDisallowed(Exception):
+    """robots.txt del host prohíbe la URL para nuestro User-Agent."""
+
+    def __init__(self, url: str):
+        super().__init__(f"robots_disallow url={url}")
+        self.url = url
+
+
+def retry_after_seconds(response: httpx.Response | None) -> float | None:
+    """Interpreta `Retry-After` (segundos o fecha HTTP). None si no viene o no se entiende."""
+    if response is None:
+        return None
+    raw = clean_text(response.headers.get("retry-after"))
+    if not raw:
+        return None
+    if raw.isdigit():
+        return float(raw)
+    try:
+        when = parsedate_to_datetime(raw)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+
+
+class PoliteHttp:
+    """Capa HTTP compartida por todos los scrapers.
+
+    - Respeta robots.txt por host (cacheado) para nuestro User-Agent.
+    - Reintenta con backoff exponencial + jitter ante 429, 5xx y errores de red.
+    - Respeta `Retry-After` cuando el servidor lo envía.
+    - Pausa `delay` segundos tras cada request real.
+    """
+
+    def __init__(
+        self,
+        client: httpx.Client,
+        *,
+        delay: float,
+        user_agent: str = USER_AGENT,
+        ignore_robots: bool = False,
+        max_retries: int = MAX_RETRIES,
+        base_backoff: float = RETRY_BASE_SECONDS,
+    ):
+        self.client = client
+        self.delay = max(0.0, float(delay))
+        self.user_agent = user_agent
+        self.ignore_robots = ignore_robots
+        self.max_retries = max(1, int(max_retries))
+        self.base_backoff = max(0.0, float(base_backoff))
+        self._robots: dict[str, robotparser.RobotFileParser | None] = {}
+        self.robots_skipped: list[str] = []
+        self.retries = 0
+
+    # robots.txt -----------------------------------------------------------
+    def _robots_for(self, url: str) -> robotparser.RobotFileParser | None:
+        parsed = urlparse(url)
+        host = f"{parsed.scheme}://{parsed.netloc}"
+        if host in self._robots:
+            return self._robots[host]
+        parser = robotparser.RobotFileParser()
+        parser.set_url(f"{host}/robots.txt")
+        try:
+            response = self.client.get(f"{host}/robots.txt", timeout=REQUEST_TIMEOUT)
+            status = response.status_code
+            if status == 200:
+                parser.parse(response.text.splitlines())
+            elif status in (401, 403):
+                parser.disallow_all = True
+            elif 400 <= status < 500:
+                parser.allow_all = True
+            else:
+                # 5xx: igual que urllib, no asumimos permiso hasta poder leer robots.txt.
+                parser.disallow_all = True
+                print(f"warning robots_txt_unavailable host={host} status={status}", flush=True)
+        except Exception as exc:
+            # Sin robots.txt alcanzable por red: no bloqueamos la corrida, pero lo dejamos registrado.
+            parser.allow_all = True
+            print(f"warning robots_txt_fetch_failed host={host} error={exc}", flush=True)
+        parser.modified()
+        self._robots[host] = parser
+        return parser
+
+    def allowed(self, url: str) -> bool:
+        if self.ignore_robots:
+            return True
+        parser = self._robots_for(url)
+        if parser is None:
+            return True
+        return parser.can_fetch(self.user_agent, url)
+
+    # requests -------------------------------------------------------------
+    def backoff_seconds(self, attempt: int, response: httpx.Response | None) -> float:
+        retry_after = retry_after_seconds(response)
+        if retry_after is not None:
+            return min(retry_after, RETRY_MAX_SLEEP_SECONDS)
+        wait = self.base_backoff * (2 ** attempt) + random.uniform(0, self.base_backoff)
+        return min(wait, RETRY_MAX_SLEEP_SECONDS)
+
+    def request(self, url: str, method: str = "GET", **kwargs: Any) -> httpx.Response:
+        if not self.allowed(url):
+            self.robots_skipped.append(url)
+            print(f"warning robots_disallow url={url}", flush=True)
+            raise RobotsDisallowed(url)
+
+        kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+        response: httpx.Response | None = None
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries):
+            response = None
+            try:
+                response = self.client.request(method, url, **kwargs)
+            except httpx.HTTPError as exc:
+                last_error = exc
+            finally:
+                if self.delay:
+                    time.sleep(self.delay)
+            if response is not None and response.status_code not in RETRY_STATUS_CODES:
+                return response
+            if attempt + 1 >= self.max_retries:
+                break
+            self.retries += 1
+            wait = self.backoff_seconds(attempt, response)
+            reason = f"status={response.status_code}" if response is not None else f"error={last_error}"
+            print(f"warning http_retry attempt={attempt + 1} wait={wait:.1f}s {reason} url={url}", flush=True)
+            time.sleep(wait)
+
+        if response is not None:
+            return response
+        assert last_error is not None
+        raise last_error
+
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request(url, "GET", **kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request(url, "POST", **kwargs)
+
+
 class BaseScraper:
-    def __init__(self, client: httpx.Client, limit: int, delay: float, terms: list[str] | None = None):
+    def __init__(
+        self,
+        client: httpx.Client,
+        limit: int,
+        delay: float,
+        terms: list[str] | None = None,
+        http: PoliteHttp | None = None,
+    ):
         self.client = client
         self.limit = limit
         self.delay = delay
         self.terms = terms or DEFAULT_SUPPLEMENT_TERMS
         self.fetch_detail_pages = False
         self.ocr_product_images = False
+        self.http = http or PoliteHttp(client, delay=delay)
 
     def fetch(self) -> list[ProductRow]:
         raise NotImplementedError
 
+    def _request(self, url: str, **kwargs: Any) -> httpx.Response:
+        """Único punto de salida HTTP: robots.txt, reintentos, Retry-After y pausa."""
+        return self.http.request(url, **kwargs)
+
     def get_json(self, url: str, **kwargs: Any) -> Any:
-        response = self.client.get(url, timeout=REQUEST_TIMEOUT, **kwargs)
+        response = self._request(url, **kwargs)
         response.raise_for_status()
-        time.sleep(self.delay)
         return response.json()
 
-    def get_text(self, url: str) -> str:
-        response = self.client.get(url, timeout=REQUEST_TIMEOUT)
+    def get_text(self, url: str, **kwargs: Any) -> str:
+        response = self._request(url, **kwargs)
         response.raise_for_status()
-        time.sleep(self.delay)
         return response.text
 
     def enrich_row_from_text_and_images(
@@ -795,7 +997,7 @@ class BaseScraper:
                     row.registro_sanitario = registro
                     row.registro_sanitario_source = detail_source
         if self.ocr_product_images and not row.registro_sanitario and image_urls:
-            registro = first_registro_from_images(self.client, image_urls)
+            registro = first_registro_from_images(self.client, image_urls, http=self.http)
             if registro:
                 row.registro_sanitario = registro
                 row.registro_sanitario_source = "image_ocr"
@@ -820,12 +1022,18 @@ def download_product_images(
     rows: list[ProductRow],
     image_dir: Path,
     client: httpx.Client,
+    http: PoliteHttp | None = None,
 ) -> dict[str, int]:
+    """Descarga opt-in (`--download-product-images`) de la imagen principal para revisión interna.
+
+    Las imágenes no se redistribuyen ni se sirven desde la API; ver docs/supplement_scraping.md.
+    """
     if not image_dir.is_absolute():
         image_dir = ROOT_DIR / image_dir
     image_dir.mkdir(parents=True, exist_ok=True)
-    stats = {"attempted": 0, "downloaded": 0, "failed": 0}
+    stats = {"attempted": 0, "downloaded": 0, "failed": 0, "robots_disallow": 0}
     seen_urls: dict[str, str] = {}
+    http = http or PoliteHttp(client, delay=0.0)
 
     for row in rows:
         if not row.image_url:
@@ -837,9 +1045,8 @@ def download_product_images(
             stats["downloaded"] += 1
             continue
         try:
-            response = client.get(
+            response = http.request(
                 row.image_url,
-                timeout=REQUEST_TIMEOUT,
                 headers={
                     "Accept": "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8",
                     "Referer": row.url or row.image_url,
@@ -864,6 +1071,8 @@ def download_product_images(
             row.image_local_path = local_path
             row.image_downloaded_at = now_iso()
             stats["downloaded"] += 1
+        except RobotsDisallowed:
+            stats["robots_disallow"] += 1
         except Exception:
             stats["failed"] += 1
 
@@ -877,19 +1086,49 @@ def slugify_filename(value: str) -> str:
 
 
 class InretailAlgoliaScraper(BaseScraper):
-    app_id = "15W622LAQ4"
-    api_key = "3ba15abece13b00b123c5501680690f7"
+    """Inkafarma/Mifarma (InRetail) vía el índice Algolia que usa su frontend.
+
+    Las credenciales NO van en el código: se leen de `INKAFARMA_ALGOLIA_APP_ID` y
+    `INKAFARMA_ALGOLIA_API_KEY` (ver .env.example). Son credenciales públicas del
+    frontend de un tercero; antes de usarlas deben revisarse sus términos de uso.
+    Sin ellas, el scraper se salta con un log claro y no tumba la corrida.
+    """
+
     index_name = "products"
     product_api = "https://5doa19p9r7.execute-api.us-east-1.amazonaws.com/MMPROD/product/"
 
-    def __init__(self, client: httpx.Client, limit: int, delay: float, pharmacy: str, base_url: str, terms: list[str] | None = None):
-        super().__init__(client, limit, delay, terms)
+    def __init__(
+        self,
+        client: httpx.Client,
+        limit: int,
+        delay: float,
+        pharmacy: str,
+        base_url: str,
+        terms: list[str] | None = None,
+        http: PoliteHttp | None = None,
+        app_id: str | None = None,
+        api_key: str | None = None,
+    ):
+        super().__init__(client, limit, delay, terms, http=http)
         self.pharmacy = pharmacy
         self.base_url = base_url.rstrip("/")
+        self.app_id = clean_text(app_id if app_id is not None else os.getenv(ALGOLIA_APP_ID_ENV, ""))
+        self.api_key = clean_text(api_key if api_key is not None else os.getenv(ALGOLIA_API_KEY_ENV, ""))
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.app_id and self.api_key)
 
     def fetch(self) -> list[ProductRow]:
         rows: list[ProductRow] = []
         seen = set()
+        if not self.configured:
+            print(
+                f"warning scraper_skipped={self.pharmacy} reason=missing_algolia_credentials "
+                f"env={ALGOLIA_APP_ID_ENV},{ALGOLIA_API_KEY_ENV}",
+                flush=True,
+            )
+            return rows
         for term in self.terms:
             page = 0
             while len(rows) < self.limit:
@@ -899,15 +1138,15 @@ class InretailAlgoliaScraper(BaseScraper):
                     "page": page,
                     "attributesToRetrieve": ["*"],
                 }
-                response = self.client.post(
+                response = self._request(
                     f"https://{self.app_id}-dsn.algolia.net/1/indexes/{self.index_name}/query",
+                    method="POST",
                     headers={
                         "X-Algolia-API-Key": self.api_key,
                         "X-Algolia-Application-Id": self.app_id,
                         "Content-Type": "application/json",
                     },
                     json=payload,
-                    timeout=REQUEST_TIMEOUT,
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -930,7 +1169,6 @@ class InretailAlgoliaScraper(BaseScraper):
                 page += 1
                 if page >= int(data.get("nbPages") or 0):
                     break
-                time.sleep(self.delay)
             if len(rows) >= self.limit:
                 break
         return rows
@@ -997,7 +1235,7 @@ class InretailAlgoliaScraper(BaseScraper):
         if not sku:
             return {}
         try:
-            response = self.client.get(self.product_api + quote_plus(sku), timeout=REQUEST_TIMEOUT)
+            response = self._request(self.product_api + quote_plus(sku))
             if response.status_code != 200 or not response.content:
                 return {}
             data = response.json()
@@ -1007,8 +1245,17 @@ class InretailAlgoliaScraper(BaseScraper):
 
 
 class VtexScraper(BaseScraper):
-    def __init__(self, client: httpx.Client, limit: int, delay: float, pharmacy: str, base_url: str, terms: list[str] | None = None):
-        super().__init__(client, limit, delay, terms)
+    def __init__(
+        self,
+        client: httpx.Client,
+        limit: int,
+        delay: float,
+        pharmacy: str,
+        base_url: str,
+        terms: list[str] | None = None,
+        http: PoliteHttp | None = None,
+    ):
+        super().__init__(client, limit, delay, terms, http=http)
         self.pharmacy = pharmacy
         self.base_url = base_url.rstrip("/")
 
@@ -1098,8 +1345,17 @@ class VtexScraper(BaseScraper):
 
 
 class WooStoreScraper(BaseScraper):
-    def __init__(self, client: httpx.Client, limit: int, delay: float, pharmacy: str, base_url: str, terms: list[str] | None = None):
-        super().__init__(client, limit, delay, terms)
+    def __init__(
+        self,
+        client: httpx.Client,
+        limit: int,
+        delay: float,
+        pharmacy: str,
+        base_url: str,
+        terms: list[str] | None = None,
+        http: PoliteHttp | None = None,
+    ):
+        super().__init__(client, limit, delay, terms, http=http)
         self.pharmacy = pharmacy
         self.base_url = base_url.rstrip("/")
 
@@ -1173,8 +1429,17 @@ class WooStoreScraper(BaseScraper):
 
 
 class HtmlSearchScraper(BaseScraper):
-    def __init__(self, client: httpx.Client, limit: int, delay: float, pharmacy: str, base_url: str, terms: list[str] | None = None):
-        super().__init__(client, limit, delay, terms)
+    def __init__(
+        self,
+        client: httpx.Client,
+        limit: int,
+        delay: float,
+        pharmacy: str,
+        base_url: str,
+        terms: list[str] | None = None,
+        http: PoliteHttp | None = None,
+    ):
+        super().__init__(client, limit, delay, terms, http=http)
         self.pharmacy = pharmacy
         self.base_url = base_url.rstrip("/")
 
@@ -1191,7 +1456,7 @@ class HtmlSearchScraper(BaseScraper):
             ]
             for search_url in search_urls:
                 try:
-                    html_text = self.client.get(search_url, timeout=REQUEST_TIMEOUT).text
+                    html_text = self.get_text(search_url)
                 except Exception:
                     continue
                 for link in extract_product_links(html_text, self.base_url):
@@ -1211,7 +1476,10 @@ class HtmlSearchScraper(BaseScraper):
 
     def _row_from_page(self, url: str) -> ProductRow | None:
         try:
-            text = self.client.get(url, timeout=REQUEST_TIMEOUT).text
+            text = self.get_text(url)
+        except RobotsDisallowed:
+            # Ya quedó registrado en http.robots_skipped; no se crea fila para esa URL.
+            return None
         except Exception:
             return None
         title = first_match(text, r"<h1[^>]*>(.*?)</h1>") or first_match(text, r"<title[^>]*>(.*?)</title>")
@@ -1255,7 +1523,7 @@ class BoticasPeruScraper(BaseScraper):
                     f"Search-UpdateGrid?q={quote_plus(term)}&start={start}&sz=24"
                 )
                 try:
-                    text = self.client.get(url, timeout=REQUEST_TIMEOUT).text
+                    text = self.get_text(url)
                 except Exception:
                     break
 
@@ -1279,7 +1547,6 @@ class BoticasPeruScraper(BaseScraper):
                 if len(page_rows) < 24:
                     break
                 start += 24
-                time.sleep(self.delay)
 
             if len(rows) >= self.limit:
                 break
@@ -1334,7 +1601,10 @@ class BoticasPeruScraper(BaseScraper):
 
 def name_from_url(url: str) -> str:
     slug = url.rstrip("/").split("/")[-2] if "/" in url.rstrip("/") else url
+    # Decodificar percent-encoding antes de construir el nombre (%2B -> +, %26 -> &, %2C -> ,).
+    slug = unquote(slug)
     slug = re.sub(r"[_-]+", " ", slug)
+    slug = re.sub(r"\s+,", ",", slug)
     slug = re.sub(r"\s+", " ", slug)
     return slug.strip().title()
 
@@ -1359,14 +1629,22 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_scrapers(client: httpx.Client, selected: set[str], limit: int, delay: float, terms: list[str] | None = None) -> list[BaseScraper]:
+def build_scrapers(
+    client: httpx.Client,
+    selected: set[str],
+    limit: int,
+    delay: float,
+    terms: list[str] | None = None,
+    http: PoliteHttp | None = None,
+) -> list[BaseScraper]:
+    http = http or PoliteHttp(client, delay=delay)
     definitions: dict[str, BaseScraper] = {
-        "inkafarma": InretailAlgoliaScraper(client, limit, delay, "Inkafarma", "https://inkafarma.pe", terms),
-        "mifarma": InretailAlgoliaScraper(client, limit, delay, "Mifarma", "https://www.mifarma.com.pe", terms),
-        "boticasperu": BoticasPeruScraper(client, limit, delay, terms),
-        "farmaciauniversal": VtexScraper(client, limit, delay, "Farmacia Universal", "https://www.farmaciauniversal.com", terms),
-        "hogarysalud": WooStoreScraper(client, limit, delay, "Hogar y Salud", "https://www.hogarysalud.com.pe", terms),
-        "boticasysalud": HtmlSearchScraper(client, limit, delay, "Boticas y Salud", "https://www.boticasysalud.com", terms),
+        "inkafarma": InretailAlgoliaScraper(client, limit, delay, "Inkafarma", "https://inkafarma.pe", terms, http=http),
+        "mifarma": InretailAlgoliaScraper(client, limit, delay, "Mifarma", "https://www.mifarma.com.pe", terms, http=http),
+        "boticasperu": BoticasPeruScraper(client, limit, delay, terms, http=http),
+        "farmaciauniversal": VtexScraper(client, limit, delay, "Farmacia Universal", "https://www.farmaciauniversal.com", terms, http=http),
+        "hogarysalud": WooStoreScraper(client, limit, delay, "Hogar y Salud", "https://www.hogarysalud.com.pe", terms, http=http),
+        "boticasysalud": HtmlSearchScraper(client, limit, delay, "Boticas y Salud", "https://www.boticasysalud.com", terms, http=http),
     }
     if not selected:
         return list(definitions.values())
@@ -1444,7 +1722,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--download-product-images",
         action="store_true",
-        help="Descarga la imagen principal detectada para cada producto aceptado/rechazado.",
+        default=False,
+        help=(
+            "Opt-in explícito: descarga la imagen principal detectada para revisión interna. "
+            "Por defecto desactivado; las imágenes no se redistribuyen."
+        ),
+    )
+    parser.add_argument(
+        "--ignore-robots",
+        action="store_true",
+        default=False,
+        help="SOLO para pruebas locales: no consulta robots.txt. Por defecto se respeta.",
     )
     parser.add_argument(
         "--image-dir",
@@ -1461,13 +1749,16 @@ def main() -> int:
     terms = [clean_text(term) for term in (args.term or []) if clean_text(term)]
     matcher = RegistryMatcher(args.digemid, args.components, args.component_master)
     headers = {
-        "User-Agent": "SupleMatch research price crawler/1.0 (+weekly catalog validation)",
+        "User-Agent": USER_AGENT,
         "Accept": "application/json,text/html;q=0.9,*/*;q=0.8",
     }
+    if args.ignore_robots:
+        print("warning ignore_robots=1 (solo para pruebas; robots.txt no se consulta)", flush=True)
 
     all_rows: list[ProductRow] = []
     with httpx.Client(headers=headers, follow_redirects=True) as client:
-        scrapers = build_scrapers(client, selected, args.limit_per_pharmacy, args.delay, terms or None)
+        http = PoliteHttp(client, delay=args.delay, ignore_robots=bool(args.ignore_robots))
+        scrapers = build_scrapers(client, selected, args.limit_per_pharmacy, args.delay, terms or None, http=http)
         for scraper in scrapers:
             scraper.fetch_detail_pages = bool(args.fetch_detail_pages)
             scraper.ocr_product_images = bool(args.ocr_product_images)
@@ -1489,9 +1780,9 @@ def main() -> int:
             else:
                 rejected.append(row)
 
-        image_stats = {"attempted": 0, "downloaded": 0, "failed": 0}
+        image_stats = {"attempted": 0, "downloaded": 0, "failed": 0, "robots_disallow": 0}
         if args.download_product_images:
-            image_stats = download_product_images([*accepted, *rejected], args.image_dir, client)
+            image_stats = download_product_images([*accepted, *rejected], args.image_dir, client, http=http)
 
     write_rows(args.out, accepted)
     write_rows(args.rejects_out, rejected)
@@ -1507,6 +1798,11 @@ def main() -> int:
         "images": {
             "with_url": sum(1 for row in [*accepted, *rejected] if row.image_url),
             **image_stats,
+        },
+        "http": {
+            "retries": http.retries,
+            "robots_disallow_skipped": len(http.robots_skipped),
+            "ignore_robots": bool(args.ignore_robots),
         },
         "out": str(args.out),
         "rejects_out": str(args.rejects_out),
