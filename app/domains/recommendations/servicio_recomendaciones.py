@@ -963,9 +963,10 @@ def _normalize_relation(item: Any) -> dict[str, str] | None:
     if component_a is None or component_b is None or relation_type is None:
         return None
 
+    # Nombres visibles para el usuario (el frontend los muestra y los cruza con display_name de las recomendaciones).
     relation = {
-        "component_a": component_a,
-        "component_b": component_b,
+        "component_a": _translate_component_name(component_a),
+        "component_b": _translate_component_name(component_b),
         "type": relation_type,
     }
     if component_a_id is not None:
@@ -1071,12 +1072,13 @@ def _normalize_packs(values: Any) -> list[dict[str, Any]]:
             if component.get("component_id") is not None
         ]
         component_names = [component["name"] for component in components]
+        display_names = [component.get("display_name") or _translate_component_name(component["name"]) for component in components]
         score_final = _clean_float(_first_present(item.get("score_final"), item.get("score")))
 
         packs.append({
             "pack_id": _clean_text(item.get("pack_id")) or f"pack_{index}",
             "rank": _clean_int(item.get("rank"), index),
-            "title": " + ".join(component_names),
+            "title": " + ".join(display_names),
             "subtitle": f"{len(component_names)} suplemento(s) priorizados para tu perfil",
             "components": components,
             "component_ids": component_ids,

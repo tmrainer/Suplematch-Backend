@@ -33,16 +33,40 @@ TARGET_TO_CONDITION = {
     "target_hba1c_high": "RIESGO_METABOLICO_GLUCOSA",
     "target_b12_low": "DEFICIT_B12",
 }
+# Lo que ve el usuario: nombre en lenguaje comun (sin siglas, unidades ni cortes), el examen tal como se pide en un
+# laboratorio peruano y el corte tecnico aparte (test_labels_are_plain_language).
 TARGET_LABELS = {
-    "target_vitamin_d_low": "Vitamina D baja (<20 ng/mL)",
-    "target_ferritin_low": "Ferritina baja (<30 ng/mL)",
-    "target_anemia": "Anemia (Hb bajo corte OMS por sexo)",
-    "target_glucose_high": "Glucosa en ayunas elevada (>=100 mg/dL)",
-    "target_cholesterol_high": "Colesterol total elevado (>=200 mg/dL)",
-    "target_hdl_low": "HDL bajo (<40 mg/dL)",
-    "target_alt_high": "ALT elevada (>40 U/L)",
-    "target_hba1c_high": "HbA1c elevada (>=5.7 %)",
-    "target_b12_low": "Vitamina B12 baja (<300 pg/mL)",
+    "target_vitamin_d_low": "Vitamina D baja",
+    "target_ferritin_low": "Reservas de hierro bajas",
+    "target_anemia": "Anemia",
+    "target_glucose_high": "Azúcar en sangre alta en ayunas",
+    "target_cholesterol_high": "Colesterol alto",
+    "target_hdl_low": "Colesterol bueno bajo",
+    "target_alt_high": "Enzima del hígado alta",
+    "target_hba1c_high": "Azúcar en sangre alta en los últimos meses",
+    "target_b12_low": "Vitamina B12 baja",
+}
+TARGET_EXAMS = {
+    "target_vitamin_d_low": "Vitamina D (25-hidroxivitamina D)",
+    "target_ferritin_low": "Ferritina",
+    "target_anemia": "Hemograma completo",
+    "target_glucose_high": "Glucosa en ayunas",
+    "target_cholesterol_high": "Perfil lipídico",
+    "target_hdl_low": "Perfil lipídico (colesterol HDL)",
+    "target_alt_high": "Perfil hepático (TGP)",
+    "target_hba1c_high": "Hemoglobina glicosilada (HbA1c)",
+    "target_b12_low": "Vitamina B12 en sangre",
+}
+TARGET_CUTOFFS = {
+    "target_vitamin_d_low": "< 20 ng/mL",
+    "target_ferritin_low": "< 30 ng/mL",
+    "target_anemia": "hemoglobina < 13 g/dL en hombres, < 12 g/dL en mujeres (OMS 2024)",
+    "target_glucose_high": ">= 100 mg/dL",
+    "target_cholesterol_high": ">= 200 mg/dL",
+    "target_hdl_low": "HDL < 40 mg/dL",
+    "target_alt_high": "TGP/ALT > 40 U/L",
+    "target_hba1c_high": "HbA1c >= 5.7 %",
+    "target_b12_low": "< 300 pg/mL",
 }
 
 # Targets excluidos de produccion y por que. Validacion peruana con ENDES 2022/2024 (28 947 y 27 464 mujeres 18-49
@@ -184,6 +208,8 @@ def predict_lab_risks(encuesta: Any) -> list[dict[str, Any]]:
             {
                 "target": target,
                 "label": TARGET_LABELS.get(target, target),
+                "exam_name": TARGET_EXAMS.get(target),
+                "cutoff": TARGET_CUTOFFS.get(target),
                 "condition": TARGET_TO_CONDITION.get(target),
                 "probability": round(probability, 4),
                 "score_semantics": "probabilidad_calibrada_real",

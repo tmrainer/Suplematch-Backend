@@ -126,12 +126,12 @@ def test_recommend_endpoint_returns_normalized_response():
     assert body["recommendations"][0]["name"] == "Vitamin D"
     assert body["recommendations"][0]["reason"] == "Relacionado con déficit de vitamina d."
     assert body["recommendations"][0]["icon_key"] == "sun"
-    assert body["packs_ranked"][0]["title"] == "Vitamin D + Calcium"
+    assert body["packs_ranked"][0]["title"] == "Vitamina D + Calcio"  # nombres que reconoce el usuario
     assert body["packs_ranked"][0]["components"][0]["display_name"] == "Vitamina D"
     assert body["sinergias"] == [
         {
-            "component_a": "Vitamin D",
-            "component_b": "Calcium",
+            "component_a": "Vitamina D",
+            "component_b": "Calcio",
             "type": "soporte_salud_osea",
         }
     ]

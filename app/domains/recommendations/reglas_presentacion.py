@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unicodedata
+
 DISCLAIMER = (
     "Estas recomendaciones son orientativas y no reemplazan una evaluación médica. "
     "Consulta con un profesional de salud antes de iniciar suplementos, especialmente "
@@ -12,33 +14,33 @@ CONDITION_LABELS = {
     "DEFICIT_CALCIO": "Déficit de calcio",
     "DEFICIT_B12": "Déficit de vitamina B12",
     "DEFICIT_HIERRO": "Déficit de hierro",
-    "DEFICIT_FOLATO": "Déficit de folato",
+    "DEFICIT_FOLATO": "Déficit de ácido fólico (vitamina B9)",
     "DEFICIT_MAGNESIO": "Déficit de magnesio",
     "DEFICIT_ZINC": "Déficit de zinc",
     "RIESGO_VITAMINA_C_BAJA": "Riesgo de vitamina C baja",
-    "RIESGO_OMEGA3_BAJO": "Riesgo de omega 3 bajo",
+    "RIESGO_OMEGA3_BAJO": "Riesgo de omega-3 bajo",
     "RIESGO_PROTEINA_INSUFICIENTE": "Riesgo de proteína insuficiente",
-    "RIESGO_METABOLICO_GLUCOSA": "Riesgo metabólico por glucosa",
-    "RIESGO_DISLIPIDEMIA": "Riesgo de dislipidemia",
-    "RIESGO_SALUD_OSEA": "Riesgo de salud ósea",
-    "SAFETY_RENAL": "Alerta renal",
-    "SAFETY_HEPATICA": "Alerta hepática",
-    "SAFETY_TIROIDEA": "Alerta tiroidea",
-    "BAJA_INMUNIDAD": "Baja inmunidad",
+    "RIESGO_METABOLICO_GLUCOSA": "Riesgo de azúcar alta en sangre",
+    "RIESGO_DISLIPIDEMIA": "Riesgo de colesterol o triglicéridos altos",
+    "RIESGO_SALUD_OSEA": "Riesgo para la salud de los huesos",
+    "SAFETY_RENAL": "Precaución por los riñones",
+    "SAFETY_HEPATICA": "Precaución por el hígado",
+    "SAFETY_TIROIDEA": "Precaución por la tiroides",
+    "BAJA_INMUNIDAD": "Defensas bajas",
     "FATIGA": "Fatiga o baja energía",
     "FATIGA_CRONICA": "Fatiga crónica",
     "ESTRES": "Estrés elevado",
     "ESTRES_SUENO": "Estrés y sueño",
     "PROBLEMAS_SUENO": "Problemas de sueño",
     "RENDIMIENTO_DEPORTIVO": "Rendimiento deportivo",
-    "SALUD_OSEA": "Salud ósea",
-    "SALUD_COGNITIVA": "Salud cognitiva",
-    "SALUD_VISUAL": "Salud visual",
+    "SALUD_OSEA": "Salud de los huesos",
+    "SALUD_COGNITIVA": "Memoria y concentración",
+    "SALUD_VISUAL": "Salud de la vista",
     "SALUD_DIGESTIVA": "Salud digestiva",
-    "FATIGA_NUTRICIONAL": "Energía y fatiga nutricional",
+    "FATIGA_NUTRICIONAL": "Cansancio relacionado con la alimentación",
     "HIDRATACION_ELECTROLITOS": "Hidratación y electrolitos",
-    "SALUD_CARDIOVASCULAR_CONTEXTUAL": "Salud cardiovascular contextual",
-    "SALUD_CAPILAR": "Salud capilar y piel",
+    "SALUD_CARDIOVASCULAR_CONTEXTUAL": "Salud del corazón",
+    "SALUD_CAPILAR": "Cabello y piel",
     "RIESGO_CABELLO_PIEL_UNAS": "Cabello, piel y uñas",
 }
 
@@ -115,8 +117,51 @@ COMPONENT_NAME_ES: dict[str, str] = {
 }
 
 
+# Nombres que reconoce el usuario comun (no el del grafo, a veces en ingles o con sigla sola). Vitaminas B con su
+# numero, que es como se venden en farmacia; omega-3 y probioticos con lo que son. Aplica a ingles y a variantes en
+# espanol sin tilde ("Acido Folico"). Ver test_component_names_are_recognizable.
+COMPONENT_NAME_ES.update({
+    "boron": "Boro",
+    "phosphorus": "Fósforo",
+    "folate": "Ácido fólico (vitamina B9)",
+    "folic acid": "Ácido fólico (vitamina B9)",
+    "acido folico": "Ácido fólico (vitamina B9)",
+    "folato": "Ácido fólico (vitamina B9)",
+    "thiamine": "Vitamina B1 (tiamina)",
+    "thiamin": "Vitamina B1 (tiamina)",
+    "tiamina": "Vitamina B1 (tiamina)",
+    "vitamin b1": "Vitamina B1 (tiamina)",
+    "riboflavin": "Vitamina B2 (riboflavina)",
+    "riboflavina": "Vitamina B2 (riboflavina)",
+    "vitamin b2": "Vitamina B2 (riboflavina)",
+    "niacin": "Vitamina B3 (niacina)",
+    "niacina": "Vitamina B3 (niacina)",
+    "pantothenic acid": "Vitamina B5 (ácido pantoténico)",
+    "acido pantotenico": "Vitamina B5 (ácido pantoténico)",
+    "biotin": "Biotina (vitamina B7)",
+    "biotina": "Biotina (vitamina B7)",
+    "omega 3": "Omega-3",
+    "dha": "Omega-3 DHA",
+    "epa": "Omega-3 EPA",
+    "coq10": "Coenzima Q10",
+    "bacillus coagulans": "Probiótico Bacillus coagulans",
+    "bifidobacterium longum": "Probiótico Bifidobacterium longum",
+    "l-theanine": "L-teanina",
+    "theanine": "L-teanina",
+})
+
+
+def _name_key(name: str) -> str:
+    """Clave sin tildes, en minusculas y con espacios simples: "Ácido  Fólico" y "acido folico" coinciden."""
+    text = unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode("ascii")
+    return " ".join(text.lower().split())
+
+
+_COMPONENT_NAME_LOOKUP = {_name_key(key): value for key, value in COMPONENT_NAME_ES.items()}
+
+
 def _translate_component_name(name: str) -> str:
-    return COMPONENT_NAME_ES.get(name.lower(), name)
+    return _COMPONENT_NAME_LOOKUP.get(_name_key(name), name)
 
 
 COMPONENT_ICONS = {

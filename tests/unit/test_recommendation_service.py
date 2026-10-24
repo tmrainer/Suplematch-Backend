@@ -76,7 +76,7 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
     # evidence_grade (fuente de verdad del peso de evidencia) debe llegar al cliente, no solo evidence_strength.
     assert response["recommendations"][0]["evidence_grade"] == "moderate"
     assert response["recommendations"][1]["type_display"] == "Soporte complementario"
-    assert response["packs_ranked"][0]["title"] == "Vitamin D + Calcium"
+    assert response["packs_ranked"][0]["title"] == "Vitamina D + Calcio"
     assert response["packs_ranked"][0]["components"] == [
         {
             "component_id": "cmp_vit_d",
@@ -95,15 +95,15 @@ def test_recommendation_response_is_normalized_for_frontend_cards():
     assert response["packs_ranked"][0]["cta_label"] == "Ver detalle del pack"
     assert response["sinergias"] == [
         {
-            "component_a": "Vitamin D",
-            "component_b": "Calcium",
+            "component_a": "Vitamina D",
+            "component_b": "Calcio",
             "type": "soporte_salud_osea",
         }
     ]
     assert response["alertas"] == [
         {
-            "component_a": "Iron",
-            "component_b": "Calcium",
+            "component_a": "Hierro",
+            "component_b": "Calcio",
             "type": "INTERACCION_RIESGOSA",
         }
     ]

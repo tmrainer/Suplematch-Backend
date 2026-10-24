@@ -129,3 +129,12 @@ def test_hba1c_estimate_is_served_and_excluded_targets_are_not() -> None:
     assert "target_hba1c_high" in targets
     assert not targets & set(cli.EXCLUDED_TARGETS)
 
+
+def test_labels_are_plain_language_and_every_target_names_its_exam() -> None:
+    import re
+
+    for target, label in cli.TARGET_LABELS.items():
+        # Sin siglas de laboratorio (HbA1c, HDL, ALT), unidades ni cortes: eso va en `exam_name` y `cutoff`.
+        # Nombres conocidos con numero ("Vitamina B12") si valen.
+        assert not re.search(r"[<>=%]|/dL|/mL|U/L|\b[A-Z]{2,}|[A-Z][a-z]?[A-Z]|\d+\s*(mg|ng|pg|g)\b", label), (target, label)
+        assert cli.TARGET_EXAMS[target] and cli.TARGET_CUTOFFS[target], target
