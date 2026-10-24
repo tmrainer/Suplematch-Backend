@@ -14,7 +14,6 @@ from app.ml.runtime.modelo2_inference import _register_torch_cpu_fallback
 
 REQUIRED_ARTIFACTS = (
     "condition_mvp_model.pkl",
-    "modelo1_pipeline.pkl",
     "modelo2_artifacts.pkl",
 )
 
@@ -26,12 +25,10 @@ def main() -> int:
         raise FileNotFoundError(f"Faltan artefactos en {model_dir}: {', '.join(missing)}")
 
     condition_model = load_condition_mvp_model()
-    modelo1 = joblib.load(model_dir / "modelo1_pipeline.pkl")
     _register_torch_cpu_fallback()
     modelo2 = joblib.load(model_dir / "modelo2_artifacts.pkl")
 
     print(f"[OK] condition_mvp_model.pkl keys={sorted(condition_model.keys())[:8]}")
-    print(f"[OK] modelo1_pipeline.pkl type={type(modelo1).__name__}")
     print(f"[OK] modelo2_artifacts.pkl keys={sorted(modelo2.keys())[:8]}")
     return 0
 

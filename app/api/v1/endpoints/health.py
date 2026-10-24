@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import BASE_DIR, settings
 from app.core.observability import metrics
 from app.db.database import engine
+from app.ml.model_loader import check_model_artifacts
 from app.db.models import (
     AdminAction,
     CatalogImportRun,
@@ -227,7 +228,13 @@ def readiness(request: Request):
         checks["alembic_head"] = current_revision == script.get_current_head()
 
     models = getattr(request.app.state, "models", {}) or {}
-    checks["models"] = bool(models) and all(model is not None for model in models.values())
+    artifacts = check_model_artifacts()
+    checks["models"] = (
+        bool(models)
+        and all(model is not None for model in models.values())
+        and artifacts["ready"]
+    )
+    checks["model_artifacts"] = artifacts
 
     from app.db.session import SessionLocal
 
