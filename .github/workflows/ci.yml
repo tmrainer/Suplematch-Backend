@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-ci.txt
+      # Checkout limpio: sin .pkl ni data/raw|training|evaluation|reports. Los tests que los requieren se omiten.
+      - run: python -m pytest tests/unit -q -p no:cacheprovider
+      - run: python scripts/ops/verificar_insumos.py --strict-versioned
+      - run: python scripts/catalog/limpiar_catalogo_aprobado.py --max-rs-fanout 5 > /tmp/cleanup_dry_run.json
+      - name: Catalogo aprobado sin cosmeticos ni RS genericos
+        run: python -c "import json; d=json.load(open('/tmp/cleanup_dry_run.json')); bad=d['removed_by_reason']; assert not bad.get('categoria_no_suplemento') and not bad.get('rs_generico_fanout'), bad"
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: suplematch
+          POSTGRES_USER: suplematch
+          POSTGRES_PASSWORD: suplematch
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U suplematch -d suplematch"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://suplematch:suplematch@localhost:5432/suplematch
+      ENVIRONMENT: development
+      LEGACY_FEEDBACK_SQLITE_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-ci.txt
+      - run: alembic upgrade head
+      - run: python scripts/ops/sembrar_base.py
+      - run: python scripts/catalog/importar_catalogo_postgres.py --catalog data/catalog/approved_catalog.csv
+      # Sin .pkl en el checkout: los tests que necesitan /recommend se omiten o fallan de forma explicita.
+      - run: python -m pytest tests/integration -q -p no:cacheprovider
