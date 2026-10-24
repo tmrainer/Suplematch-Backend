@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROWS="${ROWS:-10000}"
 SEED="${SEED:-42}"
-PYTHON_BIN="${PYTHON_BIN:-/home/leo/DPD/Proyecto/.venv/bin/python}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 LOG_DIR="$ROOT_DIR/data/reports/condition_model"
 LOG_FILE="$LOG_DIR/condition_mvp_${ROWS}_train.log"
 PID_FILE="$LOG_DIR/condition_mvp_${ROWS}_train.pid"

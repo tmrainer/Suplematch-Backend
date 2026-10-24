@@ -16,8 +16,11 @@ El modelo estima probabilidades de riesgo/prioridad. No diagnostica.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import math
 import random
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -50,121 +53,48 @@ TRAINING_DIR = ROOT_DIR / "data/training/condition_model"
 REPORT_DIR = ROOT_DIR / "data/reports/condition_model"
 RUNTIME_DIR = ROOT_DIR / "models/runtime"
 
-LAB_STATUS_COLS = [
-    "lab_vitamin_d_status",
-    "lab_b12_status",
-    "lab_ferritin_status",
-    "lab_hemoglobin_status",
-    "lab_magnesium_status",
-    "lab_zinc_status",
-    "lab_calcium_status",
-    "lab_folate_status",
-    "lab_glucose_status",
-    "lab_total_cholesterol_status",
-    "lab_ldl_status",
-    "lab_hdl_status",
-    "lab_triglycerides_status",
-    "lab_creatinine_status",
-    "lab_egfr_status",
-    "lab_alt_status",
-    "lab_ast_status",
-    "lab_tsh_status",
+# El contrato de features vive en app/ml/features_contract.py y es compartido con el runtime.
+sys.path.insert(0, str(ROOT_DIR))
+
+from app.ml.features_contract import (  # noqa: E402
+    BENCHMARK_STATUS_COLS,
+    CAT_COLS,
+    CONTEXT_QUANTITY_COLS,
+    DIET_META_COLS,
+    DIET_QUANTITY_COLS,
+    DIET_STATUS_COLS,
+    FEATURE_CONTRACT_VERSION,
+    LAB_BASES,
+    LAB_META_COLS,
+    LAB_STATUS_COLS,
+    MISSING_CATEGORY,
+    NUM_COLS,
+    RISK_FACTOR_COLS,
+    SOFT_SIGNAL_COLS,
+    SYMPTOM_COLS,
+    aggregate_rule_score,
+    attach_soft_signal_features,
+    family_rule_threshold,
+    is_corroborated,
+    rule_matches,
+    rule_thresholds,
+)
+
+__all__ = [
+    "CAT_COLS",
+    "NUM_COLS",
+    "SYMPTOM_COLS",
+    "DIET_QUANTITY_COLS",
+    "SOFT_SIGNAL_COLS",
+    "LAB_STATUS_COLS",
+    "BENCHMARK_STATUS_COLS",
+    "LAB_BASES",
+    "load_knowledge",
+    "generate_dataset",
+    "build_synthetic_row",
+    "rule_matches",
+    "attach_soft_signal_features",
 ]
-
-LAB_BASES = [col.removeprefix("lab_").removesuffix("_status") for col in LAB_STATUS_COLS]
-
-SYMPTOM_COLS = [
-    "fatiga_general",
-    "dolor_muscular",
-    "dolor_articular",
-    "niebla_mental",
-    "problemas_sueno",
-    "caida_cabello",
-    "piel_seca",
-    "unas_quebradizas",
-    "enfermedad_frecuente",
-    "calambres",
-    "irritabilidad",
-]
-
-DIET_QUANTITY_COLS = [
-    "fish_servings_week",
-    "dairy_servings_day",
-    "legume_servings_week",
-    "meat_servings_week",
-    "fruit_veg_servings_day",
-    "protein_g_day_estimate",
-]
-
-DIET_META_COLS = [f"{col}_reported" for col in DIET_QUANTITY_COLS] + ["diet_quantity_missing_count"]
-
-SOFT_SIGNAL_COLS = [
-    "vitamin_c_diet_signal",
-    "protein_insufficient_signal",
-    "protein_gap_g_day",
-    "hair_skin_nails_cluster",
-]
-
-BENCHMARK_STATUS_COLS = [
-    "benchmark_lab_vitamin_c_status",
-    "benchmark_diet_b12_status",
-    "benchmark_diet_vitamin_c_status",
-    "benchmark_diet_zinc_status",
-    "benchmark_diet_magnesium_status",
-    "benchmark_diet_calcium_status",
-    "benchmark_diet_folate_status",
-    "benchmark_diet_protein_status",
-    "benchmark_diet_omega3_status",
-]
-
-LAB_META_COLS = [
-    item
-    for base in LAB_BASES
-    for item in (
-        f"lab_{base}_observed",
-        f"lab_{base}_age_days",
-        f"lab_{base}_unit_known",
-        f"lab_{base}_range_known",
-    )
-]
-
-CAT_COLS = [
-    "sexo",
-    "tipo_dieta",
-    "exposicion_solar",
-    "nivel_actividad",
-    "lab_panel_source",
-] + LAB_STATUS_COLS + BENCHMARK_STATUS_COLS
-
-NUM_COLS = [
-    "edad",
-    "peso_kg",
-    "altura_cm",
-    "bmi",
-    "fatiga_general",
-    "dolor_muscular",
-    "dolor_articular",
-    "niebla_mental",
-    "problemas_sueno",
-    "caida_cabello",
-    "piel_seca",
-    "unas_quebradizas",
-    "enfermedad_frecuente",
-    "calambres",
-    "irritabilidad",
-    "dieta_deficiente",
-    "estres_alto",
-    "meta_energia",
-    "meta_inmunidad",
-    "meta_belleza",
-    "meta_rendimiento",
-    "meta_salud_osea",
-    "meta_cognitivo",
-    "symptom_burden_score",
-    "high_symptom_count",
-    "observed_lab_count",
-    "missing_lab_count",
-] + DIET_QUANTITY_COLS + DIET_META_COLS + SOFT_SIGNAL_COLS + LAB_META_COLS
 
 
 def utc_now() -> str:
@@ -283,6 +213,10 @@ def load_knowledge() -> dict[str, Any]:
                     "source_ids": split_values(row["source_ids"]),
                 }
                 for row in biomarkers_df.to_dict("records")
+                if str(row.get("sex") or "any") == "any"
+                and str(row.get("pregnant") or "any") == "any"
+                and not str(row.get("age_min") or "").strip()
+                and not str(row.get("age_max") or "").strip()
             ],
         },
         "links": {
@@ -442,7 +376,7 @@ def lab_status(rng: random.Random, low_probability: float, critical_probability:
         return "borderline"
     if roll < 0.72:
         return "normal"
-    return "missing"
+    return MISSING_CATEGORY
 
 
 def diet_status_from_signal(rng: random.Random, risk_probability: float, critical_probability: float = 0.04) -> str:
@@ -455,7 +389,7 @@ def diet_status_from_signal(rng: random.Random, risk_probability: float, critica
         return "borderline"
     if roll < 0.92:
         return "normal"
-    return "missing"
+    return MISSING_CATEGORY
 
 
 def high_lab_status(rng: random.Random, high_probability: float, critical_probability: float = 0.03) -> str:
@@ -468,7 +402,7 @@ def high_lab_status(rng: random.Random, high_probability: float, critical_probab
         return "borderline"
     if roll < 0.72:
         return "normal"
-    return "missing"
+    return MISSING_CATEGORY
 
 
 def thyroid_status(rng: random.Random, altered_probability: float = 0.12) -> str:
@@ -485,7 +419,7 @@ def thyroid_status(rng: random.Random, altered_probability: float = 0.12) -> str
         return "borderline"
     if roll < 0.72:
         return "normal"
-    return "missing"
+    return MISSING_CATEGORY
 
 
 def bounded_gauss(rng: random.Random, mean: float, std: float, min_value: float, max_value: float) -> float:
@@ -525,6 +459,8 @@ def build_diet_quantities(rng: random.Random, tipo_dieta: str, nivel_actividad: 
         "meat_servings_week": meat,
         "fruit_veg_servings_day": bounded_gauss(rng, 3.0 if tipo_dieta in {"vegano", "vegetariano"} else 2.4, 1.5, 0.0, 10.0),
         "protein_g_day_estimate": protein,
+        "fermented_foods_week": bounded_gauss(rng, 2.6 if tipo_dieta in {"vegano", "vegetariano"} else 1.8, 1.6, 0.0, 14.0),
+        "water_intake_l_day": bounded_gauss(rng, 2.1 if nivel_actividad in {"activo", "muy_activo"} else 1.6, 0.6, 0.3, 5.0),
     }
 
 
@@ -551,7 +487,7 @@ def attach_benchmark_status_features(row: dict[str, Any], rng: random.Random) ->
 
     def status_from_reported(value: float, risk: float, critical: float = 0.04) -> str:
         if value < 0:
-            return "missing"
+            return MISSING_CATEGORY
         return diet_status_from_signal(rng, risk_probability=risk, critical_probability=critical)
 
     b12_risk = 0.72 if tipo_dieta == "vegano" else 0.50 if tipo_dieta == "vegetariano" else 0.28 if meat <= 1 else 0.08
@@ -583,7 +519,7 @@ def attach_lab_metadata(row: dict[str, Any], rng: random.Random) -> None:
     observed_count = 0
     for status_col in LAB_STATUS_COLS:
         base = status_col.removeprefix("lab_").removesuffix("_status")
-        observed = 0 if row.get(status_col) == "missing" else 1
+        observed = 0 if row.get(status_col) == MISSING_CATEGORY else 1
         observed_count += observed
         row[f"lab_{base}_observed"] = observed
         row[f"lab_{base}_age_days"] = rng.randint(1, 120) if observed else 999
@@ -597,54 +533,93 @@ def attach_lab_metadata(row: dict[str, Any], rng: random.Random) -> None:
         row["lab_panel_source"] = weighted_choice(rng, [("ocr_pdf", 0.55), ("ocr_photo", 0.25), ("manual", 0.20)])
 
 
-def attach_soft_signal_features(row: dict[str, Any]) -> None:
-    fruit_veg_reported = int(row.get("fruit_veg_servings_day_reported", 0))
-    fruit_veg = float(row.get("fruit_veg_servings_day", -1))
-    row["vitamin_c_diet_signal"] = int(
-        bool(fruit_veg_reported)
-        and fruit_veg <= 2
-        and (
-            int(row.get("dieta_deficiente", 0)) == 1
-            or int(row.get("enfermedad_frecuente", 0)) >= 4
-            or int(row.get("meta_inmunidad", 0)) == 1
-        )
+# Paneles de laboratorio realistas (plan de fiabilidad, Fase 3). La mayoria de los usuarios no sube
+# examenes; quienes lo hacen traen un panel acotado (hemograma, glucosa, perfil lipidico), casi nunca los
+# 18 marcadores del contrato. Antes cada lab faltaba de forma independiente (28 %), asi que
+# P(sin ningun lab) = 0.28**18 ~ 0 y el modelo nunca veia el caso mayoritario "solo encuesta".
+DEFAULT_LAB_PANEL_RATE = 0.30  # fraccion de filas con al menos un laboratorio observado
+_BASIC_PANEL = {"hemoglobin", "glucose", "total_cholesterol", "ldl", "hdl", "triglycerides"}
+_METABOLIC_PANEL = _BASIC_PANEL | {"creatinine", "egfr", "alt", "ast"}
+_NUTRITIONAL_PANEL = {"vitamin_d", "b12", "ferritin", "hemoglobin", "folate", "glucose"}
+LAB_PANELS: dict[str, set[str]] = {
+    "basic": _BASIC_PANEL,
+    "metabolic": _METABOLIC_PANEL,
+    "nutritional": _NUTRITIONAL_PANEL,
+    "extended": _METABOLIC_PANEL | _NUTRITIONAL_PANEL | {"magnesium", "zinc", "calcium", "tsh"},
+}
+LAB_PANEL_WEIGHTS: list[tuple[str, float]] = [("basic", 0.40), ("metabolic", 0.25), ("nutritional", 0.20), ("extended", 0.15)]
+WITHIN_PANEL_MISSING_PROBABILITY = 0.05
+
+
+def apply_lab_panel_availability(row: dict[str, Any], rng: random.Random, panel_rate: float) -> str:
+    """Decide que laboratorios quedan observados y pone `missing` en el resto.
+
+    Devuelve el panel asignado (`none` si la fila no tiene laboratorios). Se aplica DESPUES de generar los
+    estados (que condicionan sintomas y otras variables) y ANTES de etiquetar: la etiqueta solo puede usar lo
+    que el usuario realmente tendria.
+    """
+    if panel_rate <= 0 or rng.random() >= panel_rate:
+        for status_col in LAB_STATUS_COLS:
+            row[status_col] = MISSING_CATEGORY
+        return "none"
+    panel_name = weighted_choice(rng, LAB_PANEL_WEIGHTS)
+    panel = LAB_PANELS[panel_name]
+    for status_col in LAB_STATUS_COLS:
+        base = status_col.removeprefix("lab_").removesuffix("_status")
+        if base not in panel or rng.random() < WITHIN_PANEL_MISSING_PROBABILITY:
+            row[status_col] = MISSING_CATEGORY
+        elif row.get(status_col) == MISSING_CATEGORY:
+            # Dentro de un panel pedido el resultado existe: el `missing` del generador independiente pasa a normal.
+            row[status_col] = "normal"
+    return panel_name
+
+
+RISK_FACTOR_MISSING_PROBABILITY = 0.30
+
+
+def synthetic_risk_factors(rng: random.Random, sexo: str, edad: int, tipo_dieta: str) -> dict[str, int]:
+    """Factores de riesgo declarados (contrato 2026-10-24.1) con la misma semantica que FeatureBuilder:
+    conteo de factores presentes, -1 cuando el grupo de preguntas no se respondio."""
+    def maybe(count: int) -> int:
+        return -1 if rng.random() < RISK_FACTOR_MISSING_PROBABILITY else count
+
+    menstruating = sexo == "F" and 14 <= edad <= 50
+    iron = (
+        int(menstruating and rng.random() < 0.20)
+        + int(sexo == "F" and 18 <= edad <= 45 and rng.random() < 0.08)
+        + int(rng.random() < 0.04)
     )
-
-    protein_reported = int(row.get("protein_g_day_estimate_reported", 0))
-    protein = float(row.get("protein_g_day_estimate", -1))
-    activity_multiplier = 1.2 if row.get("nivel_actividad") in {"activo", "muy_activo"} else 0.85
-    protein_target = float(row.get("peso_kg", 70.0)) * activity_multiplier
-    if protein_reported:
-        protein_gap = max(0.0, protein_target - protein)
-    else:
-        protein_gap = -1.0
-    row["protein_gap_g_day"] = round(protein_gap, 2)
-    row["protein_insufficient_signal"] = int(
-        bool(protein_reported)
-        and (
-            protein < 55
-            or protein_gap >= 20
-            or (
-                row.get("nivel_actividad") in {"activo", "muy_activo"}
-                and protein_gap >= 12
-                and int(row.get("meta_rendimiento", 0)) == 1
-            )
-        )
+    sun_barrier = int(rng.random() < 0.25) + int(rng.random() < 0.45)
+    b12 = (
+        int(rng.random() < (0.12 if edad >= 50 else 0.04))
+        + int(rng.random() < 0.08)
+        + int(tipo_dieta in {"vegano", "vegetariano"} and rng.random() < 0.45)
     )
-
-    hair_skin_hits = [
-        int(row.get("meta_belleza", 0)) == 1,
-        int(row.get("caida_cabello", 0)) >= 4,
-        int(row.get("piel_seca", 0)) >= 4,
-        int(row.get("unas_quebradizas", 0)) >= 4,
-        row.get("lab_zinc_status") in {"low", "critical_low"},
-        row.get("benchmark_diet_zinc_status") in {"low", "critical_low"},
-        row.get("lab_ferritin_status") in {"low", "critical_low"},
-    ]
-    row["hair_skin_nails_cluster"] = sum(1 for hit in hair_skin_hits if hit)
+    return {"iron_loss_risk": maybe(iron), "vitamin_d_sun_barrier": maybe(sun_barrier), "b12_absorption_risk": maybe(b12)}
 
 
-def build_synthetic_row(rng: random.Random) -> dict[str, Any]:
+def context_flags(row: dict[str, Any]) -> dict[str, int]:
+    """Banderas meta_* deterministas, identicas a FeatureBuilder: sintomas, habitos y edad, sin objetivos.
+
+    Antes se sumaba un componente aleatorio (p. ej. 20 % de meta_energia sin fatiga) que imitaba a quien elige
+    el objetivo; desde 2026-10-24 los objetivos no alimentan la deteccion."""
+    sweat = int(row.get("heavy_sweat_days_week", -1))
+    screen = float(row.get("screen_hours_day", -1))
+    return {
+        "meta_energia": int(row["fatiga_general"] >= 3 or row["problemas_sueno"] >= 4 or row["dieta_deficiente"] == 1),
+        "meta_inmunidad": int(row["enfermedad_frecuente"] >= 3),
+        "meta_belleza": int(max(row["caida_cabello"], row["piel_seca"], row["unas_quebradizas"]) >= 3),
+        "meta_rendimiento": int(row["nivel_actividad"] in {"activo", "muy_activo"}),
+        "meta_salud_osea": int(row["exposicion_solar"] == "baja" or row["edad"] >= 50 or row["dieta_deficiente"] == 1),
+        "meta_cognitivo": int(row["irritabilidad"] >= 4 or row["problemas_sueno"] >= 4),
+        "meta_visual": int(screen >= 6),
+        "meta_digestiva": int(row["digestive_discomfort"] >= 3),
+        "meta_hidratacion": int(row["calambres"] >= 3 or sweat >= 3),
+        "meta_cardiovascular": int(row["edad"] >= 50),
+    }
+
+
+def build_synthetic_row(rng: random.Random, lab_panel_rate: float | None = DEFAULT_LAB_PANEL_RATE) -> dict[str, Any]:
     sexo = weighted_choice(rng, [("F", 0.52), ("M", 0.48)])
     edad = int(round(min(78, max(16, rng.gauss(35, 14)))))
     altura_cm = round(rng.gauss(162 if sexo == "F" else 171, 8), 1)
@@ -659,11 +634,21 @@ def build_synthetic_row(rng: random.Random) -> dict[str, Any]:
         rng,
         [("sedentario", 0.28), ("moderado", 0.36), ("activo", 0.24), ("muy_activo", 0.12)],
     )
-    dieta_deficiente = 1 if tipo_dieta in {"vegano", "vegetariano"} or rng.random() < 0.32 else 0
+    # "Poco variada" declarada (unico caso en que la dieta cuenta como deficiente por si sola, igual que
+    # FeatureBuilder). Tras calcular los estados por nutriente se marca tambien con 2+ nutrientes bajos.
+    dieta_deficiente = 1 if rng.random() < 0.15 else 0
     estres_alto = 1 if rng.random() < 0.34 else 0
     problemas_sueno = severity_from_choices(rng, 0.30 if estres_alto else 0.18)
     irritabilidad = severity_from_choices(rng, 0.34 if estres_alto else 0.16)
     fatiga_general = severity_from_choices(rng, 0.30 if problemas_sueno >= 4 or dieta_deficiente else 0.18)
+    calambres = severity_from_choices(rng, 0.25 if nivel_actividad in {"activo", "muy_activo"} else 0.16)
+    digestive_discomfort = severity_from_choices(rng, 0.24 if dieta_deficiente or estres_alto else 0.14)
+    # Cantidades de contexto: -1 cuando no se reportan (misma semantica que FeatureBuilder).
+    screen_hours_day = bounded_gauss(rng, 5.5, 2.5, 0.0, 14.0) if rng.random() > 0.15 else -1.0
+    if rng.random() > 0.15:
+        heavy_sweat_days_week = min(7, max(0, int(round(rng.gauss(3.5 if nivel_actividad in {"activo", "muy_activo"} else 1.0, 1.5)))))
+    else:
+        heavy_sweat_days_week = -1
 
     row = {
         "sexo": sexo,
@@ -683,34 +668,48 @@ def build_synthetic_row(rng: random.Random) -> dict[str, Any]:
         "piel_seca": severity_from_choices(rng, 0.18),
         "unas_quebradizas": severity_from_choices(rng, 0.16),
         "enfermedad_frecuente": severity_from_choices(rng, 0.26 if dieta_deficiente else 0.16),
-        "calambres": severity_from_choices(rng, 0.25 if nivel_actividad in {"activo", "muy_activo"} else 0.16),
+        "calambres": calambres,
         "irritabilidad": irritabilidad,
+        "digestive_discomfort": digestive_discomfort,
         "dieta_deficiente": dieta_deficiente,
         "estres_alto": estres_alto,
-        "meta_energia": 1 if fatiga_general >= 4 or rng.random() < 0.20 else 0,
-        "meta_inmunidad": 1 if rng.random() < 0.18 else 0,
-        "meta_belleza": 1 if rng.random() < 0.17 else 0,
-        "meta_rendimiento": 1 if nivel_actividad in {"activo", "muy_activo"} and rng.random() < 0.40 else 0,
-        "meta_salud_osea": 1 if edad >= 50 or rng.random() < 0.14 else 0,
-        "meta_cognitivo": 1 if problemas_sueno >= 4 or estres_alto else 0,
+        "screen_hours_day": screen_hours_day,
+        "heavy_sweat_days_week": heavy_sweat_days_week,
     }
+    row.update(synthetic_risk_factors(rng, sexo, edad, tipo_dieta))
     row.update(build_diet_quantities(rng, tipo_dieta, nivel_actividad, peso_kg))
     attach_diet_metadata(row, rng)
     attach_benchmark_status_features(row, rng)
+    # Misma regla que FeatureBuilder: 2+ nutrientes bajos, sin contar B12 en vegetarianos ni omega 3 sin pescado
+    # reportado (esos riesgos ya suman en su propia condicion).
+    counted = [
+        col for col in DIET_STATUS_COLS
+        if not (col == "benchmark_diet_b12_status" and tipo_dieta in {"vegano", "vegetariano"})
+        and not (col == "benchmark_diet_omega3_status" and float(row.get("fish_servings_week", -1)) < 0)
+    ]
+    low_diet_statuses = sum(1 for col in counted if row.get(col) in {"low", "critical_low"})
+    if low_diet_statuses >= 2:
+        row["dieta_deficiente"] = 1
+    row.update(context_flags(row))
     row["symptom_burden_score"] = round(sum(float(row[col]) for col in SYMPTOM_COLS) / len(SYMPTOM_COLS), 3)
     row["high_symptom_count"] = sum(1 for col in SYMPTOM_COLS if int(row[col]) >= 4)
 
+    # Los factores declarados elevan la probabilidad del laboratorio correspondiente (supuesto sintetico, no
+    # estimado con datos reales). max(0, x) porque -1 = no respondido.
+    sun_barrier = max(0, int(row["vitamin_d_sun_barrier"]))
+    b12_absorption = max(0, int(row["b12_absorption_risk"]))
+    iron_loss = max(0, int(row["iron_loss_risk"]))
     row["lab_vitamin_d_status"] = lab_status(
         rng,
-        low_probability=0.34 if exposicion_solar == "baja" else 0.14,
+        low_probability=(0.34 if exposicion_solar == "baja" else 0.14) + 0.10 * sun_barrier,
         critical_probability=0.05 if exposicion_solar == "baja" else 0.015,
     )
     row["lab_b12_status"] = lab_status(
         rng,
-        low_probability=0.32 if tipo_dieta in {"vegano", "vegetariano"} else 0.10,
+        low_probability=(0.32 if tipo_dieta in {"vegano", "vegetariano"} else 0.10) + 0.12 * b12_absorption,
         critical_probability=0.04 if tipo_dieta == "vegano" else 0.015,
     )
-    row["lab_ferritin_status"] = lab_status(rng, low_probability=0.24 if sexo == "F" else 0.11)
+    row["lab_ferritin_status"] = lab_status(rng, low_probability=(0.24 if sexo == "F" else 0.11) + 0.12 * iron_loss)
     row["lab_hemoglobin_status"] = lab_status(rng, low_probability=0.12 if row["lab_ferritin_status"] in {"low", "critical_low"} else 0.06)
     row["lab_magnesium_status"] = lab_status(rng, low_probability=0.17 if row["calambres"] >= 4 else 0.08)
     row["lab_zinc_status"] = lab_status(rng, low_probability=0.18 if row["enfermedad_frecuente"] >= 4 else 0.08)
@@ -762,61 +761,58 @@ def build_synthetic_row(rng: random.Random) -> dict[str, Any]:
         critical_probability=0.015 if row["lab_alt_status"] in {"high", "critical_high"} else 0.005,
     )
     row["lab_tsh_status"] = thyroid_status(rng)
+    # `lab_panel_rate=None` reproduce la distribucion legada (cada lab falta de forma independiente).
+    # El panel asignado no se persiste como columna: el contrato de features es cerrado.
+    if lab_panel_rate is not None:
+        apply_lab_panel_availability(row, rng, lab_panel_rate)
     attach_soft_signal_features(row)
     attach_lab_metadata(row, rng)
     return row
 
 
-def rule_matches(row: dict[str, Any], rule: dict[str, Any]) -> bool:
-    value = row.get(rule["field"])
-    expected = rule.get("value")
-    operator = rule["operator"]
-    if operator == "eq":
-        return value == expected
-    if operator == "in":
-        return value in set(expected)
-    if operator == "contains":
-        return isinstance(value, list) and expected in value
-    if value is None:
-        return False
-    numeric_value = float(value)
-    if numeric_value < 0:
-        return False
-    if operator == "gte":
-        return numeric_value >= float(expected)
-    if operator == "lte":
-        return numeric_value <= float(expected)
-    if operator == "lt":
-        return numeric_value < float(expected)
-    raise ValueError(f"Operador no soportado: {operator}")
+def label_row(
+    row: dict[str, Any],
+    knowledge: dict[str, Any],
+    rng: random.Random,
+    rule_aggregation: str = "family",
+) -> dict[str, Any]:
+    """Etiqueta una fila con las reglas de condition_rules.csv.
 
-
-def label_row(row: dict[str, Any], knowledge: dict[str, Any], rng: random.Random) -> dict[str, Any]:
+    Usa la misma agregacion que el runtime (``aggregate_rule_score``/``is_corroborated``): en modo "family" cada
+    familia de evidencia cuenta una vez y, sin laboratorio, un positivo necesita dos familias.
+    """
     labels = {}
     scores = {}
     evidence = {}
     for condition in knowledge["conditions"]["conditions"]:
-        score = 0.04
-        hits = []
-        for rule in condition.get("rules", []):
-            if rule_matches(row, rule):
-                score += float(rule["weight"])
-                hits.append(rule["field"])
-        score += rng.uniform(-0.04, 0.04)
+        matched = [rule for rule in condition.get("rules", []) if rule_matches(row, rule)]
+        hits = [rule["field"] for rule in matched]
+        aggregated, families = aggregate_rule_score(matched, rule_aggregation)
+        score = 0.04 + aggregated + rng.uniform(-0.04, 0.04)
         score = max(0.0, min(0.98, score))
         code = condition["code"]
         scores[f"rule_score_{code}"] = round(score, 4)
-        labels[f"target_{code}"] = 1 if score >= float(condition["positive_threshold"]) else 0
+        threshold = float(condition["positive_threshold"])
+        if rule_aggregation == "family":
+            threshold = family_rule_threshold(condition.get("rules", []), threshold)
+        positive = score >= threshold and is_corroborated(families, rule_aggregation)
+        labels[f"target_{code}"] = 1 if positive else 0
         evidence[f"evidence_{code}"] = "|".join(sorted(set(hits)))
     return {**labels, **scores, **evidence}
 
 
-def generate_dataset(knowledge: dict[str, Any], n_rows: int, seed: int) -> pd.DataFrame:
+def generate_dataset(
+    knowledge: dict[str, Any],
+    n_rows: int,
+    seed: int,
+    lab_panel_rate: float | None = DEFAULT_LAB_PANEL_RATE,
+    rule_aggregation: str = "family",
+) -> pd.DataFrame:
     rng = random.Random(seed)
     rows = []
     for _ in range(n_rows):
-        row = build_synthetic_row(rng)
-        row.update(label_row(row, knowledge, rng))
+        row = build_synthetic_row(rng, lab_panel_rate=lab_panel_rate)
+        row.update(label_row(row, knowledge, rng, rule_aggregation))
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -826,6 +822,8 @@ def dataset_eda(df: pd.DataFrame, labels: list[str]) -> dict[str, Any]:
     return {
         "generated_at": utc_now(),
         "row_count": int(len(df)),
+        "rows_without_labs_share": round(float((df["observed_lab_count"] == 0).mean()), 4),
+        "observed_lab_count_distribution": {str(k): int(v) for k, v in df["observed_lab_count"].value_counts().sort_index().items()},
         "feature_count": int(len(CAT_COLS) + len(NUM_COLS)),
         "target_count": int(len(target_cols)),
         "label_prevalence": {
@@ -899,6 +897,8 @@ def dataset_eda_to_csv(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]
             "feature_count": report["feature_count"],
             "target_count": report["target_count"],
             "healthy_like_rows_without_targets": report["healthy_like_rows_without_targets"],
+            "rows_without_labs_share": report.get("rows_without_labs_share", ""),
+            "observed_lab_count_distribution": "|".join(f"{k}:{v}" for k, v in report.get("observed_lab_count_distribution", {}).items()),
         }
     ]
     label_prevalence = [
@@ -976,6 +976,14 @@ def feature_contract_rows() -> list[dict[str, Any]]:
             group = "observed_labs_metadata"
             source = "ocr_or_manual_lab"
             missing = "observed=0, age_days=999, known=0"
+        elif col in CONTEXT_QUANTITY_COLS:
+            group = "survey_context_quantity"
+            source = "self_reported_quantity"
+            missing = "-1 sentinel when not reported"
+        elif col in RISK_FACTOR_COLS:
+            group = "declared_risk_factors"
+            source = "self_reported_count"
+            missing = "-1 when none of the group's questions was answered"
         elif col in {"edad", "peso_kg", "altura_cm", "bmi"}:
             group = "profile_anthropometrics"
             source = "profile"
@@ -1027,19 +1035,7 @@ def optimize_prediction_thresholds(
     return optimized
 
 
-def train_model(df: pd.DataFrame, knowledge: dict[str, Any], seed: int) -> dict[str, Any]:
-    labels = knowledge["conditions"]["labels"]
-    target_cols = [f"target_{label}" for label in labels]
-    x = df[CAT_COLS + NUM_COLS]
-    y = df[target_cols]
-
-    x_train, x_test, y_train, y_test = train_test_split(
-        x,
-        y,
-        test_size=0.22,
-        random_state=seed,
-    )
-
+def build_training_pipeline(seed: int) -> Pipeline:
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", StandardScaler(), NUM_COLS),
@@ -1056,23 +1052,92 @@ def train_model(df: pd.DataFrame, knowledge: dict[str, Any], seed: int) -> dict[
         method="sigmoid",
         cv=3,
     )
-    pipeline = Pipeline(
+    return Pipeline(
         steps=[
             ("prep", preprocessor),
             ("clf", OneVsRestClassifier(base_estimator)),
         ]
     )
-    pipeline.fit(x_train, y_train)
 
-    probabilities = pipeline.predict_proba(x_test)
-    y_true = y_test.to_numpy()
+
+def _subset_metrics(labels: list[str], y_true: np.ndarray, probabilities: np.ndarray, y_pred: np.ndarray) -> dict[str, Any]:
+    """Metricas en un subconjunto del test. Una etiqueta sin positivos en el subconjunto no es evaluable
+    (f1/roc_auc = None) y no entra en el macro; p. ej. SAFETY_RENAL solo se etiqueta con laboratorios."""
+    if len(y_true) == 0:
+        return {"rows": 0}
+    per_label: dict[str, dict[str, Any]] = {}
+    evaluable: list[int] = []
+    for index, label in enumerate(labels):
+        positives = int(y_true[:, index].sum())
+        per_label[label] = {
+            "prevalence": round(float(y_true[:, index].mean()), 4),
+            "positives": positives,
+            "roc_auc": safe_metric(roc_auc_score, y_true[:, index], probabilities[:, index]) if positives else None,
+            "f1": safe_metric(lambda a, b: f1_score(a, b, zero_division=0), y_true[:, index], y_pred[:, index]) if positives else None,
+        }
+        if positives:
+            evaluable.append(index)
+    return {
+        "rows": int(len(y_true)),
+        "evaluable_labels": len(evaluable),
+        "hamming_loss": round(float(hamming_loss(y_true, y_pred)), 4),
+        "f1_macro": round(float(f1_score(y_true[:, evaluable], y_pred[:, evaluable], average="macro", zero_division=0)), 4) if evaluable else None,
+        "f1_samples": round(float(f1_score(y_true, y_pred, average="samples", zero_division=0)), 4),
+        "per_label": per_label,
+    }
+
+
+def train_model(
+    df: pd.DataFrame,
+    knowledge: dict[str, Any],
+    seed: int,
+    lab_panel_rate: float | None = DEFAULT_LAB_PANEL_RATE,
+    rule_aggregation: str = "family",
+    model_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Entrena y guarda el artefacto. ``model_dir`` (bajo el repo) permite entrenar sin pisar models/runtime,
+    p. ej. para la prueba de estabilidad entre semillas."""
+    labels = knowledge["conditions"]["labels"]
+    target_cols = [f"target_{label}" for label in labels]
+    x = df[CAT_COLS + NUM_COLS]
+    y = df[target_cols]
+
+    x_train, x_test, y_train, y_test = train_test_split(
+        x,
+        y,
+        test_size=0.22,
+        random_state=seed,
+    )
     label_thresholds = {
         condition["code"]: float(condition["positive_threshold"])
         for condition in knowledge["conditions"]["conditions"]
     }
-    thresholds = optimize_prediction_thresholds(labels, y_true, probabilities, label_thresholds)
+
+    # Umbrales de decision elegidos en una particion de VALIDACION dentro del train. Antes se optimizaban
+    # sobre el propio test, lo que inflaba F1/precision/recall reportados (plan de fiabilidad, Fase 3).
+    x_fit, x_val, y_fit, y_val = train_test_split(x_train, y_train, test_size=0.20, random_state=seed)
+    validation_pipeline = build_training_pipeline(seed)
+    validation_pipeline.fit(x_fit, y_fit)
+    thresholds = optimize_prediction_thresholds(
+        labels,
+        y_val.to_numpy(),
+        validation_pipeline.predict_proba(x_val),
+        label_thresholds,
+    )
+
+    # Modelo final: reentrenado con todo el train; el test solo se usa para reportar.
+    pipeline = build_training_pipeline(seed)
+    pipeline.fit(x_train, y_train)
+
+    probabilities = pipeline.predict_proba(x_test)
+    y_true = y_test.to_numpy()
     threshold_array = np.array([thresholds[label] for label in labels])
     y_pred = (probabilities >= threshold_array).astype(int)
+
+    # Estratificacion por disponibilidad de laboratorios: el caso mayoritario en produccion es "solo encuesta".
+    no_labs_mask = (x_test["observed_lab_count"] == 0).to_numpy()
+    metrics_no_labs = _subset_metrics(labels, y_true[no_labs_mask], probabilities[no_labs_mask], y_pred[no_labs_mask])
+    metrics_with_labs = _subset_metrics(labels, y_true[~no_labs_mask], probabilities[~no_labs_mask], y_pred[~no_labs_mask])
 
     per_label = {}
     for index, label in enumerate(labels):
@@ -1086,6 +1151,9 @@ def train_model(df: pd.DataFrame, knowledge: dict[str, Any], seed: int) -> dict[
             "precision": safe_metric(lambda a, b: precision_score(a, b, zero_division=0), y_true[:, index], y_pred[:, index]),
             "recall": safe_metric(lambda a, b: recall_score(a, b, zero_division=0), y_true[:, index], y_pred[:, index]),
             "f1": safe_metric(lambda a, b: f1_score(a, b, zero_division=0), y_true[:, index], y_pred[:, index]),
+            "f1_no_labs": metrics_no_labs.get("per_label", {}).get(label, {}).get("f1"),
+            "roc_auc_no_labs": metrics_no_labs.get("per_label", {}).get(label, {}).get("roc_auc"),
+            "f1_with_labs": metrics_with_labs.get("per_label", {}).get(label, {}).get("f1"),
         }
 
     metrics = {
@@ -1093,20 +1161,46 @@ def train_model(df: pd.DataFrame, knowledge: dict[str, Any], seed: int) -> dict[
         "model_type": "OneVsRestClassifier(Calibrated LogisticRegression)",
         "disclaimer": "Modelo de probabilidades de riesgo/prioridad; no diagnostica.",
         "train_rows": int(len(x_train)),
+        "validation_rows": int(len(x_val)),
         "test_rows": int(len(x_test)),
+        "threshold_selection": "internal_validation_split",
+        "lab_panel_rate": lab_panel_rate if lab_panel_rate is not None else "legacy_independent_missing",
+        "test_rows_without_labs": int(no_labs_mask.sum()),
         "hamming_loss": round(float(hamming_loss(y_true, y_pred)), 4),
         "f1_macro": round(float(f1_score(y_true, y_pred, average="macro", zero_division=0)), 4),
         "f1_samples": round(float(f1_score(y_true, y_pred, average="samples", zero_division=0)), 4),
+        "f1_macro_no_labs": metrics_no_labs.get("f1_macro"),
+        "evaluable_labels_no_labs": metrics_no_labs.get("evaluable_labels"),
+        "hamming_loss_no_labs": metrics_no_labs.get("hamming_loss"),
+        "f1_macro_with_labs": metrics_with_labs.get("f1_macro"),
+        "hamming_loss_with_labs": metrics_with_labs.get("hamming_loss"),
         "per_label": per_label,
     }
 
     artifact = {
         "pipeline": pipeline,
         "labels": labels,
-        "cat_cols": CAT_COLS,
-        "num_cols": NUM_COLS,
+        "cat_cols": list(CAT_COLS),
+        "num_cols": list(NUM_COLS),
+        "feature_contract_version": FEATURE_CONTRACT_VERSION,
+        # El runtime usa el mismo modo con el que se etiqueto el dataset (ver aggregate_rule_score).
+        "rule_aggregation": rule_aggregation,
+        # Umbral para el puntaje de reglas (distinto del umbral de probabilidad del modelo). En "family" se escala
+        # solo para condiciones que sin doble conteo no alcanzarian su umbral original con encuesta.
+        "rule_thresholds": rule_thresholds(
+            {condition["code"]: condition.get("rules", []) for condition in knowledge["conditions"]["conditions"]},
+            {condition["code"]: float(condition["positive_threshold"]) for condition in knowledge["conditions"]["conditions"]},
+            rule_aggregation,
+        ),
         "thresholds": thresholds,
+        "threshold_selection": metrics["threshold_selection"],
         "label_thresholds": label_thresholds,
+        "training_data": {
+            "kind": "semisintetico_derivado_de_reglas",
+            "rows": int(len(df)),
+            "lab_panel_rate": metrics["lab_panel_rate"],
+            "rows_without_labs_share": round(float((df["observed_lab_count"] == 0).mean()), 4),
+        },
         "condition_rules": {
             condition["code"]: condition.get("rules", [])
             for condition in knowledge["conditions"]["conditions"]
@@ -1121,9 +1215,10 @@ def train_model(df: pd.DataFrame, knowledge: dict[str, Any], seed: int) -> dict[
         "model_type": metrics["model_type"],
         "disclaimer": metrics["disclaimer"],
     }
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    model_path = RUNTIME_DIR / "condition_mvp_model.pkl"
-    metadata_path = RUNTIME_DIR / "condition_mvp_metadata.csv"
+    out_dir = model_dir or RUNTIME_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    model_path = out_dir / "condition_mvp_model.pkl"
+    metadata_path = out_dir / "condition_mvp_metadata.csv"
     joblib.dump(artifact, model_path)
     write_csv(
         metadata_path,
@@ -1134,6 +1229,7 @@ def train_model(df: pd.DataFrame, knowledge: dict[str, Any], seed: int) -> dict[
             {"key": "thresholds", "value": "|".join(f"{key}:{value}" for key, value in thresholds.items())},
             {"key": "label_thresholds", "value": "|".join(f"{key}:{value}" for key, value in label_thresholds.items())},
             {"key": "feature_count", "value": str(len(CAT_COLS) + len(NUM_COLS))},
+            {"key": "feature_contract_version", "value": FEATURE_CONTRACT_VERSION},
             {"key": "source_version", "value": artifact["source_version"]},
             {"key": "conditions_version", "value": artifact["conditions_version"]},
             {"key": "trained_at", "value": artifact["trained_at"]},
@@ -1144,7 +1240,70 @@ def train_model(df: pd.DataFrame, knowledge: dict[str, Any], seed: int) -> dict[
 
     metrics["model_path"] = str(model_path.relative_to(ROOT_DIR))
     metrics["metadata_path"] = str(metadata_path.relative_to(ROOT_DIR))
+    metrics["model_card_path"] = str(write_model_card(model_path, artifact, metrics, seed).relative_to(ROOT_DIR))
     return metrics
+
+
+MODEL_CARD_LIMITATIONS = [
+    "Dataset SEMISINTETICO: filas generadas al azar y etiquetadas con las mismas reglas de condition_rules.csv que "
+    "usa el runtime. El modelo aprende a reproducir esas reglas; las metricas miden fidelidad a las reglas, no "
+    "validez clinica. Sin valor diagnostico.",
+    "La salida es un indice de riesgo basado en reglas (score_basis model|model+rules|rules_only), no una "
+    "probabilidad clinica. En la API se expone como risk_index; `probability` se conserva por compatibilidad.",
+    "Las prevalencias de laboratorio alterado y la disponibilidad de paneles son supuestos del generador, no datos "
+    "poblacionales peruanos.",
+    "Los umbrales se eligen en una particion de validacion interna del train; el benchmark NHANES semi-curado "
+    "(scripts/training/calibrar_thresholds_condiciones.py) puede sobrescribirlos con --apply.",
+    "Para riesgo de laboratorio con datos reales ver condition_lab_model (NHANES) y su model card.",
+]
+
+
+def write_model_card(model_path: Path, artifact: dict[str, Any], metrics: dict[str, Any], seed: int) -> Path:
+    """Model card del artefacto sintetico: hash, datos, metricas y limitaciones (plan de fiabilidad, Fase 3)."""
+    digest = hashlib.sha256(model_path.read_bytes()).hexdigest()[:16]
+    per_label = metrics.get("per_label", {})
+    card = {
+        "model": "condition_mvp_model",
+        "sha256_16": digest,
+        "task": "Indice de riesgo por condicion a partir de la encuesta (+ laboratorios opcionales). Reproduce reglas curadas; no diagnostica.",
+        "clinical_validity": "none_synthetic",
+        "data": {
+            **artifact["training_data"],
+            "seed": seed,
+            "train_rows": metrics["train_rows"],
+            "validation_rows": metrics["validation_rows"],
+            "test_rows": metrics["test_rows"],
+            "test_rows_without_labs": metrics["test_rows_without_labs"],
+            "label_source": (
+                "condition_rules.csv (weight_basis=expert_heuristic) + ruido uniforme +-0.04; agregacion "
+                f"'{artifact.get('rule_aggregation', 'sum')}' (family = una vez por familia de evidencia y, sin "
+                "laboratorio, dos familias para un positivo)"
+            ),
+        },
+        "features": {
+            "count": len(artifact["cat_cols"]) + len(artifact["num_cols"]),
+            "contract_version": artifact["feature_contract_version"],
+            "contract_module": "app/ml/features_contract.py",
+        },
+        "algorithm": artifact["model_type"] + "; umbral por F1 en validacion interna (candidatos 0.20-0.80)",
+        "threshold_selection": metrics["threshold_selection"],
+        "thresholds": artifact["thresholds"],
+        "metrics_test": {
+            "hamming_loss": metrics["hamming_loss"],
+            "f1_macro": metrics["f1_macro"],
+            "f1_samples": metrics["f1_samples"],
+            "f1_macro_no_labs": metrics["f1_macro_no_labs"],
+            "f1_macro_with_labs": metrics["f1_macro_with_labs"],
+            "per_label": {label: {k: v for k, v in values.items() if k in {"roc_auc", "f1", "f1_no_labs", "roc_auc_no_labs", "prevalence_test", "prediction_threshold"}} for label, values in per_label.items()},
+        },
+        "knowledge_versions": {"sources": artifact["source_version"], "conditions": artifact["conditions_version"]},
+        "limitations": MODEL_CARD_LIMITATIONS,
+        "trained_at": artifact["trained_at"],
+        "generated_at": utc_now(),
+    }
+    card_path = model_path.with_name("condition_mvp_model_card.json")
+    card_path.write_text(json.dumps(card, indent=2, ensure_ascii=False), encoding="utf-8")
+    return card_path
 
 
 def run_pipeline(args: argparse.Namespace) -> None:
@@ -1158,7 +1317,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
     write_csv(REPORT_DIR / "02_knowledge_eda.csv", knowledge_eda_rows(knowledge_report))
     write_csv(TRAINING_DIR / "condition_feature_contract.csv", feature_contract_rows())
 
-    df = generate_dataset(knowledge, n_rows=args.rows, seed=args.seed)
+    lab_panel_rate = None if args.legacy_lab_distribution else args.lab_panel_rate
+    df = generate_dataset(
+        knowledge, n_rows=args.rows, seed=args.seed, lab_panel_rate=lab_panel_rate, rule_aggregation=args.rule_aggregation,
+    )
     dataset_path = TRAINING_DIR / "condition_training_dataset.csv"
     df.to_csv(dataset_path, index=False)
     eda_report = dataset_eda(df, knowledge["conditions"]["labels"])
@@ -1169,7 +1331,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     write_csv(REPORT_DIR / "03_dataset_lab_status_distribution.csv", eda_csv["lab_status_distribution"])
     write_csv(REPORT_DIR / "03_dataset_numeric_summary.csv", eda_csv["numeric_summary"])
 
-    metrics = train_model(df, knowledge, seed=args.seed)
+    metrics = train_model(df, knowledge, seed=args.seed, lab_panel_rate=lab_panel_rate, rule_aggregation=args.rule_aggregation)
     per_label = metrics.pop("per_label")
     write_csv(REPORT_DIR / "04_training_metrics.csv", [metrics])
     write_csv(
@@ -1184,13 +1346,38 @@ def run_pipeline(args: argparse.Namespace) -> None:
     print(f"  dataset EDA: {REPORT_DIR / '03_dataset_eda_summary.csv'}")
     print(f"  metricas: {REPORT_DIR / '04_training_metrics.csv'}")
     print(f"  modelo: {RUNTIME_DIR / 'condition_mvp_model.pkl'}")
+    print(f"  model card: {RUNTIME_DIR / 'condition_mvp_model_card.json'}")
+    print(
+        f"  f1_macro={metrics['f1_macro']} (sin labs {metrics['f1_macro_no_labs']}, con labs {metrics['f1_macro_with_labs']}); "
+        f"filas test sin labs: {metrics['test_rows_without_labs']}/{metrics['test_rows']}"
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Entrena modelo MVP de condiciones con base medica curada.")
     parser.add_argument("--rows", type=int, default=2500, help="Cantidad de filas semisinteticas a generar.")
     parser.add_argument("--seed", type=int, default=42, help="Semilla reproducible.")
+    parser.add_argument(
+        "--rule-aggregation",
+        choices=["family", "sum"],
+        default="family",
+        help="family: cada familia de evidencia cuenta una vez y sin labs hacen falta dos (default desde 2026-10-24). "
+        "sum: suma simple de reglas (comportamiento anterior, para comparar o revertir).",
+    )
+    parser.add_argument(
+        "--lab-panel-rate",
+        type=float,
+        default=DEFAULT_LAB_PANEL_RATE,
+        help="Fraccion de filas con al menos un laboratorio observado (el resto solo encuesta). Default 0.30.",
+    )
+    parser.add_argument(
+        "--legacy-lab-distribution",
+        action="store_true",
+        help="Reproduce la distribucion anterior (cada laboratorio falta de forma independiente; casi nadie sin labs).",
+    )
     args = parser.parse_args()
+    if not 0.0 <= args.lab_panel_rate <= 1.0:
+        raise SystemExit("--lab-panel-rate debe estar entre 0 y 1.")
     if args.rows < 500:
         raise SystemExit("--rows debe ser al menos 500 para que la calibracion por etiqueta sea estable.")
     run_pipeline(args)

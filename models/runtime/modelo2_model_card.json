@@ -1,0 +1,82 @@
+{
+  "model": "modelo2_artifacts",
+  "version": "graphsage_link_v3_2026-10-23",
+  "sha256_16": "5718b0cf3716c7cc",
+  "task": "Embeddings de componentes (GraphSAGE, link prediction) para proponer candidatos complementarios al ranker de reglas.",
+  "data": {
+    "master": {
+      "path": "/app/data/training/supplement_model/Component_Master_Clean.csv",
+      "sha256_16": "2c603ffea343bedf",
+      "nodes": 935
+    },
+    "edges": {
+      "path": "/app/data/training/supplement_model/Component_Relationship_Edges_Clean.csv",
+      "sha256_16": "3e2033035645099c",
+      "rows": 1604,
+      "used_for_training": 596,
+      "by_class": {
+        "SOPORTE_FUNCIONAL": 536,
+        "RIESGOSA": 349,
+        "REFERENCIA_A_COMPONENTE": 298,
+        "REVISION_PRIORITARIA": 193,
+        "VARIANTE_O_FORMA": 82,
+        "NORMALIZACION_COMPONENTE": 69,
+        "INEFICAZ": 45,
+        "DESCOMPOSICION_COMPONENTE": 17,
+        "ANULACION": 9,
+        "BENEFICIOSA": 2,
+        "SOPORTE_METABOLICO": 2,
+        "SOPORTE_ANTIOXIDANTE": 1,
+        "COFACTOR_FUNCIONAL": 1
+      },
+      "useful_classes": [
+        "ANULACION",
+        "BENEFICIOSA",
+        "COFACTOR_FUNCIONAL",
+        "INEFICAZ",
+        "INTERACCION_VALIDADA",
+        "SOPORTE_ANTIOXIDANTE",
+        "SOPORTE_FUNCIONAL",
+        "SOPORTE_METABOLICO"
+      ]
+    },
+    "node_features": [
+      "source_count",
+      "has_regulatory_signal",
+      "has_safety_signal",
+      "regulatory_signal_count",
+      "safety_signal_count",
+      "total_ensayos_clinicos",
+      "ensayos_completados",
+      "tasa_no_completado",
+      "tasa_riesgo_toxicidad",
+      "interaction_degree_drugbank"
+    ]
+  },
+  "algorithm": "GraphSAGE 2 capas (64 -> 32), decoder producto punto, Adam lr=0.005 wd=1e-4, negativos muestreados, early stop por ROC-AUC de validacion (paciencia 15, max 300 epochs, se restaura el mejor epoch), seed 42",
+  "split": "70 % aristas para entrenar / 15 % validacion (early stop) / 15 % test (metricas); val y test fuera del grafo de mensaje",
+  "metrics_held_out_edges": {
+    "test_edges": 90,
+    "val_edges": 89,
+    "train_edges": 417,
+    "roc_auc": 0.9591358024691359,
+    "average_precision": 0.9747436053539449,
+    "best_val_roc_auc": 0.9904683752051509,
+    "best_epoch": 51,
+    "epochs_run": 66,
+    "best_train_loss": 0.4305741786956787,
+    "seed": 42
+  },
+  "acceptance_threshold": {
+    "roc_auc_min": 0.65,
+    "passed": true
+  },
+  "limitations": [
+    "Las aristas provienen de fuentes estructuradas (DrugBank, AACT/ClinicalTrials, NIH ODS): el GNN aprende a reproducir ese grafo. AUC alto en aristas reservadas NO demuestra utilidad de recomendacion para usuarios; eso requiere feedback real (plan de fiabilidad, Fase 5).",
+    "Solo aporta candidatos complementarios (`candidato_gnn`, score = similitud coseno x 0.45) filtrados por `functional_pairs`; las recomendaciones principales salen de condition_component_links.csv con fuentes.",
+    "Las sinergias (`functional_pairs`) heredan la fuente del grafo pero no tienen source_ids clinicos propios.",
+    "Varios nodos del grafo representan el mismo componente (p. ej. 'Vitamin D', 'Vitamin D (cholecalciferol)'); data/knowledge/gnn_node_equivalences.csv los colapsa al id canonico en inferencia.",
+    "Split 70/15/15 de aristas con negativos muestreados al azar: los negativos faciles inflan AUC/AP frente a un escenario real de ranking."
+  ],
+  "generated_at": "2026-10-23T18:11:44.074101+00:00"
+}

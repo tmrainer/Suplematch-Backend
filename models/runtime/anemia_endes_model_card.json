@@ -1,0 +1,103 @@
+{
+  "model": "anemia_endes_model",
+  "sha256_16": "611be160cc66be2c",
+  "task": "Probabilidad de anemia (V457 INEI) en mujeres 18-49 peruanas desde variables de encuesta; incluye altitud y region.",
+  "data": {
+    "source": "ENDES (INEI) via datosabiertos.gob.pe",
+    "train": "2022",
+    "test": "2024",
+    "2022": {
+      "n": 28947,
+      "n_raw_women": 28947,
+      "prevalence": 0.21687912391612257,
+      "prevalence_weighted": 0.2019406430514013,
+      "agreement_v457_vs_who_cutoff": 1.0
+    },
+    "2024": {
+      "n": 27464,
+      "n_raw_women": 27464,
+      "prevalence": 0.24158898922225458,
+      "prevalence_weighted": 0.23992541163391018,
+      "agreement_v457_vs_who_cutoff": 1.0
+    }
+  },
+  "features": {
+    "categorical": [
+      "embarazo",
+      "urbano",
+      "educacion_endes",
+      "fuma",
+      "diabetes_dx",
+      "hipertension_dx"
+    ],
+    "numeric": [
+      "edad",
+      "bmi",
+      "altitud_m",
+      "riqueza_quintil",
+      "region_codigo"
+    ]
+  },
+  "metrics_test": {
+    "n": 27464,
+    "prevalence": 0.24158898922225458,
+    "roc_auc": 0.5731777361160602,
+    "average_precision": 0.3029250986946929,
+    "brier": 0.18149697517654453,
+    "brier_baseline_prevalence": 0.18322374950882397,
+    "ece": 0.024449744985515602,
+    "threshold": 0.3,
+    "f1": 0.09407991447280502,
+    "precision": 0.41509433962264153,
+    "recall": 0.05305199698568199
+  },
+  "nhanes_model_on_endes": {
+    "nhanes_as_is_2022": {
+      "n": 28947,
+      "prevalence": 0.21687912391612257,
+      "roc_auc": 0.5010632010395009,
+      "average_precision": 0.22015776196363945,
+      "brier": 0.1753063134184048,
+      "brier_baseline_prevalence": 0.16984256952549776,
+      "ece": 0.06142572148625214,
+      "threshold": 0.32,
+      "f1": 0.10895705521472393,
+      "precision": 0.23717948717948717,
+      "recall": 0.07072316024211532
+    },
+    "nhanes_as_is_2024": {
+      "n": 27464,
+      "prevalence": 0.24158898922225458,
+      "roc_auc": 0.4969953056942702,
+      "average_precision": 0.24289486216627082,
+      "brier": 0.19015530278849244,
+      "brier_baseline_prevalence": 0.18322374950882397,
+      "ece": 0.06569241387613076,
+      "threshold": 0.32,
+      "f1": 0.10860049686501834,
+      "precision": 0.2524752475247525,
+      "recall": 0.0691785983421251
+    },
+    "nhanes_recalibrated_2024": {
+      "n": 27464,
+      "prevalence": 0.24158898922225458,
+      "roc_auc": 0.4982096544355529,
+      "average_precision": 0.24141709411994178,
+      "brier": 0.18384322944527134,
+      "brier_baseline_prevalence": 0.18322374950882397,
+      "ece": 0.02481502056734236,
+      "threshold": 0.3,
+      "f1": 0.0006020469596628537,
+      "precision": 0.2222222222222222,
+      "recall": 0.0003014318010550113
+    },
+    "nhanes_model_sha256_16": "b6cc26f3754b62d0"
+  },
+  "limitations": [
+    "Solo mujeres 15-49 (ENDES no mide hemoglobina en hombres adultos).",
+    "Sin pesos muestrales en el ajuste; prevalencia ponderada solo informativa.",
+    "La encuesta SupleMatch no pregunta altitud/region: para usar este modelo habria que anadir ciudad o region.",
+    "No es diagnostico."
+  ],
+  "generated_at": "2026-10-23T01:42:25.748593+00:00"
+}

@@ -1,0 +1,283 @@
+{
+  "model": "condition_mvp_model",
+  "sha256_16": "2bcb4c1eee0b31da",
+  "task": "Indice de riesgo por condicion a partir de la encuesta (+ laboratorios opcionales). Reproduce reglas curadas; no diagnostica.",
+  "clinical_validity": "none_synthetic",
+  "data": {
+    "kind": "semisintetico_derivado_de_reglas",
+    "rows": 10000,
+    "lab_panel_rate": 0.3,
+    "rows_without_labs_share": 0.7012,
+    "seed": 42,
+    "train_rows": 7800,
+    "validation_rows": 1560,
+    "test_rows": 2200,
+    "test_rows_without_labs": 1536,
+    "label_source": "condition_rules.csv (weight_basis=expert_heuristic) + ruido uniforme +-0.04; agregacion 'family' (family = una vez por familia de evidencia y, sin laboratorio, dos familias para un positivo)"
+  },
+  "features": {
+    "count": 168,
+    "contract_version": "2026-10-24.1",
+    "contract_module": "app/ml/features_contract.py"
+  },
+  "algorithm": "OneVsRestClassifier(Calibrated LogisticRegression); umbral por F1 en validacion interna (candidatos 0.20-0.80)",
+  "threshold_selection": "internal_validation_split",
+  "thresholds": {
+    "DEFICIT_VIT_D": 0.48,
+    "DEFICIT_B12": 0.41,
+    "DEFICIT_HIERRO": 0.31,
+    "DEFICIT_MAGNESIO": 0.37,
+    "BAJA_INMUNIDAD": 0.39,
+    "RIESGO_SALUD_OSEA": 0.28,
+    "ESTRES_SUENO": 0.42,
+    "RENDIMIENTO_DEPORTIVO": 0.36,
+    "DEFICIT_FOLATO": 0.33,
+    "DEFICIT_ZINC": 0.45,
+    "DEFICIT_CALCIO": 0.22,
+    "RIESGO_VITAMINA_C_BAJA": 0.52,
+    "RIESGO_OMEGA3_BAJO": 0.39,
+    "RIESGO_PROTEINA_INSUFICIENTE": 0.41,
+    "RIESGO_CABELLO_PIEL_UNAS": 0.38,
+    "RIESGO_METABOLICO_GLUCOSA": 0.6,
+    "RIESGO_DISLIPIDEMIA": 0.31,
+    "SAFETY_RENAL": 0.31,
+    "SAFETY_HEPATICA": 0.32,
+    "SAFETY_TIROIDEA": 0.26,
+    "SALUD_VISUAL": 0.37,
+    "SALUD_DIGESTIVA": 0.39,
+    "FATIGA_NUTRICIONAL": 0.25,
+    "HIDRATACION_ELECTROLITOS": 0.32,
+    "SALUD_CARDIOVASCULAR_CONTEXTUAL": 0.28,
+    "SALUD_COGNITIVA": 0.43
+  },
+  "metrics_test": {
+    "hamming_loss": 0.0385,
+    "f1_macro": 0.8487,
+    "f1_samples": 0.8138,
+    "f1_macro_no_labs": 0.8356,
+    "f1_macro_with_labs": 0.8388,
+    "per_label": {
+      "DEFICIT_VIT_D": {
+        "prediction_threshold": 0.48,
+        "prevalence_test": 0.1105,
+        "roc_auc": 0.9907,
+        "f1": 0.8333,
+        "f1_no_labs": 0.7899,
+        "roc_auc_no_labs": 0.9888
+      },
+      "DEFICIT_B12": {
+        "prediction_threshold": 0.41,
+        "prevalence_test": 0.1873,
+        "roc_auc": 0.9679,
+        "f1": 0.7839,
+        "f1_no_labs": 0.7678,
+        "roc_auc_no_labs": 0.9662
+      },
+      "DEFICIT_HIERRO": {
+        "prediction_threshold": 0.31,
+        "prevalence_test": 0.0518,
+        "roc_auc": 0.983,
+        "f1": 0.75,
+        "f1_no_labs": 0.619,
+        "roc_auc_no_labs": 0.9836
+      },
+      "DEFICIT_MAGNESIO": {
+        "prediction_threshold": 0.37,
+        "prevalence_test": 0.3432,
+        "roc_auc": 0.9948,
+        "f1": 0.952,
+        "f1_no_labs": 0.9644,
+        "roc_auc_no_labs": 0.9967
+      },
+      "BAJA_INMUNIDAD": {
+        "prediction_threshold": 0.39,
+        "prevalence_test": 0.1636,
+        "roc_auc": 0.972,
+        "f1": 0.7925,
+        "f1_no_labs": 0.8046,
+        "roc_auc_no_labs": 0.9799
+      },
+      "RIESGO_SALUD_OSEA": {
+        "prediction_threshold": 0.28,
+        "prevalence_test": 0.0677,
+        "roc_auc": 0.9951,
+        "f1": 0.904,
+        "f1_no_labs": 1.0,
+        "roc_auc_no_labs": 1.0
+      },
+      "ESTRES_SUENO": {
+        "prediction_threshold": 0.42,
+        "prevalence_test": 0.1205,
+        "roc_auc": 0.9719,
+        "f1": 0.7786,
+        "f1_no_labs": 0.8049,
+        "roc_auc_no_labs": 0.9768
+      },
+      "RENDIMIENTO_DEPORTIVO": {
+        "prediction_threshold": 0.36,
+        "prevalence_test": 0.0432,
+        "roc_auc": 0.9734,
+        "f1": 0.6082,
+        "f1_no_labs": 0.6667,
+        "roc_auc_no_labs": 0.9775
+      },
+      "DEFICIT_FOLATO": {
+        "prediction_threshold": 0.33,
+        "prevalence_test": 0.0286,
+        "roc_auc": 0.9979,
+        "f1": 0.8676,
+        "f1_no_labs": 0.8649,
+        "roc_auc_no_labs": 0.998
+      },
+      "DEFICIT_ZINC": {
+        "prediction_threshold": 0.45,
+        "prevalence_test": 0.0977,
+        "roc_auc": 0.9938,
+        "f1": 0.9149,
+        "f1_no_labs": 0.9283,
+        "roc_auc_no_labs": 0.9968
+      },
+      "DEFICIT_CALCIO": {
+        "prediction_threshold": 0.22,
+        "prevalence_test": 0.0364,
+        "roc_auc": 0.9898,
+        "f1": 0.732,
+        "f1_no_labs": 0.7377,
+        "roc_auc_no_labs": 0.995
+      },
+      "RIESGO_VITAMINA_C_BAJA": {
+        "prediction_threshold": 0.52,
+        "prevalence_test": 0.3377,
+        "roc_auc": 0.9891,
+        "f1": 0.9217,
+        "f1_no_labs": 0.9218,
+        "roc_auc_no_labs": 0.9895
+      },
+      "RIESGO_OMEGA3_BAJO": {
+        "prediction_threshold": 0.39,
+        "prevalence_test": 0.4691,
+        "roc_auc": 0.9996,
+        "f1": 0.9903,
+        "f1_no_labs": 0.9938,
+        "roc_auc_no_labs": 0.9999
+      },
+      "RIESGO_PROTEINA_INSUFICIENTE": {
+        "prediction_threshold": 0.41,
+        "prevalence_test": 0.1173,
+        "roc_auc": 0.986,
+        "f1": 0.8166,
+        "f1_no_labs": 0.8113,
+        "roc_auc_no_labs": 0.9862
+      },
+      "RIESGO_CABELLO_PIEL_UNAS": {
+        "prediction_threshold": 0.38,
+        "prevalence_test": 0.2055,
+        "roc_auc": 0.9918,
+        "f1": 0.9322,
+        "f1_no_labs": 0.958,
+        "roc_auc_no_labs": 0.9961
+      },
+      "RIESGO_METABOLICO_GLUCOSA": {
+        "prediction_threshold": 0.6,
+        "prevalence_test": 0.0391,
+        "roc_auc": 1.0,
+        "f1": 1.0,
+        "f1_no_labs": null,
+        "roc_auc_no_labs": null
+      },
+      "RIESGO_DISLIPIDEMIA": {
+        "prediction_threshold": 0.31,
+        "prevalence_test": 0.1236,
+        "roc_auc": 1.0,
+        "f1": 0.9982,
+        "f1_no_labs": null,
+        "roc_auc_no_labs": null
+      },
+      "SAFETY_RENAL": {
+        "prediction_threshold": 0.31,
+        "prevalence_test": 0.01,
+        "roc_auc": 0.997,
+        "f1": 0.8696,
+        "f1_no_labs": null,
+        "roc_auc_no_labs": null
+      },
+      "SAFETY_HEPATICA": {
+        "prediction_threshold": 0.32,
+        "prevalence_test": 0.0159,
+        "roc_auc": 0.9979,
+        "f1": 0.9118,
+        "f1_no_labs": null,
+        "roc_auc_no_labs": null
+      },
+      "SAFETY_TIROIDEA": {
+        "prediction_threshold": 0.26,
+        "prevalence_test": 0.0064,
+        "roc_auc": 0.9969,
+        "f1": 0.7742,
+        "f1_no_labs": null,
+        "roc_auc_no_labs": null
+      },
+      "SALUD_VISUAL": {
+        "prediction_threshold": 0.37,
+        "prevalence_test": 0.1655,
+        "roc_auc": 0.9897,
+        "f1": 0.9127,
+        "f1_no_labs": 0.9171,
+        "roc_auc_no_labs": 0.9893
+      },
+      "SALUD_DIGESTIVA": {
+        "prediction_threshold": 0.39,
+        "prevalence_test": 0.3659,
+        "roc_auc": 0.9771,
+        "f1": 0.8931,
+        "f1_no_labs": 0.892,
+        "roc_auc_no_labs": 0.9763
+      },
+      "FATIGA_NUTRICIONAL": {
+        "prediction_threshold": 0.25,
+        "prevalence_test": 0.1173,
+        "roc_auc": 0.9758,
+        "f1": 0.7871,
+        "f1_no_labs": 0.7951,
+        "roc_auc_no_labs": 0.9786
+      },
+      "HIDRATACION_ELECTROLITOS": {
+        "prediction_threshold": 0.32,
+        "prevalence_test": 0.1695,
+        "roc_auc": 0.9494,
+        "f1": 0.7167,
+        "f1_no_labs": 0.7019,
+        "roc_auc_no_labs": 0.9463
+      },
+      "SALUD_CARDIOVASCULAR_CONTEXTUAL": {
+        "prediction_threshold": 0.28,
+        "prevalence_test": 0.2145,
+        "roc_auc": 0.97,
+        "f1": 0.8083,
+        "f1_no_labs": 0.7894,
+        "roc_auc_no_labs": 0.9733
+      },
+      "SALUD_COGNITIVA": {
+        "prediction_threshold": 0.43,
+        "prevalence_test": 0.2682,
+        "roc_auc": 0.9495,
+        "f1": 0.818,
+        "f1_no_labs": 0.8181,
+        "roc_auc_no_labs": 0.9492
+      }
+    }
+  },
+  "knowledge_versions": {
+    "sources": "2026-06-16.2",
+    "conditions": "2026-06-16.2"
+  },
+  "limitations": [
+    "Dataset SEMISINTETICO: filas generadas al azar y etiquetadas con las mismas reglas de condition_rules.csv que usa el runtime. El modelo aprende a reproducir esas reglas; las metricas miden fidelidad a las reglas, no validez clinica. Sin valor diagnostico.",
+    "La salida es un indice de riesgo basado en reglas (score_basis model|model+rules|rules_only), no una probabilidad clinica. En la API se expone como risk_index; `probability` se conserva por compatibilidad.",
+    "Las prevalencias de laboratorio alterado y la disponibilidad de paneles son supuestos del generador, no datos poblacionales peruanos.",
+    "Los umbrales se eligen en una particion de validacion interna del train; el benchmark NHANES semi-curado (scripts/training/calibrar_thresholds_condiciones.py) puede sobrescribirlos con --apply.",
+    "Para riesgo de laboratorio con datos reales ver condition_lab_model (NHANES) y su model card."
+  ],
+  "trained_at": "2026-10-24T06:49:55+00:00",
+  "generated_at": "2026-10-24T06:49:55+00:00"
+}

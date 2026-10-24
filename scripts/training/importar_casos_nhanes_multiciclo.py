@@ -38,7 +38,7 @@ sys.path.insert(0, str(TRAINING_SCRIPT_DIR))
 
 from app.ml.runtime.condition_mvp_inference import _prepare_features, predict_condition_probabilities
 from entrenar_modelo_condiciones import CAT_COLS, NUM_COLS, load_knowledge
-from import_nhanes_condition_mvp_cases import (
+from importar_casos_nhanes_condiciones import (
     egfr_2021_creatinine,
     egfr_status,
     hdl_status,

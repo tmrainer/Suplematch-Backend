@@ -74,6 +74,13 @@ Features principales:
 El dato faltante se modela de forma explicita:
 
 - Labs: categoria `missing` mas `lab_*_observed=0`.
+- **Distribucion realista de laboratorios (2026-10-23).** Antes cada laboratorio faltaba de forma independiente
+  (28 %), asi que P(sin ningun lab) = 0.28^18 ~ 0 y el modelo nunca veia el caso mayoritario "solo encuesta".
+  Ahora `--lab-panel-rate` (default 0.30) fija la fraccion de filas con algun laboratorio; esas filas reciben un
+  panel acotado (`basic` hemograma+glucosa+lipidos 40 %, `metabolic` +renal/hepatico 25 %, `nutritional`
+  vit D/B12/ferritina/folato 20 %, `extended` 15 %) y el resto queda `missing`. Resultado: ~70 % de filas sin
+  laboratorios (`rows_without_labs_share` en `03_dataset_eda_summary.csv`). La etiqueta se calcula DESPUES de
+  aplicar el panel: solo usa lo que el usuario realmente tendria. `--legacy-lab-distribution` reproduce lo anterior.
 - Cantidades dietarias: valor `-1` mas `*_reported=0`.
 - Sintomas: no se usa cero para representar ausencia de respuesta; se generan como escala ordinal.
 
@@ -165,7 +172,9 @@ Motivo:
 Calibracion:
 
 - `label_thresholds`: umbrales de reglas usados para construir la etiqueta semisintetica.
-- `thresholds`: umbrales de prediccion optimizados por etiqueta en el split interno para mejorar F1.
+- `thresholds`: umbrales de prediccion optimizados por etiqueta **en una particion de validacion interna del
+  train (20 %)**, nunca en el test (`threshold_selection="internal_validation_split"` en el artefacto). Hasta
+  2026-10-22 se optimizaban sobre el propio test, lo que inflaba F1/precision/recall reportados.
 - Safety conserva thresholds estrictos si ya logra recall/precision perfectos.
 
 Artefactos:
@@ -173,7 +182,21 @@ Artefactos:
 ```txt
 models/runtime/condition_mvp_model.pkl
 models/runtime/condition_mvp_metadata.csv
+models/runtime/condition_mvp_model_card.json   # hash, datos, metricas (total / sin labs / con labs), limitaciones
 ```
+
+Metricas de referencia (2026-10-23, 10 000 filas, seed 42, `lab_panel_rate=0.30`, umbrales en validacion):
+
+| Metrica | Total (2 200 test) | Solo encuesta (1 541) | Con labs (659) |
+|---|---|---|---|
+| f1_macro | 0.889 | 0.859 (21 etiquetas evaluables) | 0.871 |
+| hamming_loss | 0.024 | — | — |
+
+Lectura honesta: el 0.91 anterior se media con umbrales ajustados en el test y con casi todas las filas con
+laboratorios. Las condiciones que solo se etiquetan por laboratorio (`RIESGO_METABOLICO_GLUCOSA`,
+`RIESGO_DISLIPIDEMIA`, `SAFETY_*`) no son evaluables sin labs (sin positivos); en runtime siguen activandose por
+reglas (`score_basis=rules_only|model+rules`). `SAFETY_RENAL`/`SAFETY_TIROIDEA` tienen <1 % de prevalencia en el
+test, asi que su F1 (0.81 / 0.65) es ruidoso. Estas metricas miden fidelidad a las reglas, no validez clinica.
 
 Metricas:
 
@@ -354,15 +377,21 @@ derived_soft_signal       señales derivadas como brecha proteica o cluster cabe
 
 Interpretación:
 
-- `probability` es la probabilidad final usada por el motor.
+- `probability` es el score final usado por el motor. **No es una probabilidad clinica**: el modelo se entrena
+  con datos sinteticos derivados de `condition_rules.csv`. Desde 2026-10-23 la API lo expone tambien como
+  `risk_index` con `score_semantics="indice_riesgo_reglas"` y `score_label="Índice de riesgo basado en reglas"`
+  (en `condition_results`, `wellness_priorities`, `safety_flags`, `conditions_display` y `explanations`);
+  `probability` se conserva solo por compatibilidad del frontend. Las unicas probabilidades calibradas con datos
+  reales son `lab_risk_estimates` (`score_semantics="probabilidad_calibrada_real"`).
 - `model_probability` es la probabilidad cruda del clasificador.
 - `rule_score` es la suma auditable de reglas coincidentes.
 - `calibrated_by_rules=true` indica que una regla fuerte elevó una condición
   que el clasificador dejaba bajo el threshold.
 - `signal_strength` resume la fuerza: `alta`, `media` o `baja`.
 
-El pipeline principal ahora usa `condition_mvp_model.pkl` como Modelo 1
-preferido. Si no existe, conserva compatibilidad con `modelo1_pipeline.pkl`.
+El pipeline principal usa `condition_mvp_model.pkl` como unico Modelo 1. El RF
+legacy `modelo1_pipeline.pkl` (y su explicabilidad SHAP) se retiro el 2026-10-23;
+si falta `condition_mvp_model.pkl`, `/recommend` responde error y `/health` lo reporta.
 
 ## 7. Casos reales anonimizados
 
@@ -685,7 +714,7 @@ Para convertirlo en modelo real se necesita:
 
 ## 12. Integracion recomendada
 
-No reemplazar automaticamente `modelo1_pipeline.pkl`.
+(Historico) Esta seccion recomendaba no reemplazar `modelo1_pipeline.pkl`; el reemplazo se hizo y el legacy se retiro el 2026-10-23.
 
 Siguiente paso recomendado:
 
@@ -716,6 +745,66 @@ Y devuelva:
 ```
 
 La salida sigue siendo probabilistica. `positive=true` significa que supera el umbral interno de riesgo/prioridad, no que exista diagnostico.
+
+## Contrato de features compartido
+
+Desde `feature_contract_version = 2026-10-22.1` las columnas que consume el clasificador
+viven en UN solo modulo:
+
+```txt
+app/ml/features_contract.py
+```
+
+Lo importan tanto `scripts/training/entrenar_modelo_condiciones.py` (genera el dataset
+sintetico y entrena) como `app/ml/runtime/condition_mvp_inference.py` (prepara el payload
+real antes de `predict_proba`). Antes cada lado tenia su copia y divergian: el training usaba
+11 sintomas y 6 cantidades de dieta, el runtime 12 y 8; `hair_skin_nails_cluster` se
+calculaba distinto; el runtime rellenaba categoricas de perfil con `"unknown"`, un valor que
+el modelo nunca vio. Resultado: el modelo se entrenaba con unas features y se usaba con otras.
+
+Que define el contrato:
+
+- `CAT_COLS` (32) y `NUM_COLS` (133): 165 features, en el orden que espera el pipeline.
+- Grupos: `SYMPTOM_COLS` (12, incluye `digestive_discomfort`), `DIET_QUANTITY_COLS` (8,
+  incluye `fermented_foods_week` y `water_intake_l_day`) con sus `*_reported`,
+  `SOFT_SIGNAL_COLS` (10), `GOAL_CONTEXT_COLS`, `CONTEXT_QUANTITY_COLS`, `LAB_STATUS_COLS`,
+  `BENCHMARK_STATUS_COLS`, `LAB_META_COLS`, `MEDICAL_SAFETY_COLS`.
+- `MISSING_CATEGORY = "missing"`: unica categoria de faltante para toda categorica.
+- `rule_matches`, `attach_soft_signal_features`, `prepare_features`: la misma derivacion
+  determinista en training y runtime.
+- `BUILDER_ONLY_KEYS`: claves que `FeatureBuilder` emite pero que no son features del modelo
+  (insumos crudos ya plegados en otra feature, p. ej. `red_meat_servings_week` ->
+  `meat_servings_week`). El test de paridad exige que el conjunto de claves fuera de contrato
+  sea exactamente este.
+- `FEATURE_CONTRACT_VERSION`: se guarda en el `.pkl` (`feature_contract_version`) y en
+  `condition_mvp_metadata.csv`. Si el runtime carga un artefacto con otra version o con
+  `cat_cols`/`num_cols` distintos, loguea un warning (no falla) pidiendo reentrenar.
+
+Decisiones de paridad (gana la version del runtime porque es la que recibe datos reales):
+
+- 12 sintomas, 8 cantidades de dieta, 10 senales blandas.
+- `hair_skin_nails_cluster` no cuenta `benchmark_diet_zinc_status`: ese estatus ya es feature
+  propia y regla directa de `DEFICIT_ZINC`, y `FeatureBuilder` lo marca `low` para cualquier
+  vegetariano con pocas legumbres, asi que sumarlo haria alcanzar la regla `gte 3` solo con
+  dieta declarada.
+- Un `None` explicito en una categorica se normaliza a `missing` antes de derivar
+  `lab_*_observed`/`observed_lab_count`, para que no cuente como laboratorio observado.
+
+Test de paridad estricto:
+
+```txt
+tests/unit/test_features_contract.py
+tests/unit/test_feature_builder.py
+```
+
+Verifican que (a) `FeatureBuilder` + `prepare_features` produce exactamente
+`CAT_COLS + NUM_COLS` sin extras no declarados, (b) ninguna categoria vale `"unknown"`,
+(c) el `.pkl` tiene `cat_cols`/`num_cols`/`feature_contract_version` iguales al contrato,
+(d) `build_synthetic_row`/`generate_dataset` producen las mismas columnas y (e) las
+derivaciones de runtime reproducen bit a bit las del dataset sintetico.
+
+Si se cambia una columna: subir `FEATURE_CONTRACT_VERSION`, reentrenar con
+`scripts/training/entrenar_modelo_condiciones.py` y volver a correr los tests.
 
 ## 13. Limitaciones
 

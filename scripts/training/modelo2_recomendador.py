@@ -20,7 +20,15 @@ from torch_geometric.utils import negative_sampling
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score
 
-DATA_DIR = "/Users/joaquinsalazar/Desktop/DPD/MODELO"
+import os
+from pathlib import Path
+
+# Directorio con Component_Master_Clean.csv y Component_Relationship_Edges_Clean.csv.
+# Configurable por entorno; por defecto data/training/supplement_model dentro del repo.
+DATA_DIR = os.environ.get(
+    "SUPPLEMENT_MODEL_DATA_DIR",
+    str(Path(__file__).resolve().parents[2] / "data" / "training" / "supplement_model"),
+)
 SEED = 42
 torch.manual_seed(SEED)
 np.random.seed(SEED)

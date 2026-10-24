@@ -2,28 +2,13 @@
 Pipeline completo: Encuesta → Modelo 1 → Condición → Modelo 2 → Recomendación
 """
 
-import pandas as pd
-import joblib
 from app.core.config import settings
-from app.ml.explainability import get_condition_scores, build_explainability
-from app.ml.runtime.condition_mvp_inference import predict_condition_probabilities
+from app.ml.runtime.condition_mvp_inference import apply_second_opinion, predict_condition_probabilities
 from app.ml.runtime.modelo2_inference import recomendar_suplementos
 from app.ml.runtime.feedback_reranker import rerank_packs
 from app.ml.runtime.feedback_store import save_recommendation_event
 
 _MODEL_DIR = settings.MODEL_DIR
-try:
-    _m1 = joblib.load(_MODEL_DIR / "modelo1_pipeline.pkl")
-    _pipe_m1 = _m1["pipeline"]
-    _labels = _m1["labels"]
-    _cat_cols = _m1["cat_cols"]
-    _num_cols = _m1["num_cols"]
-except Exception:
-    _m1 = None
-    _pipe_m1 = None
-    _labels = []
-    _cat_cols = []
-    _num_cols = []
 
 
 def _condition_mvp_available() -> bool:
@@ -68,36 +53,27 @@ def _explainability_from_condition_mvp(condition_details: list[dict]) -> list[di
     return explanations
 
 
-def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float], pd.DataFrame | None, list[dict]]:
-    """Modelo 1: encuesta → condiciones detectadas + probabilidades reales + row_df."""
-    if _condition_mvp_available():
-        condition_details = predict_condition_probabilities(usuario)
-        condition_scores = {
-            item["condition"]: float(item["probability"])
-            for item in condition_details
-        }
-        detected = [
-            item["condition"]
-            for item in condition_details
-            if item["positive"]
-        ]
-        return (detected if detected else ["SALUDABLE"], condition_scores, None, condition_details)
+def predecir_condicion(usuario: dict) -> tuple[list[str], dict[str, float], list[dict]]:
+    """Modelo 1 (condition_mvp): encuesta → condiciones detectadas + scores por condicion + detalle.
 
-    if _pipe_m1 is None:
-        raise RuntimeError("No hay modelo 1 disponible.")
+    Los scores NO son probabilidades clinicas: el modelo se entrena con datos sinteticos derivados de
+    condition_rules.csv y las reglas pueden elevar el score (ver `score_basis` en condition_details).
+    """
+    if not _condition_mvp_available():
+        raise RuntimeError("No hay modelo 1 disponible: falta condition_mvp_model.pkl en MODEL_DIR.")
 
-    cols = _cat_cols + _num_cols
-    row  = pd.DataFrame([usuario])[cols]
-
-    condition_scores = get_condition_scores(_pipe_m1, _labels, row)
-
-    if condition_scores:
-        detected = [label for label, score in condition_scores.items() if score >= 0.45]
-    else:
-        pred = _pipe_m1.predict(row)[0]
-        detected = [_labels[i] for i, v in enumerate(pred) if v == 1]
-
-    return (detected if detected else ["SALUDABLE"]), condition_scores, row, []
+    # "_second_opinion" lo agrega el servicio con las estimaciones positivas del modelo real (NHANES).
+    condition_details = apply_second_opinion(predict_condition_probabilities(usuario), usuario.get("_second_opinion"))
+    condition_scores = {
+        item["condition"]: float(item["probability"])
+        for item in condition_details
+    }
+    detected = [
+        item["condition"]
+        for item in condition_details
+        if item["positive"]
+    ]
+    return (detected if detected else ["SALUDABLE"], condition_scores, condition_details)
 
 
 def pipeline_vitaminas(usuario: dict, verbose: bool = False) -> dict:
@@ -106,7 +82,7 @@ def pipeline_vitaminas(usuario: dict, verbose: bool = False) -> dict:
 
     Retorna dict con:
         condiciones       : list[str]
-        condition_scores  : dict[str, float]  ← probabilidades reales del Modelo 1
+        condition_scores  : dict[str, float]  ← score por condicion del Modelo 1 (indice basado en reglas/modelo)
         explainability    : list[dict]         ← drivers por condición
         recomendaciones   : list[dict]
         sinergias         : list[tuple]
@@ -115,7 +91,7 @@ def pipeline_vitaminas(usuario: dict, verbose: bool = False) -> dict:
         packs_ranked      : list[dict]
         mensaje           : str
     """
-    condiciones, condition_scores, row_df, condition_details = predecir_condicion(usuario)
+    condiciones, condition_scores, condition_details = predecir_condicion(usuario)
 
     resultado = recomendar_suplementos(
         condiciones,
@@ -125,12 +101,7 @@ def pipeline_vitaminas(usuario: dict, verbose: bool = False) -> dict:
     resultado["condiciones"]      = condiciones
     resultado["condition_scores"] = condition_scores
     resultado["condition_details"] = condition_details
-    if condition_details:
-        resultado["explainability"] = _explainability_from_condition_mvp(condition_details)
-    else:
-        resultado["explainability"] = build_explainability(
-            _pipe_m1, _labels, row_df, condition_scores, usuario
-        )
+    resultado["explainability"] = _explainability_from_condition_mvp(condition_details)
 
     packs_ranked = rerank_packs(
         recomendaciones=resultado.get("recomendaciones", []),

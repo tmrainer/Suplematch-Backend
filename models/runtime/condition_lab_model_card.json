@@ -1,0 +1,260 @@
+{
+  "model": "condition_lab_model",
+  "sha256_16": "b6cc26f3754b62d0",
+  "task": "Probabilidad de laboratorio fuera de rango a partir del cuestionario (sin laboratorios como entrada).",
+  "data": {
+    "source": "NHANES (CDC)",
+    "train": "2015_2016",
+    "test": "2017_2018",
+    "min_age": 18,
+    "quick": false,
+    "n_train_adults": 5992,
+    "n_test_adults": 5856
+  },
+  "targets_and_cutoffs": {
+    "target_vitamin_d_low": "25-OH-D < 20.0 ng/mL (NIH ODS; NHANES en nmol/L x0.4)",
+    "target_ferritin_low": "ferritina < 30.0 ng/mL",
+    "target_anemia": "Hb < 13 g/dL hombres, < 12 g/dL mujeres (OMS 2024)",
+    "target_glucose_high": "glucosa ayunas >= 100.0 mg/dL",
+    "target_cholesterol_high": "colesterol total >= 200.0 mg/dL",
+    "target_hdl_low": "HDL < 40.0 mg/dL",
+    "target_alt_high": "ALT > 40.0 U/L"
+  },
+  "features": {
+    "categorical": [
+      "sexo",
+      "etnia",
+      "educacion",
+      "fuma",
+      "actividad_vigorosa",
+      "actividad_moderada",
+      "diabetes_dx",
+      "sueno_problemas",
+      "salud_autopercibida",
+      "embarazo"
+    ],
+    "numeric": [
+      "edad",
+      "bmi",
+      "peso_kg",
+      "talla_cm",
+      "ingreso_ratio",
+      "sup_count",
+      "sup_vit_d_mcg",
+      "sup_hierro_mg",
+      "sup_b12_mcg",
+      "sup_folico_mcg",
+      "sup_calcio_mg",
+      "sup_magnesio_mg",
+      "sup_zinc_mg",
+      "sup_vit_c_mg",
+      "dieta_kcal",
+      "dieta_proteina_g",
+      "dieta_vit_d_mcg",
+      "dieta_hierro_mg",
+      "dieta_b12_mcg",
+      "dieta_folato_mcg",
+      "dieta_calcio_mg",
+      "dieta_magnesio_mg",
+      "dieta_zinc_mg",
+      "dieta_vit_c_mg",
+      "dieta_fibra_g",
+      "alcohol_tragos_dia",
+      "sueno_horas"
+    ],
+    "contract_version": "nhanes_questionnaire_v1_2026-10-22"
+  },
+  "algorithm": "LogisticRegression (balanced, C=0.5) + CalibratedClassifierCV(sigmoid, cv=3); umbral por F1 en validacion interna, minimo 0.30",
+  "metrics_test": {
+    "target_vitamin_d_low": {
+      "n": 5225,
+      "prevalence": 0.2951196172248804,
+      "roc_auc": 0.8149592212686819,
+      "average_precision": 0.6294544035249643,
+      "brier": 0.1551190154971362,
+      "brier_baseline_prevalence": 0.20802402875392045,
+      "ece": 0.02866860216909906,
+      "threshold": 0.34,
+      "f1": 0.6234648549777894,
+      "precision": 0.5221006564551423,
+      "recall": 0.7736705577172504,
+      "n_train": 5421,
+      "positives_train": 1801,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    },
+    "target_ferritin_low": {
+      "n": 1303,
+      "prevalence": 0.38679969301611666,
+      "roc_auc": 0.5762287184377297,
+      "average_precision": 0.4418402252847131,
+      "brier": 0.23440152729819635,
+      "brier_baseline_prevalence": 0.23718569049875457,
+      "ece": 0.029908286740210975,
+      "threshold": 0.3,
+      "f1": 0.5562395075545608,
+      "precision": 0.387373343725643,
+      "recall": 0.9861111111111112,
+      "n_train": 1503,
+      "positives_train": 576,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "sexo": "femenino",
+        "edad_max": 49
+      }
+    },
+    "target_anemia": {
+      "n": 5271,
+      "prevalence": 0.10605198254600645,
+      "roc_auc": 0.7371310185846058,
+      "average_precision": 0.24607050367544664,
+      "brier": 0.0882379663655638,
+      "brier_baseline_prevalence": 0.094804959544068,
+      "ece": 0.015868489474144674,
+      "threshold": 0.32,
+      "f1": 0.18604651162790697,
+      "precision": 0.33488372093023255,
+      "recall": 0.12880143112701253,
+      "n_train": 5423,
+      "positives_train": 646,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    },
+    "target_glucose_high": {
+      "n": 2537,
+      "prevalence": 0.6373669688608593,
+      "roc_auc": 0.7619934930493937,
+      "average_precision": 0.8432391723219392,
+      "brier": 0.1874681917529719,
+      "brier_baseline_prevalence": 0.23113031586597968,
+      "ece": 0.04597685163366893,
+      "threshold": 0.38000000000000006,
+      "f1": 0.8037333333333333,
+      "precision": 0.706516643225504,
+      "recall": 0.9319727891156463,
+      "n_train": 2573,
+      "positives_train": 1505,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    },
+    "target_cholesterol_high": {
+      "n": 5176,
+      "prevalence": 0.34370170015455953,
+      "roc_auc": 0.6483475897044362,
+      "average_precision": 0.46072701602542776,
+      "brier": 0.2134588834411713,
+      "brier_baseline_prevalence": 0.22557084146542475,
+      "ece": 0.03205369815884161,
+      "threshold": 0.32,
+      "f1": 0.5371757925072046,
+      "precision": 0.4080560420315236,
+      "recall": 0.7858347386172007,
+      "n_train": 5394,
+      "positives_train": 1990,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    },
+    "target_hdl_low": {
+      "n": 5176,
+      "prevalence": 0.1705950540958269,
+      "roc_auc": 0.7490418044703393,
+      "average_precision": 0.36837483610422195,
+      "brier": 0.12568174567534257,
+      "brier_baseline_prevalence": 0.1414923816138688,
+      "ece": 0.021528798581486975,
+      "threshold": 0.3,
+      "f1": 0.40022172949002216,
+      "precision": 0.3919652551574376,
+      "recall": 0.4088335220838052,
+      "n_train": 5394,
+      "positives_train": 1029,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    },
+    "target_alt_high": {
+      "n": 5153,
+      "prevalence": 0.08771589365418203,
+      "roc_auc": 0.695363724155847,
+      "average_precision": 0.19108372039341648,
+      "brier": 0.07657182608081171,
+      "brier_baseline_prevalence": 0.08002181565463028,
+      "ece": 0.016337186913366667,
+      "threshold": 0.34,
+      "f1": 0.03305785123966942,
+      "precision": 0.25,
+      "recall": 0.017699115044247787,
+      "n_train": 5386,
+      "positives_train": 540,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    }
+  },
+  "limitations": [
+    "Poblacion de EE. UU.; no validado en Peru. Validar anemia con ENDES antes de usar DEFICIT_HIERRO en produccion.",
+    "Sin pesos muestrales de NHANES: metricas no representan prevalencia poblacional.",
+    "El cuestionario NHANES no es la encuesta SupleMatch: el mapeo de features es aproximado (ver features_from_questionnaire).",
+    "No es diagnostico. Salida = probabilidad calibrada de laboratorio fuera de rango, para priorizar recomendaciones y sugerir un examen."
+  ],
+  "generated_at": "2026-10-22T23:45:31.757229+00:00",
+  "peru_validation": {
+    "source": "ENDES 2022 y 2024 (INEI, datosabiertos.gob.pe), mujeres 18-49 con hemoglobina medida (V455=0), target V457 (anemia INEI, Hb ajustada por altitud; acuerdo 100% con corte OMS sobre V456)",
+    "n": {
+      "2022": 28947,
+      "2024": 27464
+    },
+    "prevalence": {
+      "2022": 0.217,
+      "2024": 0.242
+    },
+    "target_anemia_nhanes_as_is": {
+      "2022": {
+        "roc_auc": 0.501,
+        "average_precision": 0.22,
+        "brier": 0.175,
+        "brier_baseline_prevalence": 0.17,
+        "ece": 0.061,
+        "recall": 0.071
+      },
+      "2024": {
+        "roc_auc": 0.497,
+        "average_precision": 0.243,
+        "brier": 0.19,
+        "brier_baseline_prevalence": 0.183,
+        "ece": 0.066,
+        "recall": 0.069
+      }
+    },
+    "target_anemia_nhanes_recalibrated_2024": {
+      "roc_auc": 0.498,
+      "brier": 0.184,
+      "ece": 0.025
+    },
+    "endes_native_model_2024": {
+      "roc_auc": 0.573,
+      "average_precision": 0.303,
+      "brier": 0.181,
+      "ece": 0.024
+    },
+    "decision": "target_anemia excluido de lab_risk_estimates (EXCLUDED_TARGETS). Los demas targets siguen sin validacion peruana: ENDES no mide vitamina D, glucosa ni lipidos.",
+    "validated_at": "2026-10-23T01:42:25.748593+00:00"
+  }
+}

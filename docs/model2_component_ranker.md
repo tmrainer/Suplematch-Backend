@@ -21,6 +21,25 @@ component_id
 -> productos reales por farmacia, precio, stock y registro sanitario
 ```
 
+## Artefacto GNN y model card (2026-10-23)
+
+`models/runtime/modelo2_artifacts.pkl` se reentrenó con `scripts/training/modelo2_train.py` (GraphSAGE 2 capas,
+935 nodos, split 70/30 de aristas, seed 42) y ahora viene con `models/runtime/modelo2_model_card.json` (hash del
+`.pkl` y de los CSV del grafo, aristas por clase, métricas en aristas reservadas, umbral de aceptación y
+limitaciones). Link prediction en aristas reservadas: **ROC-AUC 0.940, AP 0.937** (umbral 0.65; la evaluación
+exploratoria del 2026-10-22 dio 0.974 con otro early stop). El test `tests/unit/test_model_cards.py` exige que el
+hash de la card coincida con el artefacto servido.
+
+Nodos equivalentes: el grafo tiene varios nodos por componente real ("Vitamin D", "Vitamin D (cholecalciferol)",
+"Vitamin D (MedlinePlus Supplements)"...). `data/knowledge/gnn_node_equivalences.csv` (142 nodos → 27 ids
+canónicos; generado por `scripts/ops/generar_equivalencias_gnn.py`, reglas `exact|qualified|source_page|salt_form`)
+los colapsa en inferencia: un candidato GNN equivalente a un componente ya recomendado se descarta y la
+deduplicación final usa el id canónico (`canonical_graph_id`). Cada `candidato_gnn` expone
+`graph_node_canonical_id`.
+
+Benchmark de 27 casos con el artefacto nuevo: top3 1.000, block 1.000, risk_avoidance 1.000, commercial_coverage
+0.963, pharmacy_diversity 0.383.
+
 ## Fuentes
 
 El ranker usa:

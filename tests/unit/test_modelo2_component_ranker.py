@@ -1,5 +1,20 @@
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+from app.core.config import settings
+
+# Requiere el artefacto del Modelo 2 y torch (para deserializar los embeddings). En CI limpio se omite.
+needs_model2 = pytest.mark.skipif(
+    not (Path(settings.MODEL_DIR) / "modelo2_artifacts.pkl").exists() or importlib.util.find_spec("torch") is None,
+    reason="modelo2_artifacts.pkl o torch no disponibles (artefacto no versionado)",
+)
+
+pytestmark = needs_model2
+
 from app.domains.recommendations.servicio_recomendaciones import _attach_products_to_recommendations
 from app.ml.runtime.feedback_reranker import rerank_packs
 from app.ml.runtime.modelo2_inference import _component_enrichment, recomendar_suplementos

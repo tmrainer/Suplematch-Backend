@@ -117,6 +117,19 @@ class FeatureBuilder:
         "alta": 5,
     }
 
+    # Proteina de alimentos que el bloque semanal no pregunta (arroz, pan, fideos, quinua, papa). Heuristica
+    # conservadora pendiente de revision por nutricionista; sin ella toda dieta salia con proteina "critica".
+    BASE_PROTEIN_OTHER_FOODS_G = 15.0
+    # Porcion tipica de proteina en polvo cuando la persona no declara la dosis.
+    PROTEIN_SUPPLEMENT_DEFAULT_G = 20.0
+    # Grupos que el tipo de dieta excluye: se toman como 0 porciones aunque no se respondan.
+    DIET_IMPLIED_ZERO = {
+        "vegano": {"red_meat", "poultry", "fish", "eggs", "dairy"},
+        "vegetariano": {"red_meat", "poultry", "fish"},
+        "pescetariano": {"red_meat", "poultry"},
+        "omnivoro": set(),
+    }
+
     @staticmethod
     def _quantity(encuesta: EncuestaInput, field: str) -> float | None:
         value = getattr(encuesta, field, None)
@@ -131,7 +144,7 @@ class FeatureBuilder:
     @staticmethod
     def _status_from_value(value: float | None, low: float, critical: float | None = None, high_is_better: bool = True) -> str:
         if value is None:
-            return "unknown"
+            return "missing"
 
         critical = low if critical is None else critical
         if high_is_better:
@@ -154,7 +167,7 @@ class FeatureBuilder:
         if tipo_dieta == "vegetariano":
             return "low"
         if meat_servings_week is None:
-            return "unknown"
+            return "missing"
         if meat_servings_week <= 0.5:
             return "critical_low"
         if meat_servings_week <= 2:
@@ -164,7 +177,7 @@ class FeatureBuilder:
     @staticmethod
     def _diet_protein_status(protein_g_day: float | None, weight_kg: float) -> str:
         if protein_g_day is None:
-            return "unknown"
+            return "missing"
 
         grams_per_kg = protein_g_day / max(weight_kg, 1.0)
         if grams_per_kg < 0.55:
@@ -176,7 +189,7 @@ class FeatureBuilder:
     @staticmethod
     def _diet_folate_status(legumes_week: float | None, fruit_veg_day: float | None) -> str:
         if legumes_week is None and fruit_veg_day is None:
-            return "unknown"
+            return "missing"
 
         legumes = legumes_week or 0.0
         fruit_veg = fruit_veg_day or 0.0
@@ -188,8 +201,11 @@ class FeatureBuilder:
 
     @staticmethod
     def _diet_zinc_status(tipo_dieta: str, meat_servings_week: float | None, legume_servings_week: float | None) -> str:
-        if meat_servings_week is None and legume_servings_week is None and tipo_dieta not in {"vegano", "vegetariano"}:
-            return "unknown"
+        # Faltante si falta lo que define el riesgo: carne en omnivoros, menestras en vegetarianos.
+        if meat_servings_week is None and tipo_dieta not in {"vegano", "vegetariano"}:
+            return "missing"
+        if legume_servings_week is None and (tipo_dieta in {"vegano", "vegetariano"} or meat_servings_week <= 2):
+            return "missing"
 
         meat = meat_servings_week or 0.0
         legumes = legume_servings_week or 0.0
@@ -210,18 +226,28 @@ class FeatureBuilder:
         legumes_week: float | None,
         dairy_week: float | None,
     ) -> float | None:
-        if all(value is None for value in (red_meat_week, poultry_week, fish_week, eggs_week, legumes_week, dairy_week)):
+        """Estimacion solo con el bloque completo. Antes un grupo sin responder contaba como 0 porciones y un
+        bloque a medias daba proteina "critica"; ahora devuelve None (faltante) si falta cualquier grupo."""
+        values = (red_meat_week, poultry_week, fish_week, eggs_week, legumes_week, dairy_week)
+        if any(value is None for value in values):
             return None
 
         weekly_grams = (
-            (red_meat_week or 0.0) * 25.0
-            + (poultry_week or 0.0) * 25.0
-            + (fish_week or 0.0) * 22.0
-            + (eggs_week or 0.0) * 6.0
-            + (legumes_week or 0.0) * 12.0
-            + (dairy_week or 0.0) * 8.0
+            red_meat_week * 25.0
+            + poultry_week * 25.0
+            + fish_week * 22.0
+            + eggs_week * 6.0
+            + legumes_week * 12.0
+            + dairy_week * 8.0
         )
-        return round(weekly_grams / 7.0, 2)
+        return round(weekly_grams / 7.0 + FeatureBuilder.BASE_PROTEIN_OTHER_FOODS_G, 2)
+
+    @staticmethod
+    def _answered_count(flags: list[bool | None]) -> int:
+        """Cuenta factores presentes; -1 si ninguna de las preguntas se respondio (dato faltante)."""
+        if all(flag is None for flag in flags):
+            return -1
+        return sum(1 for flag in flags if flag)
 
     def build_pipeline_payload(self, encuesta: EncuestaInput) -> dict:
         edad = int(encuesta.age_years) if getattr(encuesta, "age_years", None) is not None else self.EDAD_MAP[encuesta.edad_rango]
@@ -239,11 +265,10 @@ class FeatureBuilder:
             elif alcohol_drinks_week >= 4:
                 alcohol_bonus = max(alcohol_bonus, 1)
         tipo_dieta = self.TIPO_DIETA_MAP[getattr(encuesta, "tipo_dieta", "omnivoro")]
-        objetivos = set(getattr(encuesta, "objetivos", []) or [])
-        objetivo_principal = getattr(encuesta, "objetivo_principal", None)
 
-        # Dieta poco variada incrementa riesgo de déficits
-        dieta_deficiente = encuesta.dieta in ("poco_variada", "regular") or tipo_dieta in ("vegano", "vegetariano")
+        # Solo "poco variada" cuenta por si sola. "Regular" (la respuesta mas comun) y ser vegetariano ya no marcan
+        # dieta deficiente: el riesgo concreto (B12, zinc, hierro) lo capturan los estados por nutriente.
+        dieta_deficiente = encuesta.dieta == "poco_variada"
         dolor_muscular = self.SEVERIDAD_MAP[getattr(encuesta, "dolor_muscular", "leve")]
         dolor_articular = self.SEVERIDAD_MAP[getattr(encuesta, "dolor_articular", "leve")]
         niebla_mental = self.SEVERIDAD_MAP[getattr(encuesta, "niebla_mental", "leve")]
@@ -285,20 +310,29 @@ class FeatureBuilder:
             recovery_score = self.RECOVERY_MAP[recovery_difficulty]
             dolor_muscular = max(dolor_muscular, recovery_score)
 
-        fish_servings_week = self._quantity(encuesta, "fish_servings_week")
+        implied_zero = self.DIET_IMPLIED_ZERO.get(tipo_dieta, set())
+
+        def food(field: str, group: str) -> float | None:
+            value = self._quantity(encuesta, field)
+            return 0.0 if value is None and group in implied_zero else value
+
+        fish_servings_week = food("fish_servings_week", "fish")
         dairy_servings_day = self._quantity(encuesta, "dairy_servings_day")
         legume_servings_week = self._quantity(encuesta, "legume_servings_week")
-        red_meat_servings_week = self._quantity(encuesta, "red_meat_servings_week")
-        poultry_servings_week = self._quantity(encuesta, "poultry_servings_week")
-        eggs_servings_week = self._quantity(encuesta, "eggs_servings_week")
+        red_meat_servings_week = food("red_meat_servings_week", "red_meat")
+        poultry_servings_week = food("poultry_servings_week", "poultry")
+        eggs_servings_week = food("eggs_servings_week", "eggs")
         meat_servings_week = self._quantity(encuesta, "meat_servings_week")
-        if meat_servings_week is None and (red_meat_servings_week is not None or poultry_servings_week is not None):
-            meat_servings_week = (red_meat_servings_week or 0.0) + (poultry_servings_week or 0.0)
+        if meat_servings_week is None and red_meat_servings_week is not None and poultry_servings_week is not None:
+            meat_servings_week = red_meat_servings_week + poultry_servings_week
         fruit_veg_servings_day = self._quantity(encuesta, "fruit_veg_servings_day")
         protein_g_day_estimate = self._quantity(encuesta, "protein_g_day_estimate")
-        dairy_servings_week = self._quantity(encuesta, "dairy_servings_week")
+        dairy_servings_week = food("dairy_servings_week", "dairy")
         if dairy_servings_week is None and dairy_servings_day is not None:
             dairy_servings_week = dairy_servings_day * 7
+        if dairy_servings_day is None and dairy_servings_week is not None:
+            dairy_servings_day = round(dairy_servings_week / 7, 4)
+        suplementos = set(getattr(encuesta, "suplementos_actuales", []) or [])
         if protein_g_day_estimate is None:
             protein_g_day_estimate = self._estimated_protein_g_day(
                 red_meat_servings_week,
@@ -308,6 +342,11 @@ class FeatureBuilder:
                 legume_servings_week,
                 dairy_servings_week,
             )
+            # Factor protector: la proteina en polvo declarada suma a la estimacion (no la inventa si falta comida).
+            if protein_g_day_estimate is not None and "proteina" in suplementos:
+                dose = (getattr(encuesta, "suplementos_dosis_actual", {}) or {}).get("proteina")
+                grams = float(dose.amount) if dose is not None and str(dose.unit).lower().startswith("g") else self.PROTEIN_SUPPLEMENT_DEFAULT_G
+                protein_g_day_estimate = round(protein_g_day_estimate + grams, 2)
         fermented_foods_week = self._quantity(encuesta, "fermented_foods_week")
         water_intake_l_day = self._quantity(encuesta, "water_intake_l_day")
         screen_hours_day = self._quantity(encuesta, "screen_hours_day")
@@ -323,6 +362,15 @@ class FeatureBuilder:
                 fatiga_general = max(fatiga_general, 4)
             elif fatigue_days_week >= 1:
                 fatiga_general = max(fatiga_general, 3)
+
+        # Seguimiento de fatiga: si es reciente (<2 semanas) o se explica por dormir poco y mejora al descansar,
+        # no se trata como señal nutricional persistente (queda en "a veces").
+        fatiga_duracion = getattr(encuesta, "fatiga_duracion", None)
+        fatiga_mejora_descanso = getattr(encuesta, "fatiga_mejora_descanso", None)
+        if fatiga_duracion == "menos_2_semanas":
+            fatiga_general = min(fatiga_general, 3)
+        if fatiga_mejora_descanso == "si" and problemas_sueno >= 4:
+            fatiga_general = min(fatiga_general, 3)
 
         if caffeine_servings_day is not None and caffeine_servings_day >= 3:
             irritabilidad = min(5, max(irritabilidad, 4))
@@ -340,36 +388,75 @@ class FeatureBuilder:
         diet_zinc_status = self._diet_zinc_status(tipo_dieta, meat_servings_week, legume_servings_week)
         diet_b12_status = self._diet_b12_status(tipo_dieta, meat_servings_week)
         diet_protein_status = self._diet_protein_status(protein_g_day_estimate, weight_kg)
+
+        # Factores protectores y de riesgo de B12: suplemento con B12 o alimentos fortificados cubren la ingesta;
+        # una dieta vegana de menos de un año aun no agota reservas (riesgo "low", no "critical_low").
+        fortificados_b12 = getattr(encuesta, "alimentos_fortificados_b12", None)
+        anios_dieta_vegetal = getattr(encuesta, "anios_dieta_vegetal", None)
+        medicamentos_b12 = list(getattr(encuesta, "medicamentos_b12", []) or [])
+        b12_covered = bool(suplementos & {"vitamina_b12", "multivitaminico"}) or fortificados_b12 == "si"
+        if b12_covered:
+            diet_b12_status = "normal"
+        elif tipo_dieta == "vegano" and anios_dieta_vegetal == "menos_1":
+            diet_b12_status = "low"
+        b12_answered = bool(medicamentos_b12) or anios_dieta_vegetal is not None or fortificados_b12 is not None
+        b12_absorption_risk = (
+            len(medicamentos_b12) + (1 if anios_dieta_vegetal == "mas_3" and not b12_covered else 0)
+            if b12_answered else -1
+        )
+
+        menstruacion = getattr(encuesta, "menstruacion_abundante", None)
+        parto = getattr(encuesta, "parto_ultimo_anio", None)
+        dona_sangre = getattr(encuesta, "dona_sangre", None)
+        iron_loss_risk = self._answered_count([
+            None if menstruacion is None else menstruacion == "si",
+            None if parto is None else parto == "si",
+            None if dona_sangre is None else dona_sangre == "2_o_mas_al_anio",
+        ])
+        protector_solar = getattr(encuesta, "protector_solar", None)
+        piel_expuesta = getattr(encuesta, "piel_expuesta", None)
+        vitamin_d_sun_barrier = self._answered_count([
+            None if protector_solar is None else protector_solar == "siempre",
+            None if piel_expuesta is None else piel_expuesta == "cara_manos",
+        ])
+
         if getattr(encuesta, "iron_anemia_history", None) == "si":
             diet_folate_status = "low" if diet_folate_status == "normal" else diet_folate_status
             dieta_deficiente = True
 
-        if any(
-            status in {"low", "critical_low"}
-            for status in (
-                diet_omega3_status,
-                diet_calcium_status,
-                diet_vitamin_c_status,
-                diet_magnesium_status,
-                diet_folate_status,
-                diet_zinc_status,
-                diet_b12_status,
-                diet_protein_status,
-            )
-        ):
+        # Antes bastaba UN nutriente bajo para marcar dieta deficiente, y esa bandera suma en varias condiciones a
+        # la vez (fatiga, vitamina C, omega 3, digestiva...). Ahora hacen falta dos, y solo cuentan estados que salen
+        # de cantidades respondidas: B12 y omega 3 bajos solo por ser vegetariano ya suman en DEFICIT_B12 y
+        # RIESGO_OMEGA3_BAJO; contarlos tambien aqui marcaba como deficiente a cualquier vegetariano.
+        counted_statuses = [
+            diet_calcium_status,
+            diet_vitamin_c_status,
+            diet_magnesium_status,
+            diet_folate_status,
+            diet_zinc_status,
+            diet_protein_status,
+        ]
+        if self._quantity(encuesta, "fish_servings_week") is not None:
+            counted_statuses.append(diet_omega3_status)
+        if tipo_dieta not in {"vegano", "vegetariano"}:
+            counted_statuses.append(diet_b12_status)
+        low_diet_statuses = sum(1 for status in counted_statuses if status in {"low", "critical_low"})
+        if low_diet_statuses >= 2:
             dieta_deficiente = True
 
-        meta_energia = 1 if objetivo_principal == "energia" or "energia" in objetivos or fatiga_general >= 3 or problemas_sueno >= 4 or dieta_deficiente else 0
-        meta_inmunidad = 1 if objetivo_principal == "inmunidad" or "inmunidad" in objetivos or enfermedad_frecuente >= 3 or alcohol_bonus >= 1 else 0
-        meta_salud_osea = 1 if objetivo_principal == "salud_osea" or "salud_osea" in objetivos or exposicion_solar == "baja" or edad >= 50 or dieta_deficiente else 0
-        meta_cognitivo = 1 if objetivo_principal == "suenio_estres" or "suenio" in objetivos or "estres" in objetivos or irritabilidad >= 4 or problemas_sueno >= 4 else 0
-        meta_belleza = 1 if objetivo_principal == "cabello_piel_unas" or "cabello_piel_unas" in objetivos or max(caida_cabello, piel_seca, unas_quebradizas) >= 3 else 0
-        meta_rendimiento = 1 if objetivo_principal == "rendimiento" or "rendimiento" in objetivos or nivel_actividad in ["activo", "muy_activo"] else 0
-        meta_visual = 1 if objetivo_principal == "salud_visual" or "salud_visual" in objetivos or (screen_hours_day is not None and screen_hours_day >= 6) else 0
-        meta_digestiva = 1 if objetivo_principal == "digestion" or "digestion" in objetivos or digestive_discomfort >= 3 else 0
-        meta_hidratacion = 1 if objetivo_principal == "hidratacion" or "hidratacion" in objetivos or calambres >= 3 or meta_hidratacion_headache or (heavy_sweat_days_week is not None and heavy_sweat_days_week >= 3) else 0
-        meta_cardiovascular = 1 if objetivo_principal == "salud_cardiovascular" or "salud_cardiovascular" in objetivos or edad >= 50 else 0
-        meta_cognitivo = max(meta_cognitivo, 1 if objetivo_principal == "salud_cognitiva" or "salud_cognitiva" in objetivos else 0)
+        # Las banderas meta_* son señales de contexto (sintomas, habitos, edad). Los objetivos que elige la persona
+        # ya NO entran aqui: querer "energia" no es tener fatiga. Los objetivos solo ordenan resultados
+        # (servicio_recomendaciones._order_by_goals).
+        meta_energia = 1 if fatiga_general >= 3 or problemas_sueno >= 4 or dieta_deficiente else 0
+        meta_inmunidad = 1 if enfermedad_frecuente >= 3 or alcohol_bonus >= 1 else 0
+        meta_salud_osea = 1 if exposicion_solar == "baja" or edad >= 50 or dieta_deficiente else 0
+        meta_cognitivo = 1 if irritabilidad >= 4 or problemas_sueno >= 4 else 0
+        meta_belleza = 1 if max(caida_cabello, piel_seca, unas_quebradizas) >= 3 else 0
+        meta_rendimiento = 1 if nivel_actividad in ["activo", "muy_activo"] else 0
+        meta_visual = 1 if screen_hours_day is not None and screen_hours_day >= 6 else 0
+        meta_digestiva = 1 if digestive_discomfort >= 3 else 0
+        meta_hidratacion = 1 if calambres >= 3 or meta_hidratacion_headache or (heavy_sweat_days_week is not None and heavy_sweat_days_week >= 3) else 0
+        meta_cardiovascular = 1 if edad >= 50 else 0
 
         return {
             "sexo": self.SEXO_MAP.get(getattr(encuesta, "sexo", "femenino"), "F"),
@@ -435,4 +522,8 @@ class FeatureBuilder:
             "benchmark_diet_folate_status": diet_folate_status,
             "benchmark_diet_protein_status": diet_protein_status,
             "benchmark_diet_omega3_status": diet_omega3_status,
+
+            "iron_loss_risk": iron_loss_risk,
+            "vitamin_d_sun_barrier": vitamin_d_sun_barrier,
+            "b12_absorption_risk": b12_absorption_risk,
         }

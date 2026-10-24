@@ -4,7 +4,9 @@ Carga artefactos pre-entrenados. Sin re-entrenamiento.
 Requiere: modelo2_artifacts.pkl (generado por modelo2_train.py)
 """
 
+import csv
 from functools import lru_cache
+import logging
 import re
 import unicodedata
 
@@ -21,7 +23,13 @@ _COMPONENT_EVIDENCE_PROFILES_PATH = BASE_DIR / "data/knowledge/component_evidenc
 _COMPONENT_LIFE_STAGE_GUIDANCE_PATH = BASE_DIR / "data/knowledge/component_life_stage_guidance.csv"
 _COMPONENT_INTERACTION_RULES_PATH = BASE_DIR / "data/knowledge/component_interaction_rules.csv"
 _COMPONENT_CLAIM_EVIDENCE_PATH = BASE_DIR / "data/knowledge/component_claim_evidence.csv"
+_COMPONENT_ALIASES_PATH = BASE_DIR / "data/knowledge/component_aliases.csv"
+# Nodos del grafo GNN que representan el mismo componente canonico ("Vitamin D", "Vitamin D (cholecalciferol)",
+# "Vitamin D (MedlinePlus Supplements)"...). Generado por scripts/ops/generar_equivalencias_gnn.py.
+_GNN_NODE_EQUIVALENCES_PATH = BASE_DIR / "data/knowledge/gnn_node_equivalences.csv"
 _TORCH_CPU_FALLBACK_REGISTERED = False
+
+logger = logging.getLogger(__name__)
 
 RANKER_VERSION = "component_ranker_v2"
 
@@ -50,6 +58,16 @@ NON_COMMERCIAL_CONTEXT_CONDITIONS = WELLNESS_CONTEXT_CONDITIONS | {
     "SAFETY_TIROIDEA",
 }
 
+# Pesos por nivel de evidencia. Fuente de verdad: columna `evidence_grade` de
+# condition_component_links.csv (vocabulario en docs/knowledge_evidence_vocabulary.md).
+# `EVIDENCE_WEIGHTS` (evidence_strength legado) se mantiene solo como fallback.
+EVIDENCE_GRADE_WEIGHTS = {
+    "high": 1.0,
+    "moderate": 0.82,
+    "low": 0.72,
+    "very_low": 0.62,
+    "expert_opinion": 0.58,
+}
 EVIDENCE_WEIGHTS = {
     "high": 1.0,
     "strong": 1.0,
@@ -89,156 +107,6 @@ RISK_LEVEL_PENALTIES = {
     "moderate_high": 0.14,
     "high": 0.25,
 }
-
-COMPONENT_ALIASES = {
-    "acido folico": ("Folate", "Folic Acid"),
-    "acido pantotenico": ("Pantothenic Acid",),
-    "ashwagandha": ("Withania somnifera",),
-    "biotina": ("Biotin",),
-    "cafeina": ("Caffeine",),
-    "calcio": ("Calcium",),
-    "carnitina": ("L-Carnitine", "Carnitine"),
-    "coenzima q10": ("Coenzyme Q10", "CoQ10"),
-    "colageno": ("Collagen", "Collagen Hydrolyzed", "Hydrolyzed Collagen"),
-    "colina": ("Choline",),
-    "cobre": ("Copper",),
-    "creatina": ("Creatina monohidrato", "Creatine monohydrate", "Creatine"),
-    "cromo": ("Chromium", "Chromium Picolinate"),
-    "dha": ("Docosahexaenoic Acid", "DHA"),
-    "epa": ("Eicosapentaenoic Acid", "EPA"),
-    "hierro": ("Iron",),
-    "l teanina": ("L-Theanine", "Theanine"),
-    "luteina": ("Lutein",),
-    "magnesio": ("Magnesium",),
-    "manganeso": ("Manganese",),
-    "melatonina": ("Melatonin",),
-    "niacina": ("Niacin", "Vitamin B3", "Nicotinamide", "Niacinamide"),
-    "omega 3": ("Omega-3 Fatty Acids", "Omega-3", "Fish Oil"),
-    "potasio": ("Potassium",),
-    "probioticos": ("Probiotics", "Lactobacillus acidophilus", "Lactobacillus"),
-    "proteina": ("whey protein", "soy protein isolate", "pea protein", "Protein"),
-    "riboflavina": ("Riboflavin", "Vitamin B2"),
-    "selenio": ("Selenium",),
-    "sodio": ("Sodium chloride", "Sodium"),
-    "taurina": ("L-Taurine", "Taurine"),
-    "te verde": ("Green Tea",),
-    "tiamina": ("Thiamin", "Thiamine", "Vitamin B1"),
-    "valeriana": ("Valerian",),
-    "vitamina a": ("Vitamin A", "Retinol", "Beta-Carotene"),
-    "vitamina b12": ("Vitamin B12",),
-    "vitamina b6": ("Vitamin B6", "Pyridoxine"),
-    "vitamina c": ("Vitamin C (ascorbic acid)", "Vitamin C"),
-    "vitamina d": ("Vitamin D (cholecalciferol)", "Vitamin D"),
-    "vitamina e": ("Vitamin E",),
-    "vitamina k": ("Vitamin K",),
-    "yodo": ("Iodine",),
-    "zeaxantina": ("Zeaxanthin",),
-    "zinc": ("Zinc",),
-    "inositol": ("Inositol",),
-    "bacillus coagulans": ("Bacillus coagulans",),
-    "bifidobacterium longum": ("Bifidobacterium longum",),
-}
-
-# Prefer IDs that are present in the commercial catalog when a generic graph node
-# has fewer/no products. These IDs still represent components, not products.
-COMPONENT_ID_OVERRIDES = {
-    "acido folico": "COMP_A9136ADF22F7",
-    "acido pantotenico": "COMP_CCEF1C481D8D",
-    "ashwagandha": "COMP_AE7EE271FD2C",
-    "biotina": "COMP_641FDABDC956",
-    "cafeina": "COMP_4F582819D2E9",
-    "calcio": "COMP_275450118D60",
-    "carnitina": "COMP_0987F386BB65",
-    "coenzima q10": "COMP_8BB25B9A3BE5",
-    "colageno": "COMP_2671E7AB4CBB",
-    "colina": "COMP_A204C673A9A2",
-    "cobre": "COMP_9C5C72058DB1",
-    "creatina": "COMP_7B47CDB437E8",
-    "cromo": "COMP_3F24EA59D864",
-    "dha": "COMP_F71DD4665D9C",
-    "epa": "COMP_F3C5987AA984",
-    "hierro": "COMP_B6A8F8958154",
-    "l teanina": "COMP_E3D7A2D1C909",
-    "luteina": "COMP_C873A4B5C00A",
-    "magnesio": "COMP_83336712C554",
-    "manganeso": "COMP_5FCBE278ABF3",
-    "melatonina": "COMP_74AC5BE900AC",
-    "niacina": "COMP_7A51909809FD",
-    "omega 3": "COMP_447F5E523CED",
-    "potasio": "COMP_BB2F708BF799",
-    "probioticos": "COMP_C5CD8E1D6AAE",
-    "proteina": "COMP_927AAC8EA873",
-    "riboflavina": "COMP_586F3B3DE0F3",
-    "selenio": "COMP_781B4EA1D853",
-    "sodio": "COMP_AFF3B61AB344",
-    "taurina": "COMP_0D2B15E9F9EE",
-    "te verde": "COMP_8F63E852ED34",
-    "tiamina": "COMP_4F4F134A6B55",
-    "valeriana": "COMP_D691B9C2718F",
-    "vitamina a": "COMP_90C4121BAE0C",
-    "vitamina b12": "COMP_06B36D3A8FF3",
-    "vitamina b6": "COMP_FB0BFF3E6E21",
-    "vitamina c": "COMP_67B16EEFC42F",
-    "vitamina d": "COMP_94DFE28A9A5C",
-    "vitamina e": "COMP_D4790F9775EF",
-    "vitamina k": "COMP_64DE5343502D",
-    "yodo": "COMP_22DA46FADFFD",
-    "zeaxantina": "COMP_D02C918DB476",
-    "zinc": "COMP_723DBC80CC4E",
-    "inositol": "COMP_430EB7DE720D",
-    "bacillus coagulans": "COMP_5FA5A40B1A56",
-    "bifidobacterium longum": "COMP_43BE32DB2D1B",
-}
-
-COMPONENT_DISPLAY_BY_ID = {
-    "COMP_A9136ADF22F7": "Ácido fólico",
-    "COMP_CCEF1C481D8D": "Ácido pantoténico",
-    "COMP_AE7EE271FD2C": "Ashwagandha",
-    "COMP_641FDABDC956": "Biotina",
-    "COMP_4F582819D2E9": "Cafeína",
-    "COMP_275450118D60": "Calcio",
-    "COMP_0987F386BB65": "Carnitina",
-    "COMP_8BB25B9A3BE5": "Coenzima Q10",
-    "COMP_2671E7AB4CBB": "Colágeno",
-    "COMP_A204C673A9A2": "Colina",
-    "COMP_9C5C72058DB1": "Cobre",
-    "COMP_7B47CDB437E8": "Creatina",
-    "COMP_3F24EA59D864": "Cromo",
-    "COMP_F71DD4665D9C": "DHA",
-    "COMP_F3C5987AA984": "EPA",
-    "COMP_B6A8F8958154": "Hierro",
-    "COMP_E3D7A2D1C909": "L-teanina",
-    "COMP_C873A4B5C00A": "Luteína",
-    "COMP_83336712C554": "Magnesio",
-    "COMP_5FCBE278ABF3": "Manganeso",
-    "COMP_74AC5BE900AC": "Melatonina",
-    "COMP_7A51909809FD": "Niacina",
-    "COMP_447F5E523CED": "Omega 3",
-    "COMP_BB2F708BF799": "Potasio",
-    "COMP_C5CD8E1D6AAE": "Probióticos",
-    "COMP_927AAC8EA873": "Proteína",
-    "COMP_586F3B3DE0F3": "Riboflavina",
-    "COMP_781B4EA1D853": "Selenio",
-    "COMP_AFF3B61AB344": "Sodio",
-    "COMP_0D2B15E9F9EE": "Taurina",
-    "COMP_8F63E852ED34": "Té verde",
-    "COMP_4F4F134A6B55": "Tiamina",
-    "COMP_D691B9C2718F": "Valeriana",
-    "COMP_90C4121BAE0C": "Vitamina A",
-    "COMP_06B36D3A8FF3": "Vitamina B12",
-    "COMP_FB0BFF3E6E21": "Vitamina B6",
-    "COMP_67B16EEFC42F": "Vitamina C",
-    "COMP_94DFE28A9A5C": "Vitamina D",
-    "COMP_D4790F9775EF": "Vitamina E",
-    "COMP_64DE5343502D": "Vitamina K",
-    "COMP_22DA46FADFFD": "Yodo",
-    "COMP_D02C918DB476": "Zeaxantina",
-    "COMP_723DBC80CC4E": "Zinc",
-    "COMP_430EB7DE720D": "Inositol",
-    "COMP_5FA5A40B1A56": "Bacillus coagulans",
-    "COMP_43BE32DB2D1B": "Bifidobacterium longum",
-}
-
 
 def _register_torch_cpu_fallback() -> None:
     """Allow artifacts saved on Apple MPS to load in Linux CPU containers."""
@@ -287,6 +155,106 @@ def _clean_csv_text(value) -> str:
 
 
 @lru_cache(maxsize=1)
+def _component_aliases_table() -> tuple[dict, ...]:
+    """Fuente de verdad de identidad de componentes: data/knowledge/component_aliases.csv.
+
+    Una fila por componente: `component_id` canónico, `canonical_name_es` (forma única usada en la
+    columna `component` de las tablas de knowledge), `canonical_name_en` y `aliases` separados por `|`.
+    """
+    if not _COMPONENT_ALIASES_PATH.exists():
+        logger.warning("component_aliases.csv no encontrado en %s", _COMPONENT_ALIASES_PATH)
+        return ()
+
+    rows = []
+    with _COMPONENT_ALIASES_PATH.open(encoding="utf-8-sig", newline="") as handle:
+        for row in csv.DictReader(handle):
+            component_id = str(row.get("component_id") or "").strip()
+            name_es = str(row.get("canonical_name_es") or "").strip()
+            if not component_id or not name_es:
+                continue
+            name_en = str(row.get("canonical_name_en") or "").strip()
+            aliases = []
+            for alias in (name_es, name_en, *str(row.get("aliases") or "").split("|")):
+                alias = alias.strip()
+                if alias and alias not in aliases:
+                    aliases.append(alias)
+            rows.append(
+                {
+                    "component_id": component_id,
+                    "canonical_name_es": name_es,
+                    "canonical_name_en": name_en,
+                    "aliases": tuple(aliases),
+                }
+            )
+    return tuple(rows)
+
+
+def _build_component_dictionaries() -> tuple[dict[str, tuple[str, ...]], dict[str, str], dict[str, str]]:
+    """Construye (COMPONENT_ALIASES, COMPONENT_ID_OVERRIDES, COMPONENT_DISPLAY_BY_ID) desde el CSV.
+
+    Se mantienen los nombres históricos porque scripts externos (scripts/catalog/*) los importan.
+    """
+    aliases_by_key: dict[str, tuple[str, ...]] = {}
+    id_by_key: dict[str, str] = {}
+    display_by_id: dict[str, str] = {}
+    for row in _component_aliases_table():
+        key = _normalize_text(row["canonical_name_es"])
+        seen = {key}
+        alias_tuple = []
+        for alias in row["aliases"]:
+            normalized = _normalize_text(alias)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            alias_tuple.append(alias)
+        aliases_by_key[key] = tuple(alias_tuple)
+        id_by_key[key] = row["component_id"]
+        display_by_id[row["component_id"]] = row["canonical_name_es"]
+    return aliases_by_key, id_by_key, display_by_id
+
+
+# Diccionarios derivados de component_aliases.csv (no editar a mano; editar el CSV).
+# COMPONENT_ALIASES: nombre_es_normalizado -> alias (EN y variantes ortográficas).
+# COMPONENT_ID_OVERRIDES: nombre_es_normalizado -> component_id canónico.
+# COMPONENT_DISPLAY_BY_ID: component_id -> canonical_name_es.
+COMPONENT_ALIASES, COMPONENT_ID_OVERRIDES, COMPONENT_DISPLAY_BY_ID = _build_component_dictionaries()
+
+
+@lru_cache(maxsize=1)
+def _component_id_by_alias() -> dict[str, str]:
+    """alias normalizado (ES canónico, EN, variantes) -> component_id."""
+    mapping: dict[str, str] = {}
+    for row in _component_aliases_table():
+        for alias in row["aliases"]:
+            mapping.setdefault(_normalize_text(alias), row["component_id"])
+    return mapping
+
+
+def _component_id_from_name(component: str) -> str | None:
+    """Resuelve un nombre (ES/EN/alias) a su component_id canónico por coincidencia exacta normalizada."""
+    return _component_id_by_alias().get(_normalize_text(component))
+
+
+def _row_component_id(row: dict, table_name: str) -> str | None:
+    """component_id de una fila de knowledge; fallback por nombre (con warning) solo si la columna está vacía."""
+    component_id = _clean_csv_text(row.get("component_id"))
+    if component_id:
+        return component_id
+    component = _clean_csv_text(row.get("component"))
+    resolved = _component_id_from_name(component)
+    if resolved:
+        logger.warning(
+            "%s: fila de '%s' sin component_id; resuelto por nombre a %s. Rellenar la columna en el CSV.",
+            table_name,
+            component,
+            resolved,
+        )
+        return resolved
+    logger.warning("%s: fila de '%s' sin component_id y sin alias conocido; se ignora en los joins.", table_name, component)
+    return None
+
+
+@lru_cache(maxsize=1)
 def _condition_component_links() -> list[dict]:
     if not _CONDITION_COMPONENT_LINKS_PATH.exists():
         return []
@@ -304,8 +272,10 @@ def _condition_component_links() -> list[dict]:
                 "version": str(row.get("version") or "").strip(),
                 "condition": condition,
                 "component": component,
+                "component_id": _row_component_id(row, "condition_component_links"),
                 "component_key": _normalize_text(component),
                 "evidence_strength": str(row.get("evidence_strength") or "contextual").strip(),
+                "evidence_grade": _clean_csv_text(row.get("evidence_grade")) or None,
                 "evidence_type": str(row.get("evidence_type") or "unspecified").strip(),
                 "recommendation_role": str(row.get("recommendation_role") or "supportive").strip(),
                 "requires_lab": str(row.get("requires_lab") or "no").strip(),
@@ -335,6 +305,9 @@ def _component_evidence_profiles() -> dict[str, dict]:
         component = str(row.get("component") or "").strip()
         if not component:
             continue
+        component_id = _row_component_id(row, "component_evidence_profiles")
+        if not component_id:
+            continue
         profile = {
             "component_profile_role": _clean_csv_text(row.get("profile_role")),
             "adult_upper_limit": _clean_csv_text(row.get("adult_upper_limit")),
@@ -357,12 +330,12 @@ def _component_evidence_profiles() -> dict[str, dict]:
             ],
             "component_profile_rationale": _clean_csv_text(row.get("rationale")),
         }
-        profiles[_normalize_text(component)] = profile
+        profiles[component_id] = profile
     return profiles
 
 
-def _component_profile(component: str) -> dict:
-    return _component_evidence_profiles().get(_normalize_text(component), {})
+def _component_profile(component_id: str) -> dict:
+    return _component_evidence_profiles().get(component_id, {})
 
 
 @lru_cache(maxsize=1)
@@ -373,8 +346,8 @@ def _component_life_stage_guidance() -> dict[str, list[dict]]:
     df = pd.read_csv(_COMPONENT_LIFE_STAGE_GUIDANCE_PATH)
     grouped: dict[str, list[dict]] = {}
     for row in df.to_dict("records"):
-        component = _clean_csv_text(row.get("component"))
-        if not component:
+        component_id = _row_component_id(row, "component_life_stage_guidance")
+        if not component_id:
             continue
         item = {
             "age_min": int(_safe_float(row.get("age_min"), default=0)),
@@ -394,7 +367,7 @@ def _component_life_stage_guidance() -> dict[str, list[dict]]:
                 if source.strip()
             ],
         }
-        grouped.setdefault(_normalize_text(component), []).append(item)
+        grouped.setdefault(component_id, []).append(item)
     return grouped
 
 
@@ -406,8 +379,8 @@ def _component_interaction_rules() -> dict[str, list[dict]]:
     df = pd.read_csv(_COMPONENT_INTERACTION_RULES_PATH)
     grouped: dict[str, list[dict]] = {}
     for row in df.to_dict("records"):
-        component = _clean_csv_text(row.get("component"))
-        if not component:
+        component_id = _row_component_id(row, "component_interaction_rules")
+        if not component_id:
             continue
         item = {
             "interaction_type": _clean_csv_text(row.get("interaction_type")),
@@ -422,7 +395,7 @@ def _component_interaction_rules() -> dict[str, list[dict]]:
                 if source.strip()
             ],
         }
-        grouped.setdefault(_normalize_text(component), []).append(item)
+        grouped.setdefault(component_id, []).append(item)
     return grouped
 
 
@@ -434,8 +407,8 @@ def _component_claim_evidence() -> dict[str, list[dict]]:
     df = pd.read_csv(_COMPONENT_CLAIM_EVIDENCE_PATH)
     grouped: dict[str, list[dict]] = {}
     for row in df.to_dict("records"):
-        component = _clean_csv_text(row.get("component"))
-        if not component:
+        component_id = _row_component_id(row, "component_claim_evidence")
+        if not component_id:
             continue
         item = {
             "claim_code": _clean_csv_text(row.get("claim_code")),
@@ -449,7 +422,7 @@ def _component_claim_evidence() -> dict[str, list[dict]]:
             ],
             "display_note": _clean_csv_text(row.get("display_note")),
         }
-        grouped.setdefault(_normalize_text(component), []).append(item)
+        grouped.setdefault(component_id, []).append(item)
     return grouped
 
 
@@ -540,8 +513,8 @@ def _matches_life_stage(row: dict, user_context: dict | None) -> bool:
     return True
 
 
-def _component_life_stage_for_context(component: str, user_context: dict | None) -> list[dict]:
-    rows = _component_life_stage_guidance().get(_normalize_text(component), [])
+def _component_life_stage_for_context(component_id: str, user_context: dict | None) -> list[dict]:
+    rows = _component_life_stage_guidance().get(component_id, [])
     matched = [row for row in rows if _matches_life_stage(row, user_context)]
     if matched:
         return matched[:3]
@@ -564,13 +537,13 @@ def _interaction_applies(rule: dict, user_context: dict | None) -> bool:
     return False
 
 
-def _component_interactions_for_context(component: str, user_context: dict | None) -> list[dict]:
-    rows = _component_interaction_rules().get(_normalize_text(component), [])
+def _component_interactions_for_context(component_id: str, user_context: dict | None) -> list[dict]:
+    rows = _component_interaction_rules().get(component_id, [])
     return [row for row in rows if _interaction_applies(row, user_context)]
 
 
-def _component_claims(component: str) -> list[dict]:
-    return _component_claim_evidence().get(_normalize_text(component), [])
+def _component_claims(component_id: str) -> list[dict]:
+    return _component_claim_evidence().get(component_id, [])
 
 
 def _component_display_name(component_id: str | None, fallback: str) -> str:
@@ -580,34 +553,38 @@ def _component_display_name(component_id: str | None, fallback: str) -> str:
 
 
 def _component_lookup_candidates(component_id: str | None, component_name: str) -> list[str]:
-    candidates = []
+    """Ids canónicos (component_aliases.csv) a los que puede referirse (component_id, component_name).
 
-    if component_id and component_id in COMPONENT_DISPLAY_BY_ID:
-        candidates.append(COMPONENT_DISPLAY_BY_ID[component_id])
-    if component_name:
-        candidates.append(component_name)
+    Orden: id canónico directo, coincidencia exacta de alias normalizado y, por último, coincidencia
+    parcial de alias (p. ej. "Vitamin D3" -> vitamina d). Solo se usa para enriquecer componentes que
+    vienen del grafo/artefacto con ids o nombres no canónicos; los joins entre tablas son por id.
+    """
+    canonical_ids: list[str] = []
 
-    normalized_inputs = {_normalize_text(value) for value in candidates if value}
-    for canonical_key, aliases in COMPONENT_ALIASES.items():
-        normalized_aliases = {_normalize_text(alias) for alias in aliases}
-        if canonical_key in normalized_inputs or normalized_inputs.intersection(normalized_aliases):
-            candidates.append(canonical_key)
-            continue
+    def _add(candidate_id: str | None) -> None:
+        if candidate_id and candidate_id in COMPONENT_DISPLAY_BY_ID and candidate_id not in canonical_ids:
+            canonical_ids.append(candidate_id)
+
+    _add(component_id)
+
+    normalized_inputs = {
+        _normalize_text(value)
+        for value in (COMPONENT_DISPLAY_BY_ID.get(component_id or ""), component_name)
+        if value
+    }
+    normalized_inputs.discard("")
+    for value in normalized_inputs:
+        _add(_component_id_by_alias().get(value))
+
+    for row in _component_aliases_table():
+        normalized_aliases = {_normalize_text(alias) for alias in row["aliases"]}
         if any(
             alias and any(alias in value or value in alias for value in normalized_inputs)
             for alias in normalized_aliases
         ):
-            candidates.append(canonical_key)
+            _add(row["component_id"])
 
-    deduped = []
-    seen = set()
-    for candidate in candidates:
-        key = _normalize_text(candidate)
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        deduped.append(candidate)
-    return deduped
+    return canonical_ids
 
 
 def _first_component_profile(candidates: list[str]) -> dict:
@@ -647,7 +624,10 @@ def _component_enrichment(component_id: str | None, component_name: str, user_co
     lookup_candidates = _component_lookup_candidates(component_id, component_name)
     return {
         **_first_component_profile(lookup_candidates),
-        "component_lookup_candidates": [_normalize_text(candidate) for candidate in lookup_candidates],
+        "component_lookup_candidates": [
+            _normalize_text(COMPONENT_DISPLAY_BY_ID[candidate]) for candidate in lookup_candidates
+        ],
+        "component_canonical_id": lookup_candidates[0] if lookup_candidates else None,
         "life_stage_guidance": _first_component_life_stage(lookup_candidates, user_context),
         "interaction_rules": _first_component_interactions(lookup_candidates, user_context),
         "claim_evidence": _first_component_claims(lookup_candidates),
@@ -713,6 +693,26 @@ def _recommendation_preference_key(item: dict) -> tuple[int, float, float]:
     )
 
 
+@lru_cache(maxsize=1)
+def gnn_node_equivalences() -> dict[str, str]:
+    """gnn_component_id -> component_id canonico (component_aliases.csv). Vacio si la tabla no existe."""
+    if not _GNN_NODE_EQUIVALENCES_PATH.exists():
+        return {}
+    with _GNN_NODE_EQUIVALENCES_PATH.open(encoding="utf-8-sig", newline="") as handle:
+        return {
+            row["gnn_component_id"]: row["component_id"]
+            for row in csv.DictReader(handle)
+            if row.get("gnn_component_id") and row.get("component_id")
+        }
+
+
+def canonical_graph_id(component_id: str | None) -> str | None:
+    """Id canonico de un nodo del grafo; el propio id si no tiene equivalencia registrada."""
+    if not component_id:
+        return component_id
+    return gnn_node_equivalences().get(component_id, component_id)
+
+
 def _find_ids(query: str, master_names: pd.DataFrame) -> list[str]:
     clean_query = _normalize_text(query)
     if not clean_query:
@@ -735,12 +735,24 @@ def _find_ids(query: str, master_names: pd.DataFrame) -> list[str]:
     return []
 
 
-def _resolve_component_id(component: str, artifacts: dict) -> tuple[str | None, str]:
+def _resolve_component_id(
+    component: str,
+    artifacts: dict,
+    component_id: str | None = None,
+) -> tuple[str | None, str]:
+    """Id canónico de un componente.
+
+    Prioridad: `component_id` ya presente en la tabla de knowledge > component_aliases.csv (por nombre
+    ES/EN/alias) > búsqueda en Component_Master del artefacto (solo semillas del grafo sin alias).
+    """
+    if component_id:
+        return component_id, component
+
     component_key = _normalize_text(component)
     comp_to_name = artifacts["comp_to_name"]
     master_names = artifacts["master_names"]
 
-    override_id = COMPONENT_ID_OVERRIDES.get(component_key)
+    override_id = COMPONENT_ID_OVERRIDES.get(component_key) or _component_id_from_name(component)
     if override_id:
         return override_id, component
 
@@ -753,7 +765,10 @@ def _resolve_component_id(component: str, artifacts: dict) -> tuple[str | None, 
     return None, component
 
 
-def _evidence_weight(evidence_strength: str | None) -> float:
+def _evidence_weight(evidence_strength: str | None, evidence_grade: str | None = None) -> float:
+    grade = str(evidence_grade or "").strip().lower()
+    if grade in EVIDENCE_GRADE_WEIGHTS:
+        return EVIDENCE_GRADE_WEIGHTS[grade]
     return EVIDENCE_WEIGHTS.get(str(evidence_strength or "").strip().lower(), 0.55)
 
 
@@ -772,7 +787,7 @@ def _mapping_weight(mapping: dict[str, float], value: str | None, default: float
 
 
 def _evidence_score(link: dict, *, has_condition_scores: bool) -> tuple[float, dict[str, float]]:
-    evidence_weight = _evidence_weight(link["evidence_strength"])
+    evidence_weight = _evidence_weight(link["evidence_strength"], link.get("evidence_grade"))
     role_weight = _mapping_weight(ROLE_WEIGHTS, link.get("recommendation_role"), 0.70)
     source_quality_weight = _mapping_weight(SOURCE_QUALITY_WEIGHTS, link.get("source_quality"), 0.70)
     lab_requirement_weight = _mapping_weight(LAB_REQUIREMENT_WEIGHTS, link.get("requires_lab"), 0.90)
@@ -830,7 +845,9 @@ def _build_structured_component_recommendations(
         if condition not in conditions:
             continue
 
-        component_id, component_name = _resolve_component_id(link["component"], artifacts)
+        component_id, component_name = _resolve_component_id(
+            link["component"], artifacts, component_id=link.get("component_id")
+        )
         if component_id is None:
             continue
 
@@ -861,6 +878,7 @@ def _build_structured_component_recommendations(
             "commercial_block_reason": commercial_block_reason,
             "condition_probability": condition_probability if condition_scores else None,
             "evidence_strength": link["evidence_strength"],
+            "evidence_grade": link.get("evidence_grade"),
             "evidence_type": link["evidence_type"],
             "evidence_weight": evidence_factors["evidence_weight"],
             "evidence_score": round(evidence_score, 4),
@@ -1020,9 +1038,13 @@ def recomendar_suplementos(
     ranked = [i for i in np.argsort(-cos_sim)
               if candidate_mask[i] and cos_sim[i] >= min_similarity]
 
+    added_canonical_ids = {canonical_graph_id(component_id) for component_id in added_ids}
     for cand_idx in ranked[:20]:  # revisar top-20 candidatos GNN
         cand_id = idx_to_comp[cand_idx]
-        if cand_id in added_ids:
+        canonical_cand_id = canonical_graph_id(cand_id)
+        # Un nodo equivalente a un componente ya recomendado ("Vitamin D (unspecified)" cuando ya esta
+        # "Vitamin D") no es un candidato nuevo.
+        if cand_id in added_ids or canonical_cand_id in added_canonical_ids:
             continue
         has_support = any(
             (cand_id, sid) in functional_pairs or (sid, cand_id) in functional_pairs
@@ -1052,19 +1074,22 @@ def recomendar_suplementos(
                 "evidence_strength": "supportive_graph",
                 "evidence_weight": None,
                 "graph_similarity": round(float(cos_sim[cand_idx]), 4),
+                "graph_node_canonical_id": canonical_cand_id,
                 "source_ids": [],
                 **enrichment,
                 "ranking_reason": "Candidato complementario por similitud funcional con los componentes principales.",
             })
             added_ids.add(cand_id)
+            added_canonical_ids.add(canonical_cand_id)
             if len([r for r in recomendaciones if r["tipo"] == "candidato_gnn"]) >= 3:
                 break
 
     # Deduplicar
     seen, recs_dedup = set(), []
     for r in recomendaciones:
-        if r["component_id"] not in seen:
-            seen.add(r["component_id"])
+        dedupe_key = canonical_graph_id(r["component_id"])
+        if dedupe_key not in seen:
+            seen.add(dedupe_key)
             recs_dedup.append(r)
 
     rec_ids = [r["component_id"] for r in recs_dedup]
