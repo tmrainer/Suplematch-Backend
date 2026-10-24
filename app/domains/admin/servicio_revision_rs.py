@@ -7,7 +7,9 @@ pasar por revisión humana y con qué contexto. La persistencia vive en
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import re
 from collections.abc import Iterable
 from typing import Any
@@ -31,6 +33,26 @@ RS_REVIEW_NOT_REQUIRED = "not_required"
 
 DEFAULT_SAMPLE_RATIO = 0.05
 DEFAULT_SAMPLE_SEED = "suplematch-rs-review-v1"
+
+# Columnas del CSV de la cola, en el orden en que las lee el revisor.
+EXPORT_COLUMNS = (
+    "id",
+    "status",
+    "sample_reason",
+    "pharmacy",
+    "sku",
+    "commercial_name",
+    "url",
+    "registro_sanitario_key",
+    "registro_sanitario_source",
+    "digemid_producto",
+    "digemid_composicion",
+    "match_reason",
+    "reviewer_note",
+    "decided_at",
+)
+# Celdas que una hoja de calculo interpretaria como formula (inyeccion CSV).
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 def clean(value: Any) -> str:
@@ -160,3 +182,19 @@ def is_valid_transition(current_status: str, next_status: str) -> bool:
     siempre que ambos sean conocidos. Se mantiene como función para endurecerla
     después sin tocar rutas."""
     return current_status in REVIEW_STATUSES and next_status in REVIEW_STATUSES
+
+
+def _csv_cell(value: Any) -> str:
+    text = "" if value is None else (value.isoformat() if hasattr(value, "isoformat") else str(value))
+    return f"'{text}" if text.startswith(_FORMULA_PREFIXES) else text
+
+
+def reviews_to_csv(rows: Iterable[Any]) -> str:
+    """CSV de la cola (filas ORM o dicts) con BOM UTF-8 para que Excel respete tildes y sin formulas ejecutables."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(EXPORT_COLUMNS)
+    for row in rows:
+        get = row.get if isinstance(row, dict) else (lambda name, _row=row: getattr(_row, name, None))
+        writer.writerow([_csv_cell(get(column)) for column in EXPORT_COLUMNS])
+    return "\ufeff" + buffer.getvalue()

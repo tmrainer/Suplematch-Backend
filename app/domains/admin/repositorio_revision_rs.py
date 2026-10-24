@@ -90,9 +90,10 @@ class CatalogRsReviewRepository:
         status: str | None = STATUS_PENDING,
         sample_reason: str | None = None,
         pharmacy: str | None = None,
-        limit: int = 50,
+        limit: int | None = 50,
         offset: int = 0,
     ) -> tuple[list[CatalogRsReview], int]:
+        """Filas de la cola filtradas y ordenadas; ``limit=None`` devuelve todas (exportacion)."""
         stmt = select(CatalogRsReview)
         count_stmt = select(func.count(CatalogRsReview.id))
         if status:
@@ -110,7 +111,10 @@ class CatalogRsReviewRepository:
             CatalogRsReview.commercial_name.asc(),
             CatalogRsReview.created_at.asc(),
         )
-        rows = list(self.db.scalars(stmt.offset(offset).limit(limit)))
+        stmt = stmt.offset(offset)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        rows = list(self.db.scalars(stmt))
         total = int(self.db.scalar(count_stmt) or 0)
         return rows, total
 

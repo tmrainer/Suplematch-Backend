@@ -82,6 +82,12 @@ Reglas del upsert (`CatalogRsReviewRepository.upsert_items`):
   before/after.
 - `GET /api/v1/admin/catalog/rs-review/summary`: `total`, `pending`, `decided`, `progress`,
   `by_status`, `by_sample_reason`, `by_sample_reason_and_status`.
+- `GET /api/v1/admin/catalog/rs-review/export.csv?status=all&sample_reason=&pharmacy=`: la cola
+  completa en CSV (UTF-8 con BOM para Excel), mismo orden que el listado. Columnas: `id`, `status`,
+  `sample_reason`, farmacia, SKU, nombre comercial, URL, RS, fuente del RS, producto y composición
+  DIGEMID, `match_reason`, `reviewer_note`, `decided_at`. Las celdas que empiezan con `=`, `+`, `-` o
+  `@` llevan un apóstrofo delante para que la hoja de cálculo no las ejecute como fórmula. Las
+  decisiones se siguen registrando con el `PATCH` (el CSV es para revisar en lote, no se reimporta).
 
 ### Criterios de aprobación
 
@@ -140,4 +146,4 @@ y el producto vuelve a servirse (con `rs_review_status="pending"`) hasta la nuev
   muestra, contexto de `match_reason`, cobertura del 100% de inferidos sobre el CSV real.
 - `tests/integration/test_catalog_rs_review.py` (requiere Postgres): upsert sin pisar
   decisiones, ocultamiento de rechazados en `products_for_component`/`search_products`,
-  independencia entre RS antiguo y nuevo, resumen.
+  independencia entre RS antiguo y nuevo, resumen, exportación CSV con filtros.

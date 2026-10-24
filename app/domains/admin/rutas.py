@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -35,6 +36,7 @@ from app.domains.admin.esquemas import (
     ProductPriceSnapshotOut,
 )
 from app.domains.admin.repositorio_revision_rs import CatalogRsReviewRepository
+from app.domains.admin.servicio_revision_rs import reviews_to_csv
 from app.domains.admin.servicio_candidatos_catalogo import CatalogCandidateService
 from app.domains.admin.servicio_jobs_catalogo import (
     approve_catalog_import,
@@ -283,6 +285,29 @@ def list_catalog_rs_reviews(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/catalog/rs-review/export.csv", response_class=Response)
+def export_catalog_rs_reviews(
+    status_filter: str | None = Query(default="all", alias="status"),
+    sample_reason: str | None = Query(default=None, pattern="^(inferred|random_sample)$"),
+    pharmacy: str | None = None,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(db_session),
+):
+    """Cola completa en CSV (UTF-8 con BOM) para revisar en hoja de calculo. `status=all` (defecto) exporta todo."""
+    if status_filter in {"", "all"}:
+        status_filter = None
+    elif status_filter not in {"pending", "approved", "rejected", "needs_info"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status inválido.")
+    rows, _total = CatalogRsReviewRepository(db).list_reviews(
+        status=status_filter, sample_reason=sample_reason, pharmacy=pharmacy, limit=None
+    )
+    return Response(
+        content=reviews_to_csv(rows),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="cola_revision_rs.csv"'},
     )
 
 

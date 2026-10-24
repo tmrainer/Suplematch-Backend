@@ -147,3 +147,36 @@ def test_decision_on_old_rs_does_not_affect_new_rs():
         products = CatalogRepository(db).products_for_component(component_code)
         assert len(products) == 1
         assert products[0]["rs_review_status"] == "not_required"
+
+
+def test_admin_can_export_the_queue_as_csv():
+    import csv as csv_module
+
+    from app.api.v1.dependencies import require_admin
+    from app.main import create_app
+    from tests.integration.test_health import asgi_request
+
+    pharmacy = f"Farmacia Export {uuid4().hex[:6]}"
+    with SessionLocal() as db:
+        db.add_all([
+            CatalogRsReview(pharmacy=pharmacy, sku="sku-1", commercial_name="=cmd|' /C calc'!A0", registro_sanitario_key="DE1",
+                            sample_reason="inferred", status="pending"),
+            CatalogRsReview(pharmacy=pharmacy, sku="sku-2", commercial_name="Vitamina C 500 mg", registro_sanitario_key="DE2",
+                            sample_reason="random_sample", status="approved"),
+        ])
+        db.commit()
+    app = create_app()
+    app.dependency_overrides[require_admin] = lambda: None
+    try:
+        status_code, body = asgi_request(app, "GET", f"/api/v1/admin/catalog/rs-review/export.csv?pharmacy={pharmacy.replace(' ', '%20')}", parse_json=False)
+        assert status_code == 200
+        rows = list(csv_module.DictReader(body.lstrip("\ufeff").splitlines()))
+        assert [row["sku"] for row in rows] == ["sku-1", "sku-2"]  # inferidos primero
+        assert rows[0]["commercial_name"].startswith("'=")
+        status_code, body = asgi_request(app, "GET", f"/api/v1/admin/catalog/rs-review/export.csv?status=approved&pharmacy={pharmacy.replace(' ', '%20')}", parse_json=False)
+        assert [row["sku"] for row in csv_module.DictReader(body.lstrip("\ufeff").splitlines())] == ["sku-2"]
+    finally:
+        with SessionLocal() as db:
+            for row in db.scalars(select(CatalogRsReview).where(CatalogRsReview.pharmacy == pharmacy)):
+                db.delete(row)
+            db.commit()

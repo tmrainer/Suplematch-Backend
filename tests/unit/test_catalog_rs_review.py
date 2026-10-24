@@ -169,3 +169,19 @@ def test_real_catalog_queue_covers_every_inferred_product():
     keys = [(i["pharmacy"], i["sku"]) for i in items]
     assert len(keys) == len(set(keys))
     assert all(i["registro_sanitario_key"] for i in items)
+
+
+def test_reviews_to_csv_has_bom_header_and_neutralizes_formulas():
+    from app.domains.admin.servicio_revision_rs import EXPORT_COLUMNS, reviews_to_csv
+
+    text = reviews_to_csv([
+        {"id": "r1", "status": "pending", "pharmacy": "Inkafarma", "commercial_name": "=HYPERLINK(\"http://x\")", "sku": "-5"},
+        {"id": "r2", "status": "approved", "pharmacy": "Mifarma", "commercial_name": "Vitamina D3 1000 UI", "reviewer_note": None},
+    ])
+    assert text.startswith("﻿")
+    rows = list(csv.DictReader(text.lstrip("﻿").splitlines()))
+    assert tuple(rows[0].keys()) == EXPORT_COLUMNS
+    assert rows[0]["commercial_name"] == "'=HYPERLINK(\"http://x\")"
+    assert rows[0]["sku"] == "'-5"
+    assert rows[1]["commercial_name"] == "Vitamina D3 1000 UI"
+    assert rows[1]["reviewer_note"] == ""
