@@ -42,8 +42,9 @@ def test_borderline_corroborated_condition_is_marked_with_real_probability() -> 
 
 
 def test_real_model_never_marks_alone() -> None:
-    # Sin confirmacion de la encuesta (una sola familia, p. ej. solo poco sol).
-    assert apply_second_opinion([_detail(corroborated=False)], {"DEFICIT_VIT_D": 0.6})[0]["positive"] is False
+    # Sin confirmacion de la encuesta (una sola familia que el modelo real tambien ve, p. ej. edad).
+    single = _detail(corroborated=False, rule_score=0.12, rule_families={"age": 0.12})
+    assert apply_second_opinion([single], {"DEFICIT_VIT_D": 0.6})[0]["positive"] is False
     # Reglas lejos del umbral.
     far = _detail(rule_score=0.55 - SECOND_OPINION_MARGIN - 0.01)
     assert apply_second_opinion([far], {"DEFICIT_VIT_D": 0.6})[0]["positive"] is False
@@ -54,3 +55,19 @@ def test_real_model_never_marks_alone() -> None:
 def test_already_positive_conditions_are_untouched() -> None:
     detail = _detail(positive=True, probability=0.8)
     assert apply_second_opinion([detail], {"DEFICIT_VIT_D": 0.4})[0] == detail
+
+
+def test_complementary_family_confirms_with_real_model() -> None:
+    # Solo poco sol (familia que NHANES no ve) + modelo real positivo: dos evidencias independientes.
+    sun_only = _detail(corroborated=False, rule_score=0.30, rule_families={"sun": 0.30})
+    [item] = apply_second_opinion([sun_only], {"DEFICIT_VIT_D": 0.44})
+    assert item["positive"] is True
+    assert item["probability"] == 0.44
+    assert item["second_opinion_reason"] == "complementary_family"
+    # Sin estimacion positiva del modelo real, poco sol solo no alcanza.
+    assert apply_second_opinion([sun_only], {})[0]["positive"] is False
+
+
+def test_borderline_path_reports_its_reason() -> None:
+    [item] = apply_second_opinion([_detail()], {"DEFICIT_VIT_D": 0.47})
+    assert item["second_opinion_reason"] == "borderline"

@@ -57,6 +57,11 @@ SIGNAL_GROUP_ORDER = [
 # AUC de prueba util (vitamina D: 0.815; ferritina 0.58 queda fuera). Ver apply_second_opinion.
 SECOND_OPINION_TARGETS: dict[str, str] = {"DEFICIT_VIT_D": "target_vitamin_d_low"}
 SECOND_OPINION_MARGIN = 0.15
+# Familias de evidencia de la encuesta que el modelo real no ve (NHANES no pregunta por exposicion solar). Una de
+# ellas + estimacion positiva del modelo real son dos evidencias independientes: confirman sin exigir el margen.
+SECOND_OPINION_COMPLEMENTARY_FAMILIES: dict[str, frozenset[str]] = {
+    "DEFICIT_VIT_D": frozenset({"sun", "sun_barrier"}),
+}
 
 # Ningun umbral de decision puede bajar de este valor aunque la calibracion sobre NHANES lo sugiera
 # (llego a 0.05 para RIESGO_SALUD_OSEA, lo que marca positivo a casi cualquier perfil).
@@ -276,29 +281,38 @@ def second_opinion_from_lab_risks(lab_risks: list[dict[str, Any]]) -> dict[str, 
 def apply_second_opinion(details: list[dict[str, Any]], second_opinion: dict[str, float] | None) -> list[dict[str, Any]]:
     """Desempate con el modelo real para condiciones limitrofes.
 
-    Una condicion no detectada pasa a positiva solo si (a) el modelo real (NHANES) la estima positiva, (b) la
-    encuesta la confirma con dos familias de evidencia y (c) el puntaje de reglas queda a menos de
-    ``SECOND_OPINION_MARGIN`` de su umbral. El modelo real nunca marca solo: no ve exposicion solar ni datos de Peru.
-    El indice mostrado pasa a ser la probabilidad calibrada del modelo real.
+    Una condicion no detectada pasa a positiva solo si el modelo real (NHANES) la estima positiva y ademas:
+
+    - ``borderline``: la encuesta la confirma con dos familias de evidencia y el puntaje de reglas queda a menos de
+      ``SECOND_OPINION_MARGIN`` de su umbral; o
+    - ``complementary_family``: la encuesta aporta una familia que el modelo real no ve
+      (``SECOND_OPINION_COMPLEMENTARY_FAMILIES``, p. ej. poco sol para vitamina D). Son dos evidencias
+      independientes: demografia/dieta/suplementos por el modelo real y exposicion solar por la encuesta.
+
+    El modelo real nunca marca solo (no ve exposicion solar ni datos de Peru). El indice mostrado pasa a ser la
+    probabilidad calibrada del modelo real y ``second_opinion_reason`` indica la via.
     """
     if not second_opinion:
         return details
     updated = []
     for item in details:
         probability = second_opinion.get(item["condition"])
-        borderline = (
-            probability is not None
-            and not item.get("positive")
-            and item.get("corroborated", False)
-            and float(item.get("rule_score", 0.0)) >= float(item.get("rule_threshold", item.get("threshold", 1.0))) - SECOND_OPINION_MARGIN
-        )
-        if borderline:
+        reason = None
+        if probability is not None and not item.get("positive"):
+            rule_threshold = float(item.get("rule_threshold", item.get("threshold", 1.0)))
+            complementary = SECOND_OPINION_COMPLEMENTARY_FAMILIES.get(item["condition"], frozenset())
+            if item.get("corroborated", False) and float(item.get("rule_score", 0.0)) >= rule_threshold - SECOND_OPINION_MARGIN:
+                reason = "borderline"
+            elif complementary & set(item.get("rule_families") or {}):
+                reason = "complementary_family"
+        if reason:
             item = {
                 **item,
                 "positive": True,
                 "probability": round(max(float(item["probability"]), probability), 4),
                 "final_score": round(max(float(item["probability"]), probability), 4),
                 "second_opinion_probability": probability,
+                "second_opinion_reason": reason,
                 "score_basis": "rules+second_opinion_nhanes",
             }
         updated.append(item)
