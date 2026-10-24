@@ -250,3 +250,15 @@ Resultado (paquete clínico de punta a punta): 5.0 condiciones por caso (11.2 el
 ### Nombres reconocibles para el usuario (2026-10-24)
 
 Todo nombre visible va en lenguaje común: suplementos en español con la vitamina B por número ("Vitamina B2 (riboflavina)", "Ácido fólico (vitamina B9)", "Omega-3 DHA", "Probiótico Bacillus coagulans"; antes "Boron", "Phosphorus", "Folate", "DHA"), condiciones sin jerga ("Riesgo de colesterol o triglicéridos altos" en vez de "dislipidemia", "Defensas bajas", "Memoria y concentración") y estimaciones de laboratorio con nombre común + examen a pedir ("Azúcar en sangre alta en los últimos meses" / "Hemoglobina glicosilada (HbA1c)"). La traducción ignora tildes y mayúsculas y se aplica también a títulos de packs, sinergias y alertas. Tests: `tests/unit/test_component_display_names.py` y `test_labels_are_plain_language_and_every_target_names_its_exam`. Revisado sobre las salidas de 120 casos clínicos + 15 escenarios.
+
+### Modelos desplegados = modelos del commit (2026-10-24)
+
+1. `check_artifact_versions` (`app/ml/model_loader.py`) compara cada `.pkl` con el sha256 de `insumos_manifest.json`
+   y el `feature_contract_version` de `condition_lab_model.pkl` con `condition_lab_inference.FEATURE_CONTRACT_VERSION`
+   (el script de entrenamiento la importa). En `staging`/`production` cualquier diferencia deja `/health/ready` en
+   `degraded`; el modelo real con otro contrato no sirve estimaciones en ningún entorno.
+2. `scripts/ops/modelos_release.py publicar|descargar|verificar`: los `.pkl` viajan como assets de un release de GitHub
+   y se verifican contra el manifiesto antes de reemplazar nada.
+3. Tests con nombre de archivo repetido: `tests/integration/test_catalog_rs_review.py` pasa a
+   `test_catalog_rs_review_api.py`; `tests/unit/test_test_layout.py` impide otro par. `pytest tests` corre unit e
+   integración juntos: **592 passed, 11 skipped**.

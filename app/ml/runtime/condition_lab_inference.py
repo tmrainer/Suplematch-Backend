@@ -21,6 +21,10 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 MODEL_FILENAME = "condition_lab_model.pkl"
+# Contrato de features que este codigo sabe armar (survey_to_nhanes_features). Un artefacto entrenado con otro
+# contrato se rechaza: no se sirven probabilidades de un modelo que espera columnas distintas. Si cambia el mapeo,
+# subirla aqui y reentrenar (entrenar_condiciones_nhanes.py la importa).
+FEATURE_CONTRACT_VERSION = "nhanes_questionnaire_v2_2026-10-24"
 
 TARGET_TO_CONDITION = {
     "target_vitamin_d_low": "DEFICIT_VIT_D",
@@ -96,6 +100,16 @@ def load_model() -> dict[str, Any]:
     import joblib
 
     return joblib.load(Path(settings.MODEL_DIR) / MODEL_FILENAME)
+
+
+def contract_problem(artifact: dict[str, Any]) -> str | None:
+    trained = artifact.get("feature_contract_version")
+    if trained != FEATURE_CONTRACT_VERSION:
+        return f"feature_contract_version del artefacto ({trained}) difiere de la del codigo ({FEATURE_CONTRACT_VERSION}); reentrenar o desplegar el modelo correcto"
+    return None
+
+
+_LOGGED_PROBLEMS: set[str] = set()
 
 
 def _num(value: Any) -> float:
@@ -190,6 +204,12 @@ def predict_lab_risks(encuesta: Any) -> list[dict[str, Any]]:
         artifact = load_model()
     except Exception as exc:  # artefacto corrupto o version incompatible
         logger.warning("condition_lab_model no cargo: %s", exc)
+        return []
+    problem = contract_problem(artifact)
+    if problem:
+        if problem not in _LOGGED_PROBLEMS:
+            _LOGGED_PROBLEMS.add(problem)
+            logger.error("condition_lab_model rechazado: %s", problem)
         return []
     features = survey_to_nhanes_features(encuesta)
     columns = list(artifact["cat_features"]) + list(artifact["num_features"])

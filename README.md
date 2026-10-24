@@ -29,7 +29,21 @@ responde error y `/health/ready` reporta `models=false`. Para generarlos:
 ```bash
 python3 scripts/training/entrenar_modelo_condiciones.py --rows 2500 --seed 42   # condition_mvp_model.pkl
 python3 scripts/training/modelo2_train.py                                          # modelo2_artifacts.pkl (requiere torch-geometric y CSVs en SUPPLEMENT_MODEL_DATA_DIR)
+python3 scripts/training/entrenar_condiciones_nhanes.py                            # condition_lab_model.pkl (descarga NHANES)
 ```
+
+El sha256 que corresponde a cada commit está en `data/insumos_manifest.json`. Al arrancar, la API compara los
+`.pkl` con ese hash y el contrato de features de `condition_lab_model.pkl` con el del código: en `staging`/`production`
+un modelo distinto deja `/health/ready` en `degraded` (`checks.model_artifacts.versions.problems`); en desarrollo solo
+avisa en el log. Para desplegar los modelos de un commit sin reentrenar:
+
+```bash
+python3 scripts/ops/modelos_release.py descargar --tag models-AAAA-MM-DD   # baja del release, verifica sha256 y reemplaza
+python3 scripts/ops/modelos_release.py verificar                          # compara lo que hay en disco
+```
+
+Tras reentrenar a propósito: `python3 scripts/ops/verificar_insumos.py --update`, comitear el manifiesto y publicar
+(`modelos_release.py publicar --tag ...`; el repositorio es público, el release también).
 
 ## 2. Despliegue
 

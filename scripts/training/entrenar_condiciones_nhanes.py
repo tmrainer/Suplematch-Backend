@@ -46,6 +46,9 @@ pd.set_option("future.no_silent_downcasting", True)
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
 
+# El runtime rechaza artefactos con otro contrato: la version vive alli para que no se desincronicen.
+from app.ml.runtime.condition_lab_inference import FEATURE_CONTRACT_VERSION  # noqa: E402
+
 RAW_ROOT = ROOT_DIR / "data" / "raw" / "nhanes"
 REPORT_DIR = ROOT_DIR / "data" / "reports" / "condition_model"
 MODEL_DIR = ROOT_DIR / "models" / "runtime"
@@ -107,7 +110,6 @@ NUM_FEATURES = [
     "dieta_kcal", "dieta_proteina_g", "dieta_vit_d_mcg", "dieta_hierro_mg", "dieta_b12_mcg", "dieta_folato_mcg", "dieta_calcio_mg", "dieta_magnesio_mg", "dieta_zinc_mg", "dieta_vit_c_mg", "dieta_fibra_g",
     "alcohol_tragos_dia", "sueno_horas",
 ]
-FEATURE_CONTRACT_VERSION = "nhanes_questionnaire_v2_2026-10-24"
 
 # Restricciones de poblacion por target para que train y test sean comparables.
 # Ferritina: en 2015-2016 NHANES solo la midio en mujeres de 12-49 anos; se restringe a mujeres 18-49 en ambos ciclos.

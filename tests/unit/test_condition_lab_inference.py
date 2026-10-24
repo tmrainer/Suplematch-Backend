@@ -138,3 +138,9 @@ def test_labels_are_plain_language_and_every_target_names_its_exam() -> None:
         # Nombres conocidos con numero ("Vitamina B12") si valen.
         assert not re.search(r"[<>=%]|/dL|/mL|U/L|\b[A-Z]{2,}|[A-Z][a-z]?[A-Z]|\d+\s*(mg|ng|pg|g)\b", label), (target, label)
         assert cli.TARGET_EXAMS[target] and cli.TARGET_CUTOFFS[target], target
+
+
+def test_lab_model_with_other_feature_contract_serves_nothing(monkeypatch) -> None:
+    monkeypatch.setattr(cli, "model_available", lambda: True)
+    monkeypatch.setattr(cli, "load_model", lambda: {"feature_contract_version": "otro", "models": {}, "cat_features": [], "num_features": []})
+    assert cli.predict_lab_risks(_encuesta()) == []
