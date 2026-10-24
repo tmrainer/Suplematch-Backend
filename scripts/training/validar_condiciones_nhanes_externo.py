@@ -6,6 +6,7 @@ del model card se sostienen en otra poblacion y otro momento.
 
 Tambien reporta el porcentaje de faltantes por feature en el ciclo L frente al de test: NHANES cambio algunos
 cuestionarios en 2021-2023 y una feature ausente se imputa con la mediana del train (el modelo la ve "promedio").
+Los medicamentos (metformina, antiacidos) se evaluan como "no" cuando faltan, igual que en el runtime.
 
 Salida: data/reports/condition_model/nhanes_external_2021_2023.json
 
@@ -42,6 +43,7 @@ from scripts.training.entrenar_condiciones_nhanes import (  # noqa: E402
 )
 
 EXTERNAL_CYCLE = "2021_2023"
+MEDICATION_FEATURES = ("metformina", "antiacidos")
 
 
 def missing_share(features) -> dict[str, float]:
@@ -80,6 +82,11 @@ def main(argv: list[str] | None = None) -> int:
 
     features = {cycle: features_from_questionnaire(frame) for cycle, frame in frames.items()}
     x_ext, t_ext = features[EXTERNAL_CYCLE], targets_from_labs(frames[EXTERNAL_CYCLE], cutoffs)
+    missing = {cycle: missing_share(frame) for cycle, frame in features.items()}
+    # RXQ_RX_L ya no publica nombres de medicamentos: metformina/antiacidos quedan faltantes en todo el ciclo. El
+    # runtime asume "no" salvo que la persona los marque (condition_lab_inference), asi que se evalua igual.
+    for col in MEDICATION_FEATURES:
+        x_ext[col] = x_ext[col].replace("missing", "no")
 
     metrics: dict[str, Any] = {}
     for target, model in artifact["models"].items():
@@ -100,7 +107,6 @@ def main(argv: list[str] | None = None) -> int:
             f"media_pred={result['mean_predicted']:.2f} F1={result['f1']:.2f}"
         )
 
-    missing = {cycle: missing_share(frame) for cycle, frame in features.items()}
     changed = {
         col: {"test": missing[TEST_CYCLE][col], "externo": missing[EXTERNAL_CYCLE][col]}
         for col in x_ext.columns

@@ -53,6 +53,9 @@ MODEL_PATH = MODEL_DIR / "condition_lab_model.pkl"
 MODEL_CARD_PATH = MODEL_DIR / "condition_lab_model_card.json"
 
 CYCLES = {
+    # B12 y acido metilmalonico solo se midieron en 2011-2012 (G) y 2013-2014 (H): split propio para B12.
+    "2011_2012": {"year": "2011", "suffix": "G"},
+    "2013_2014": {"year": "2013", "suffix": "H"},
     "2015_2016": {"year": "2015", "suffix": "I"},
     "2017_2018": {"year": "2017", "suffix": "J"},
     # Solo validacion externa (scripts/training/validar_condiciones_nhanes_externo.py); no entra al entrenamiento.
@@ -60,6 +63,10 @@ CYCLES = {
 }
 TRAIN_CYCLE = "2015_2016"
 TEST_CYCLE = "2017_2018"
+# Targets cuyo laboratorio no existe en I/J: (train, test) temporal propio.
+TARGET_SPLITS: dict[str, tuple[str, str]] = {
+    "target_b12_low": ("2011_2012", "2013_2014"),
+}
 
 # Archivos NHANES y columnas. Solo las de FEATURE_FILES pueden entrar como features.
 FEATURE_FILES: dict[str, list[str]] = {
@@ -71,7 +78,7 @@ FEATURE_FILES: dict[str, list[str]] = {
     "PAQ": ["SEQN", "PAQ605", "PAQ620", "PAQ650", "PAQ665"],
     "ALQ": ["SEQN", "ALQ130"],
     "DIQ": ["SEQN", "DIQ010"],
-    "SLQ": ["SEQN", "SLD012", "SLQ050"],
+    "SLQ": ["SEQN", "SLD012", "SLD010H", "SLQ050"],  # SLD010H: horas de sueno en G/H
     "HSQ": ["SEQN", "HSD010"],
 }
 LAB_FILES: dict[str, list[str]] = {
@@ -82,16 +89,25 @@ LAB_FILES: dict[str, list[str]] = {
     "TCHOL": ["SEQN", "LBXTC"],       # mg/dL
     "HDL": ["SEQN", "LBDHDD"],        # mg/dL
     "BIOPRO": ["SEQN", "LBXSATSI"],   # ALT U/L
+    "GHB": ["SEQN", "LBXGH"],         # HbA1c %
+    "VITB12": ["SEQN", "LBXB12", "LBDB12"],  # B12 serica pg/mL (solo G/H; LBXB12 en G, LBDB12 en H)
 }
+# Medicamentos que bajan la absorcion de B12 (NIH ODS): metformina e inhibidores de acido (IBP y anti-H2).
+# RXQ_RX tiene una fila por medicamento; se agregan a si/no por persona (ver medication_flags).
+METFORMIN_NAMES = ("METFORMIN",)
+ACID_SUPPRESSOR_NAMES = (
+    "OMEPRAZOLE", "ESOMEPRAZOLE", "LANSOPRAZOLE", "DEXLANSOPRAZOLE", "PANTOPRAZOLE", "RABEPRAZOLE",
+    "RANITIDINE", "FAMOTIDINE", "CIMETIDINE", "NIZATIDINE",
+)
 
-CAT_FEATURES = ["sexo", "etnia", "educacion", "fuma", "actividad_vigorosa", "actividad_moderada", "diabetes_dx", "sueno_problemas", "salud_autopercibida", "embarazo"]
+CAT_FEATURES = ["sexo", "etnia", "educacion", "fuma", "actividad_vigorosa", "actividad_moderada", "diabetes_dx", "sueno_problemas", "salud_autopercibida", "embarazo", "metformina", "antiacidos"]
 NUM_FEATURES = [
     "edad", "bmi", "peso_kg", "talla_cm", "ingreso_ratio",
     "sup_count", "sup_vit_d_mcg", "sup_hierro_mg", "sup_b12_mcg", "sup_folico_mcg", "sup_calcio_mg", "sup_magnesio_mg", "sup_zinc_mg", "sup_vit_c_mg",
     "dieta_kcal", "dieta_proteina_g", "dieta_vit_d_mcg", "dieta_hierro_mg", "dieta_b12_mcg", "dieta_folato_mcg", "dieta_calcio_mg", "dieta_magnesio_mg", "dieta_zinc_mg", "dieta_vit_c_mg", "dieta_fibra_g",
     "alcohol_tragos_dia", "sueno_horas",
 ]
-FEATURE_CONTRACT_VERSION = "nhanes_questionnaire_v1_2026-10-22"
+FEATURE_CONTRACT_VERSION = "nhanes_questionnaire_v2_2026-10-24"
 
 # Restricciones de poblacion por target para que train y test sean comparables.
 # Ferritina: en 2015-2016 NHANES solo la midio en mujeres de 12-49 anos; se restringe a mujeres 18-49 en ambos ciclos.
@@ -119,7 +135,7 @@ def biomarker_cutoffs() -> dict[str, dict[str, float | None]]:
         for row in csv.DictReader(handle):
             if row["sex"] != "any" or row["pregnant"] != "any" or row["age_min"] or row["age_max"]:
                 continue
-            out[row["biomarker_code"]] = {k: (float(row[k]) if row.get(k) else None) for k in ("low", "high", "critical_low", "critical_high")}
+            out[row["biomarker_code"]] = {k: (float(row[k]) if row.get(k) else None) for k in ("low", "borderline", "high", "critical_low", "critical_high")}
     return out
 
 
@@ -147,6 +163,8 @@ def targets_from_labs(frame: pd.DataFrame, cutoffs: dict[str, dict[str, float | 
     tc = _col(frame, "LBXTC")
     hdl = _col(frame, "LBDHDD")
     alt = _col(frame, "LBXSATSI")
+    hba1c = _col(frame, "LBXGH")
+    b12 = _col(frame, "LBDB12").fillna(_col(frame, "LBXB12"))
     hb_cut = pd.Series(np.where(_col(frame, "RIAGENDR") == 1, 13.0, 12.0), index=frame.index)  # OMS 2024
     t["target_vitamin_d_low"] = flag(vitd_ng, vitd_ng < cutoffs["vitamin_d"]["low"])
     t["target_ferritin_low"] = flag(ferritin, ferritin < cutoffs["ferritin"]["low"])
@@ -155,6 +173,9 @@ def targets_from_labs(frame: pd.DataFrame, cutoffs: dict[str, dict[str, float | 
     t["target_cholesterol_high"] = flag(tc, tc >= cutoffs["total_cholesterol"]["high"])
     t["target_hdl_low"] = flag(hdl, hdl < cutoffs["hdl"]["low"])
     t["target_alt_high"] = flag(alt, alt > cutoffs["alt"]["high"])
+    t["target_hba1c_high"] = flag(hba1c, hba1c >= cutoffs["hba1c"]["high"])
+    # B12 baja o limitrofe (< 300 pg/mL, NIH ODS): con < 200 la prevalencia adulta en NHANES es muy baja para aprender.
+    t["target_b12_low"] = flag(b12, b12 < cutoffs["b12"]["borderline"])
     return t
 
 
@@ -183,10 +204,12 @@ def features_from_questionnaire(frame: pd.DataFrame) -> pd.DataFrame:
     alq = frame.get("ALQ130", pd.Series(index=frame.index))
     f["alcohol_tragos_dia"] = alq.where(alq < 100)  # 777/999 = no sabe/rechaza
     f["diabetes_dx"] = frame.get("DIQ010", pd.Series(index=frame.index)).map({1: "si", 2: "no", 3: "borderline"}).fillna("missing")
-    sld = frame.get("SLD012", pd.Series(index=frame.index))
+    sld = frame.get("SLD012", pd.Series(index=frame.index)).fillna(frame.get("SLD010H", pd.Series(index=frame.index)))
     f["sueno_horas"] = sld.where(sld < 24)
     f["sueno_problemas"] = frame.get("SLQ050", pd.Series(index=frame.index)).map({1: "si", 2: "no"}).fillna("missing")
     f["salud_autopercibida"] = frame.get("HSD010", pd.Series(index=frame.index)).map({1: "excelente", 2: "muy_buena", 3: "buena", 4: "regular", 5: "mala"}).fillna("missing")
+    for col in ("metformina", "antiacidos"):
+        f[col] = frame.get(col, pd.Series("missing", index=frame.index)).fillna("missing")
     for col in NUM_FEATURES:
         if col not in f:
             f[col] = np.nan
@@ -226,8 +249,29 @@ def load_cycle(cycle: str, force: bool = False) -> pd.DataFrame:
         merged = frame if merged is None else merged.merge(frame, on="SEQN", how="left")
     if merged is None:
         raise RuntimeError(f"sin datos para {cycle}")
+    rx_path = download(f"RXQ_RX_{suffix}", year, force=force)
+    if rx_path is not None:
+        merged = merged.merge(medication_flags(pd.read_sas(rx_path, format="xport", encoding="latin-1")), on="SEQN", how="left")
     merged["cycle"] = cycle
     return merged
+
+
+def medication_flags(rx: pd.DataFrame) -> pd.DataFrame:
+    """Una fila por persona con metformina/antiacidos "si" o "no" a partir de RXQ_RX (una fila por medicamento).
+
+    RXDUSE=2 (no tomo medicamentos el ultimo mes) cuenta como "no"; sin respuesta queda faltante.
+    """
+    names = rx.get("RXDDRUG", pd.Series("", index=rx.index)).fillna("").astype(str).str.upper()
+    rx = rx.assign(
+        _metformina=names.str.contains("|".join(METFORMIN_NAMES)),
+        _antiacidos=names.str.contains("|".join(ACID_SUPPRESSOR_NAMES)),
+        _answered=rx.get("RXDUSE", pd.Series(index=rx.index)).isin([1, 2]),
+    )
+    grouped = rx.groupby("SEQN").agg(_metformina=("_metformina", "any"), _antiacidos=("_antiacidos", "any"), _answered=("_answered", "any"))
+    out = pd.DataFrame(index=grouped.index)
+    for col in ("metformina", "antiacidos"):
+        out[col] = np.where(grouped[f"_{col}"], "si", np.where(grouped["_answered"], "no", "missing"))
+    return out.reset_index()
 
 
 def expected_calibration_error(y_true: np.ndarray, y_prob: np.ndarray, bins: int = 10) -> float:
@@ -310,7 +354,8 @@ def main() -> int:
     rng = np.random.RandomState(args.seed)
     cutoffs = biomarker_cutoffs()
     frames = {}
-    for cycle in (TRAIN_CYCLE, TEST_CYCLE):
+    needed = [TRAIN_CYCLE, TEST_CYCLE] + [c for split in TARGET_SPLITS.values() for c in split if c not in (TRAIN_CYCLE, TEST_CYCLE)]
+    for cycle in dict.fromkeys(needed):
         print(f"Cargando {cycle}...")
         frame = load_cycle(cycle, force=args.force_download)
         frame = frame[frame["RIDAGEYR"] >= args.min_age]
@@ -319,19 +364,20 @@ def main() -> int:
         frames[cycle] = frame.reset_index(drop=True)
         print(f"  filas adultos: {len(frame)}")
 
-    x_train_all = features_from_questionnaire(frames[TRAIN_CYCLE])
-    t_train_all = targets_from_labs(frames[TRAIN_CYCLE], cutoffs)
-    x_test_all = features_from_questionnaire(frames[TEST_CYCLE])
-    t_test_all = targets_from_labs(frames[TEST_CYCLE], cutoffs)
-    assert not any(col.startswith(("LBX", "LBD")) for col in x_train_all.columns), "fuga: laboratorio en features"
+    x_by_cycle = {cycle: features_from_questionnaire(frame) for cycle, frame in frames.items()}
+    t_by_cycle = {cycle: targets_from_labs(frame, cutoffs) for cycle, frame in frames.items()}
+    assert not any(col.startswith(("LBX", "LBD")) for x in x_by_cycle.values() for col in x.columns), "fuga: laboratorio en features"
     for col in args.drop_features:  # ablacion: simula una encuesta que no pregunta esa variable
-        for frame_ in (x_train_all, x_test_all):
+        for frame_ in x_by_cycle.values():
             frame_[col] = "missing" if col in CAT_FEATURES else np.nan
 
     models: dict[str, Any] = {}
     thresholds: dict[str, float] = {}
     metrics: dict[str, dict[str, Any]] = {}
-    for target in t_train_all.columns:
+    for target in t_by_cycle[TRAIN_CYCLE].columns:
+        train_cycle, test_cycle = TARGET_SPLITS.get(target, (TRAIN_CYCLE, TEST_CYCLE))
+        x_train_all, t_train_all = x_by_cycle[train_cycle], t_by_cycle[train_cycle]
+        x_test_all, t_test_all = x_by_cycle[test_cycle], t_by_cycle[test_cycle]
         mask_tr = t_train_all[target].notna() & population_mask(x_train_all, target)
         mask_te = t_test_all[target].notna() & population_mask(x_test_all, target)
         y_tr = t_train_all.loc[mask_tr, target].astype(int).to_numpy()
@@ -354,7 +400,7 @@ def main() -> int:
         pipe.fit(x_tr, y_tr)
         p_te = pipe.predict_proba(x_te)[:, 1]
         result = evaluate(y_te, p_te, threshold)
-        result.update({"n_train": int(len(y_tr)), "positives_train": int(y_tr.sum()), "train_cycle": TRAIN_CYCLE, "test_cycle": TEST_CYCLE, "population": TARGET_POPULATION.get(target, {"all_adults": True})})
+        result.update({"n_train": int(len(y_tr)), "positives_train": int(y_tr.sum()), "train_cycle": train_cycle, "test_cycle": test_cycle, "population": TARGET_POPULATION.get(target, {"all_adults": True})})
         metrics[target] = result
         models[target] = pipe
         thresholds[target] = threshold
@@ -375,6 +421,7 @@ def main() -> int:
         "feature_contract_version": FEATURE_CONTRACT_VERSION,
         "train_cycle": TRAIN_CYCLE,
         "test_cycle": TEST_CYCLE,
+        "target_splits": TARGET_SPLITS,
         "cutoffs": cutoffs,
         "trained_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -394,6 +441,8 @@ def main() -> int:
             "target_cholesterol_high": f"colesterol total >= {cutoffs['total_cholesterol']['high']} mg/dL",
             "target_hdl_low": f"HDL < {cutoffs['hdl']['low']} mg/dL",
             "target_alt_high": f"ALT > {cutoffs['alt']['high']} U/L",
+            "target_hba1c_high": f"HbA1c >= {cutoffs['hba1c']['high']} % (prediabetes o diabetes)",
+            "target_b12_low": f"B12 serica < {cutoffs['b12']['borderline']} pg/mL (baja o limitrofe, NIH ODS); train 2011-2012, test 2013-2014",
         },
         "features": {"categorical": CAT_FEATURES, "numeric": NUM_FEATURES, "contract_version": FEATURE_CONTRACT_VERSION, "dropped_for_ablation": list(args.drop_features)},
         "algorithm": "LogisticRegression (balanced, C=0.5) + CalibratedClassifierCV(sigmoid, cv=3); umbral por F1 en validacion interna, minimo 0.30",

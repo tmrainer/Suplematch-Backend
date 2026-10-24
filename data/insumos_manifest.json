@@ -54,7 +54,7 @@
       "versioned": false,
       "origen": "Modelo real: NHANES 2015-2016 (train) / 2017-2018 (test), features solo de cuestionario.",
       "generador": "python scripts/training/entrenar_condiciones_nhanes.py",
-      "sha256": "b6cc26f3754b62d012204a25c7eb259b08093c0937505a442f83dd00f05b8ff1",
+      "sha256": "4bbf3339d4a6cd2ad4cf948502b634430e39c6ac71f5714eb453e3899febe139",
       "nota": "Model card en models/runtime/condition_lab_model_card.json"
     },
     {

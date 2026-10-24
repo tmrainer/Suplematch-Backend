@@ -40,7 +40,10 @@ sugerir que sí.
   (`complementary_family`, desde 2026-10-24). El modelo real nunca marca solo. La vía queda en
   `second_opinion_reason`. Efecto medido en los 120 casos del paquete clínico: vitamina D 19 → 27 casos,
   condiciones por caso 4.97 → 5.04; escenarios de calidad 8/15 → 11/15.
-- Validación externa en NHANES 2021-2023 sin reentrenar: vitamina D AUC 0.811 (ver `docs/fuentes_datos_reales.md`).
+- Desde el reentreno del 2026-10-24 (features `metformina` y `antiacidos`, targets HbA1c y B12) el umbral de
+  vitamina D es 0.38 y el efecto en el paquete clínico queda en 21 de 120 casos.
+- En producción (`EXCLUDED_TARGETS`): vitamina D, HbA1c, HDL y ALT. Fuera: glucosa (reemplazada por HbA1c), anemia
+  (ENDES), ferritina, colesterol y B12. Métricas de test y de NHANES 2021-2023 en `docs/fuentes_datos_reales.md`.
 - El Modelo 1 sintético (`condition_mvp`) sigue operando como índice de riesgo basado en reglas; la salida de ambos
   se distingue por `score_basis`.
 

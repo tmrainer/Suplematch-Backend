@@ -30,6 +30,8 @@ TARGET_TO_CONDITION = {
     "target_cholesterol_high": "RIESGO_DISLIPIDEMIA",
     "target_hdl_low": "RIESGO_DISLIPIDEMIA",
     "target_alt_high": "SAFETY_HEPATICA",
+    "target_hba1c_high": "RIESGO_METABOLICO_GLUCOSA",
+    "target_b12_low": "DEFICIT_B12",
 }
 TARGET_LABELS = {
     "target_vitamin_d_low": "Vitamina D baja (<20 ng/mL)",
@@ -39,14 +41,21 @@ TARGET_LABELS = {
     "target_cholesterol_high": "Colesterol total elevado (>=200 mg/dL)",
     "target_hdl_low": "HDL bajo (<40 mg/dL)",
     "target_alt_high": "ALT elevada (>40 U/L)",
+    "target_hba1c_high": "HbA1c elevada (>=5.7 %)",
+    "target_b12_low": "Vitamina B12 baja (<300 pg/mL)",
 }
 
 # Targets excluidos de produccion y por que. Validacion peruana con ENDES 2022/2024 (28 947 y 27 464 mujeres 18-49
 # con hemoglobina medida): el modelo NHANES obtuvo AUC 0.50 (azar); recalibrar no ayudo (0.50) y un modelo nativo
 # ENDES llego solo a 0.57. La anemia en mujeres peruanas no se infiere desde estas variables de encuesta.
 # Ver docs/condition_lab_model.md y data/reports/condition_model/endes_anemia_validation.json.
+# El resto (2026-10-24): metricas en test temporal y en NHANES 2021-2023 sin reentrenar (docs/fuentes_datos_reales.md).
 EXCLUDED_TARGETS: dict[str, str] = {
     "target_anemia": "no validado en Peru (ENDES 2022-2024: AUC 0.50); sugerir hemograma en vez de estimar",
+    "target_glucose_high": "reemplazado por target_hba1c_high (AUC 0.844 test / 0.834 externo frente a 0.762 / 0.748; HbA1c no exige ayuno)",
+    "target_ferritin_low": "no util desde la encuesta (AUC 0.575 test / 0.581 externo)",
+    "target_cholesterol_high": "debil y descalibrado fuera de muestra (AUC 0.632, Brier peor que la base en 2021-2023)",
+    "target_b12_low": "debil (AUC 0.687 en NHANES 2013-2014) y casi sin positivos al umbral (F1 0.01)",
 }
 
 EDAD_MAP = {"menos_18": 17.0, "18_30": 24.0, "31_50": 40.0, "mas_50": 60.0}
@@ -104,6 +113,9 @@ def survey_to_nhanes_features(encuesta: Any) -> dict[str, Any]:
     alcohol = alcohol_week / 7.0 if not math.isnan(alcohol_week) else ALCOHOL_TRAGOS_DIA.get(str(getattr(encuesta, "alcohol", "")), math.nan)
     sleep_quality = getattr(encuesta, "sleep_quality", None)
     current = set(getattr(encuesta, "suplementos_actuales", []) or [])
+    # La pregunta de medicamentos se muestra a quien tiene diabetes medicada, medicacion cronica o 50+ anos; fuera de
+    # ese grupo se asume que no los toma (la misma suposicion que hace la compuerta de la encuesta).
+    medications = set(getattr(encuesta, "medicamentos_b12", []) or [])
     return {
         "sexo": sexo,
         "edad": edad,
@@ -117,7 +129,7 @@ def survey_to_nhanes_features(encuesta: Any) -> dict[str, Any]:
         "sup_count": float(len(current)),
         "sup_vit_d_mcg": _dose(encuesta, "vitamina_d", {"ui": 0.025, "iu": 0.025, "mcg": 1.0, "µg": 1.0}) if "vitamina_d" in current else 0.0,
         "sup_hierro_mg": _dose(encuesta, "hierro") if "hierro" in current else 0.0,
-        "sup_b12_mcg": math.nan,
+        "sup_b12_mcg": _dose(encuesta, "vitamina_b12", {"mcg": 1.0, "µg": 1.0, "mg": 1000.0}) if "vitamina_b12" in current else 0.0,
         "sup_folico_mcg": math.nan,
         "sup_calcio_mg": _dose(encuesta, "calcio") if "calcio" in current else 0.0,
         "sup_magnesio_mg": _dose(encuesta, "magnesio") if "magnesio" in current else 0.0,
@@ -142,6 +154,8 @@ def survey_to_nhanes_features(encuesta: Any) -> dict[str, Any]:
         "sueno_horas": SUENO_HORAS.get(str(getattr(encuesta, "horas_sueno", "")), math.nan),
         "sueno_problemas": "si" if sleep_quality == "mala" else ("no" if sleep_quality == "buena" else "missing"),
         "salud_autopercibida": str(getattr(encuesta, "salud_autopercibida", None) or "missing"),
+        "metformina": "si" if "metformina" in medications else "no",
+        "antiacidos": "si" if "antiacidos_ibp" in medications else "no",
     }
 
 
@@ -177,7 +191,9 @@ def predict_lab_risks(encuesta: Any) -> list[dict[str, Any]]:
                 "positive": probability >= threshold,
                 "score_basis": "model_real",
                 "model": MODEL_FILENAME,
-                "train_data": f"NHANES {artifact.get('train_cycle')} (test {artifact.get('test_cycle')})",
+                "train_data": "NHANES {} (test {})".format(
+                    *(artifact.get("target_splits") or {}).get(target, (artifact.get("train_cycle"), artifact.get("test_cycle")))
+                ),
                 "note": "Probabilidad calibrada en poblacion de EE. UU.; no validada en Peru. Sugiere confirmar con examen.",
             }
         )

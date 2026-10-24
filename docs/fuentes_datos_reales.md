@@ -37,35 +37,43 @@ En el ciclo L cambiaron `PAQ`, `SLQ050` y `HSD010`: el modelo actual los recibe 
 | ENSIN 2015 Colombia (ICBF) | Bioquímica sin detalle (NV) | Sin procedimiento de microdatos encontrado | Buena, sin acceso confirmado |
 | KNHANES (Corea), CHMS (Canadá), NDNS (Reino Unido) | Varios | Registro o solo en centros de datos | Baja o inviable |
 
-## Validación externa hecha (2026-10-24): NHANES 2021-2023 sin reentrenar
+## Modelo actual (contrato `nhanes_questionnaire_v2_2026-10-24`) y validación externa
 
-`python scripts/training/validar_condiciones_nhanes_externo.py`, 8 153 adultos. Reporte en
-`data/reports/condition_model/nhanes_external_2021_2023.json`.
+Reentrenado el 2026-10-24 con dos features nuevas que la encuesta v2 ya pregunta: `metformina` y `antiacidos`
+(IBP o anti-H2, desde `RXQ_RX`), más la dosis de B12 en suplementos. Targets nuevos: HbA1c ≥ 5.7 % (`GHB`) y B12
+< 300 pg/mL (`VITB12`, solo en 2011-2014: train G, test H). La validación externa es NHANES 2021-2023 sin
+reentrenar (`python scripts/training/validar_condiciones_nhanes_externo.py`, 8 153 adultos; reporte en
+`data/reports/condition_model/nhanes_external_2021_2023.json`).
 
-| Target | AUC test 2017-18 | AUC externo 2021-23 | Calibración externa (ECE) | Lectura |
+| Target | AUC test | AUC externo 2021-23 | ECE externo | En producción |
 |---|---|---|---|---|
-| Vitamina D < 20 ng/mL | 0.815 | **0.811** | 0.021 | Se sostiene; prevalencia bajó de 0.30 a 0.20 y la media predicha (0.22) la sigue |
-| Glucosa ayunas ≥ 100 | 0.762 | 0.752 | 0.089 | Se sostiene; calibración peor |
-| HDL < 40 | 0.749 | 0.752 | 0.061 | Se sostiene |
-| Anemia | 0.737 | 0.719 | 0.009 | Se sostiene en EE. UU. (en Perú no: ENDES 0.50-0.57) |
-| ALT > 40 | 0.695 | 0.702 | 0.047 | Débil |
-| Colesterol ≥ 200 | 0.648 | 0.637 | 0.136 | Débil y descalibrado (Brier peor que la base) |
-| Ferritina < 30 (mujeres) | 0.576 | 0.579 | 0.028 | No útil |
+| Vitamina D < 20 ng/mL | 0.815 | **0.810** | 0.022 | Sí, y segunda opinión de `DEFICIT_VIT_D` |
+| HbA1c ≥ 5.7 % | **0.844** | **0.834** | 0.029 | Sí (reemplaza a glucosa) |
+| HDL < 40 | 0.749 | 0.753 | 0.053 | Sí |
+| ALT > 40 | 0.696 | 0.699 | 0.041 | Sí (casi nunca positivo) |
+| Glucosa ayunas ≥ 100 | 0.762 | 0.748 | 0.079 | No: reemplazada por HbA1c |
+| Anemia | 0.740 | 0.719 | 0.006 | No: en Perú AUC 0.50 (ENDES) |
+| Colesterol ≥ 200 | 0.651 | 0.632 | 0.143 | No: Brier peor que la base fuera de muestra |
+| B12 < 300 pg/mL (test 2013-14) | 0.687 | sin dato | — | No: F1 0.01 al umbral, casi no marca positivos |
+| Ferritina < 30 (mujeres) | 0.575 | 0.581 | 0.030 | No útil |
 
-Esto pasa aunque en el ciclo L faltan del todo actividad física, problemas de sueño y salud autopercibida (cambios
-del cuestionario) y un 39 % no tiene recordatorio de 24 h (se imputan con la mediana del train).
+Notas:
+- En el ciclo L faltan del todo actividad física, problemas de sueño y salud autopercibida (cambios del
+  cuestionario) y un 39 % no tiene recordatorio de 24 h; se imputan con la mediana del train.
+- `RXQ_RX_L` ya no publica los nombres de los medicamentos: la validación externa evalúa metformina y
+  antiácidos como "no", igual que el runtime cuando la persona no los marca. Dejarlos como faltantes descalibra
+  HDL (ECE 0.159) y HbA1c (0.098) por un artefacto del ciclo, no del producto.
+- El umbral de vitamina D (elegido en validación interna) pasó de 0.34 a 0.38 con el reentreno: en el paquete
+  clínico la vitamina D baja de 27 a 21 de 120 casos; los escenarios de calidad no cambian.
 
 ## Próximas acciones recomendadas
 
-1. **B12 (DEFICIT_B12)**: modelo nuevo con `VITB12_G` (train) y `VITB12_H` (test). Target B12 < 200 pg/mL, o
-   < 300 con MMA > 0.27 µmol/L. Features de la encuesta v2 que ya existen: edad, metformina, IBP, B12 en
-   suplementos, dieta vegetal. AUC esperado moderado (estimación, no medido).
-2. **Glucosa → HbA1c ≥ 5.7** (`GHB_*`): está en todos los adultos examinados, no solo en la submuestra en ayunas,
-   y es el examen que se pide en Perú.
-3. **Validación latinoamericana con ENSANUT 2018** de vitamina D, HbA1c y lípidos, después de confirmar términos
+1. **Validación latinoamericana con ENSANUT 2018** de vitamina D, HbA1c y lípidos, después de confirmar términos
    de uso con el INSP (ensanut@insp.mx).
-4. **Reentrenar con más ciclos** (G+H+I para vitamina D) y reservar J y L como test.
-5. No vale la pena con la encuesta actual: zinc, folato (fortificación), ferritina y magnesio.
+2. **Reentrenar vitamina D con más ciclos** (G+H+I) y reservar J y L como test.
+3. **B12**: con la encuesta actual no alcanza. Faltaría dieta vegetal en NHANES (no hay variable directa) o un
+   recordatorio de 24 h en la app; mientras tanto `DEFICIT_B12` sigue saliendo de las reglas (dieta vegana, metformina, edad).
+4. No vale la pena con la encuesta actual: zinc, folato (fortificación), ferritina y magnesio.
 
 Riesgos: validez en Perú (ENDES mostró que un modelo de EE. UU. puede caer al azar en anemia); términos de uso por
 confirmar en todas las fuentes salvo NHANES; el modelo usa el recordatorio de 24 h de NHANES, que la encuesta

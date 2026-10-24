@@ -1,6 +1,6 @@
 {
   "model": "condition_lab_model",
-  "sha256_16": "b6cc26f3754b62d0",
+  "sha256_16": "4bbf3339d4a6cd2a",
   "task": "Probabilidad de laboratorio fuera de rango a partir del cuestionario (sin laboratorios como entrada).",
   "data": {
     "source": "NHANES (CDC)",
@@ -18,7 +18,9 @@
     "target_glucose_high": "glucosa ayunas >= 100.0 mg/dL",
     "target_cholesterol_high": "colesterol total >= 200.0 mg/dL",
     "target_hdl_low": "HDL < 40.0 mg/dL",
-    "target_alt_high": "ALT > 40.0 U/L"
+    "target_alt_high": "ALT > 40.0 U/L",
+    "target_hba1c_high": "HbA1c >= 5.7 % (prediabetes o diabetes)",
+    "target_b12_low": "B12 serica < 300.0 pg/mL (baja o limitrofe, NIH ODS); train 2011-2012, test 2013-2014"
   },
   "features": {
     "categorical": [
@@ -31,7 +33,9 @@
       "diabetes_dx",
       "sueno_problemas",
       "salud_autopercibida",
-      "embarazo"
+      "embarazo",
+      "metformina",
+      "antiacidos"
     ],
     "numeric": [
       "edad",
@@ -62,22 +66,23 @@
       "alcohol_tragos_dia",
       "sueno_horas"
     ],
-    "contract_version": "nhanes_questionnaire_v1_2026-10-22"
+    "contract_version": "nhanes_questionnaire_v2_2026-10-24",
+    "dropped_for_ablation": []
   },
   "algorithm": "LogisticRegression (balanced, C=0.5) + CalibratedClassifierCV(sigmoid, cv=3); umbral por F1 en validacion interna, minimo 0.30",
   "metrics_test": {
     "target_vitamin_d_low": {
       "n": 5225,
       "prevalence": 0.2951196172248804,
-      "roc_auc": 0.8149592212686819,
-      "average_precision": 0.6294544035249643,
-      "brier": 0.1551190154971362,
+      "roc_auc": 0.8150819501245425,
+      "average_precision": 0.6302208429892304,
+      "brier": 0.1550550674376843,
       "brier_baseline_prevalence": 0.20802402875392045,
-      "ece": 0.02866860216909906,
-      "threshold": 0.34,
-      "f1": 0.6234648549777894,
-      "precision": 0.5221006564551423,
-      "recall": 0.7736705577172504,
+      "ece": 0.029432214081366224,
+      "threshold": 0.38000000000000006,
+      "f1": 0.6187691450849345,
+      "precision": 0.5422157149829185,
+      "recall": 0.7204928664072633,
       "n_train": 5421,
       "positives_train": 1801,
       "train_cycle": "2015_2016",
@@ -89,15 +94,15 @@
     "target_ferritin_low": {
       "n": 1303,
       "prevalence": 0.38679969301611666,
-      "roc_auc": 0.5762287184377297,
-      "average_precision": 0.4418402252847131,
-      "brier": 0.23440152729819635,
+      "roc_auc": 0.5751435325903411,
+      "average_precision": 0.4436233684029355,
+      "brier": 0.2343764104743917,
       "brier_baseline_prevalence": 0.23718569049875457,
-      "ece": 0.029908286740210975,
+      "ece": 0.028740398742030313,
       "threshold": 0.3,
-      "f1": 0.5562395075545608,
-      "precision": 0.387373343725643,
-      "recall": 0.9861111111111112,
+      "f1": 0.5572305974316024,
+      "precision": 0.3877233877233877,
+      "recall": 0.9900793650793651,
       "n_train": 1503,
       "positives_train": 576,
       "train_cycle": "2015_2016",
@@ -110,15 +115,15 @@
     "target_anemia": {
       "n": 5271,
       "prevalence": 0.10605198254600645,
-      "roc_auc": 0.7371310185846058,
-      "average_precision": 0.24607050367544664,
-      "brier": 0.0882379663655638,
+      "roc_auc": 0.7398804407579628,
+      "average_precision": 0.24724007600564654,
+      "brier": 0.08813431689000968,
       "brier_baseline_prevalence": 0.094804959544068,
-      "ece": 0.015868489474144674,
-      "threshold": 0.32,
-      "f1": 0.18604651162790697,
-      "precision": 0.33488372093023255,
-      "recall": 0.12880143112701253,
+      "ece": 0.016732992759995735,
+      "threshold": 0.3,
+      "f1": 0.2384887839433294,
+      "precision": 0.3506944444444444,
+      "recall": 0.1806797853309481,
       "n_train": 5423,
       "positives_train": 646,
       "train_cycle": "2015_2016",
@@ -130,15 +135,15 @@
     "target_glucose_high": {
       "n": 2537,
       "prevalence": 0.6373669688608593,
-      "roc_auc": 0.7619934930493937,
-      "average_precision": 0.8432391723219392,
-      "brier": 0.1874681917529719,
+      "roc_auc": 0.7620015595170874,
+      "average_precision": 0.8445745779432517,
+      "brier": 0.18750832574604473,
       "brier_baseline_prevalence": 0.23113031586597968,
-      "ece": 0.04597685163366893,
+      "ece": 0.045758189181996714,
       "threshold": 0.38000000000000006,
-      "f1": 0.8037333333333333,
-      "precision": 0.706516643225504,
-      "recall": 0.9319727891156463,
+      "f1": 0.804689581667999,
+      "precision": 0.7069288389513109,
+      "recall": 0.9338280766852195,
       "n_train": 2573,
       "positives_train": 1505,
       "train_cycle": "2015_2016",
@@ -150,15 +155,15 @@
     "target_cholesterol_high": {
       "n": 5176,
       "prevalence": 0.34370170015455953,
-      "roc_auc": 0.6483475897044362,
-      "average_precision": 0.46072701602542776,
-      "brier": 0.2134588834411713,
+      "roc_auc": 0.6509107745269402,
+      "average_precision": 0.4643644174429921,
+      "brier": 0.21295712988636847,
       "brier_baseline_prevalence": 0.22557084146542475,
-      "ece": 0.03205369815884161,
-      "threshold": 0.32,
-      "f1": 0.5371757925072046,
-      "precision": 0.4080560420315236,
-      "recall": 0.7858347386172007,
+      "ece": 0.030504293572997478,
+      "threshold": 0.3,
+      "f1": 0.5399855907780979,
+      "precision": 0.3972965809700504,
+      "recall": 0.8426082068577853,
       "n_train": 5394,
       "positives_train": 1990,
       "train_cycle": "2015_2016",
@@ -170,15 +175,15 @@
     "target_hdl_low": {
       "n": 5176,
       "prevalence": 0.1705950540958269,
-      "roc_auc": 0.7490418044703393,
-      "average_precision": 0.36837483610422195,
-      "brier": 0.12568174567534257,
+      "roc_auc": 0.749305870469428,
+      "average_precision": 0.36902973305330683,
+      "brier": 0.12568526594313917,
       "brier_baseline_prevalence": 0.1414923816138688,
-      "ece": 0.021528798581486975,
+      "ece": 0.01975076783396221,
       "threshold": 0.3,
-      "f1": 0.40022172949002216,
-      "precision": 0.3919652551574376,
-      "recall": 0.4088335220838052,
+      "f1": 0.4022099447513812,
+      "precision": 0.3926645091693635,
+      "recall": 0.41223103057757643,
       "n_train": 5394,
       "positives_train": 1029,
       "train_cycle": "2015_2016",
@@ -190,19 +195,59 @@
     "target_alt_high": {
       "n": 5153,
       "prevalence": 0.08771589365418203,
-      "roc_auc": 0.695363724155847,
-      "average_precision": 0.19108372039341648,
-      "brier": 0.07657182608081171,
+      "roc_auc": 0.6963534401454783,
+      "average_precision": 0.19028268417415356,
+      "brier": 0.07658496931308288,
       "brier_baseline_prevalence": 0.08002181565463028,
-      "ece": 0.016337186913366667,
+      "ece": 0.013906637218400176,
       "threshold": 0.34,
-      "f1": 0.03305785123966942,
-      "precision": 0.25,
-      "recall": 0.017699115044247787,
+      "f1": 0.03696098562628337,
+      "precision": 0.2571428571428571,
+      "recall": 0.01991150442477876,
       "n_train": 5386,
       "positives_train": 540,
       "train_cycle": "2015_2016",
       "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    },
+    "target_hba1c_high": {
+      "n": 5261,
+      "prevalence": 0.4390800228093518,
+      "roc_auc": 0.8438493958317747,
+      "average_precision": 0.8221591203312306,
+      "brier": 0.1584991878221222,
+      "brier_baseline_prevalence": 0.24628875637909095,
+      "ece": 0.02136481536643523,
+      "threshold": 0.4200000000000001,
+      "f1": 0.7220231822971549,
+      "precision": 0.7034907597535934,
+      "recall": 0.7415584415584415,
+      "n_train": 5441,
+      "positives_train": 2240,
+      "train_cycle": "2015_2016",
+      "test_cycle": "2017_2018",
+      "population": {
+        "all_adults": true
+      }
+    },
+    "target_b12_low": {
+      "n": 5447,
+      "prevalence": 0.10923444097668442,
+      "roc_auc": 0.6873222166030468,
+      "average_precision": 0.21404721037177357,
+      "brier": 0.0931145126169077,
+      "brier_baseline_prevalence": 0.09730227788119565,
+      "ece": 0.01157947180792411,
+      "threshold": 0.3,
+      "f1": 0.013201320132013201,
+      "precision": 0.36363636363636365,
+      "recall": 0.0067226890756302525,
+      "n_train": 4877,
+      "positives_train": 528,
+      "train_cycle": "2011_2012",
+      "test_cycle": "2013_2014",
       "population": {
         "all_adults": true
       }
@@ -214,47 +259,5 @@
     "El cuestionario NHANES no es la encuesta SupleMatch: el mapeo de features es aproximado (ver features_from_questionnaire).",
     "No es diagnostico. Salida = probabilidad calibrada de laboratorio fuera de rango, para priorizar recomendaciones y sugerir un examen."
   ],
-  "generated_at": "2026-10-22T23:45:31.757229+00:00",
-  "peru_validation": {
-    "source": "ENDES 2022 y 2024 (INEI, datosabiertos.gob.pe), mujeres 18-49 con hemoglobina medida (V455=0), target V457 (anemia INEI, Hb ajustada por altitud; acuerdo 100% con corte OMS sobre V456)",
-    "n": {
-      "2022": 28947,
-      "2024": 27464
-    },
-    "prevalence": {
-      "2022": 0.217,
-      "2024": 0.242
-    },
-    "target_anemia_nhanes_as_is": {
-      "2022": {
-        "roc_auc": 0.501,
-        "average_precision": 0.22,
-        "brier": 0.175,
-        "brier_baseline_prevalence": 0.17,
-        "ece": 0.061,
-        "recall": 0.071
-      },
-      "2024": {
-        "roc_auc": 0.497,
-        "average_precision": 0.243,
-        "brier": 0.19,
-        "brier_baseline_prevalence": 0.183,
-        "ece": 0.066,
-        "recall": 0.069
-      }
-    },
-    "target_anemia_nhanes_recalibrated_2024": {
-      "roc_auc": 0.498,
-      "brier": 0.184,
-      "ece": 0.025
-    },
-    "endes_native_model_2024": {
-      "roc_auc": 0.573,
-      "average_precision": 0.303,
-      "brier": 0.181,
-      "ece": 0.024
-    },
-    "decision": "target_anemia excluido de lab_risk_estimates (EXCLUDED_TARGETS). Los demas targets siguen sin validacion peruana: ENDES no mide vitamina D, glucosa ni lipidos.",
-    "validated_at": "2026-10-23T01:42:25.748593+00:00"
-  }
+  "generated_at": "2026-10-24T20:28:36.228203+00:00"
 }

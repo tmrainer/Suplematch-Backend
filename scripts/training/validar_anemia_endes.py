@@ -142,6 +142,8 @@ def features_from_endes(women: pd.DataFrame) -> pd.DataFrame:
     f["sueno_horas"] = np.nan
     f["sueno_problemas"] = "missing"
     f["salud_autopercibida"] = "missing"
+    f["metformina"] = "missing"  # ENDES no pregunta medicamentos
+    f["antiacidos"] = "missing"
     # columnas propias de ENDES (para el modelo nativo)
     f["altitud_m"] = num("HV040")
     f["urbano"] = num("V025").map({1: "urbano", 2: "rural"}).fillna("missing").astype(str)

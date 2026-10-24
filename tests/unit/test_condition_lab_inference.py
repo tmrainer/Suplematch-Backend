@@ -86,3 +86,46 @@ def test_lab_risk_estimates_declare_calibrated_probability_semantics() -> None:
     estimates = cli.predict_lab_risks(_encuesta(sexo="masculino", age_years=50, tabaco="actual", salud_autopercibida="mala"))
     assert estimates
     assert all(item["score_semantics"] == "probabilidad_calibrada_real" for item in estimates)
+
+
+def test_b12_medications_and_supplement_feed_the_real_model() -> None:
+    features = cli.survey_to_nhanes_features(
+        _encuesta(age_years=60, condiciones_seguridad=["diabetes_medicada"], medicamentos_b12=["metformina"], toma_suplementos="si", suplementos_actuales=["vitamina_b12"])
+    )
+    assert features["metformina"] == "si" and features["antiacidos"] == "no"
+    assert math.isnan(features["sup_b12_mcg"])  # la toma pero sin dosis: faltante, no cero
+    defaults = cli.survey_to_nhanes_features(_encuesta())
+    assert defaults["metformina"] == "no" and defaults["antiacidos"] == "no" and defaults["sup_b12_mcg"] == 0.0
+
+
+def test_medication_flags_aggregate_one_row_per_person() -> None:
+    import pandas as pd
+
+    from scripts.training.entrenar_condiciones_nhanes import medication_flags
+
+    rx = pd.DataFrame({
+        "SEQN": [1, 1, 2, 3, 4],
+        "RXDUSE": [1, 1, 1, 2, None],
+        "RXDDRUG": ["METFORMIN", "LISINOPRIL", "OMEPRAZOLE", "", ""],
+    })
+    flags = medication_flags(rx).set_index("SEQN")
+    assert flags.loc[1, "metformina"] == "si" and flags.loc[1, "antiacidos"] == "no"
+    assert flags.loc[2, "antiacidos"] == "si" and flags.loc[2, "metformina"] == "no"
+    assert flags.loc[3, "metformina"] == "no"  # RXDUSE=2: no toma medicamentos
+    assert flags.loc[4, "metformina"] == "missing"
+
+
+def test_only_targets_useful_outside_the_training_sample_reach_production() -> None:
+    # 2026-10-24: HbA1c reemplaza a glucosa; ferritina, colesterol y B12 no sirven desde la encuesta (ver EXCLUDED_TARGETS).
+    assert {"target_glucose_high", "target_ferritin_low", "target_cholesterol_high", "target_b12_low", "target_anemia"} <= set(cli.EXCLUDED_TARGETS)
+    for target in ("target_vitamin_d_low", "target_hba1c_high", "target_hdl_low"):
+        assert target not in cli.EXCLUDED_TARGETS and target in cli.TARGET_TO_CONDITION
+
+
+@pytest.mark.skipif(not (Path(settings.MODEL_DIR) / cli.MODEL_FILENAME).exists(), reason="condition_lab_model.pkl no entrenado")
+def test_hba1c_estimate_is_served_and_excluded_targets_are_not() -> None:
+    cli.load_model.cache_clear()
+    targets = {item["target"] for item in cli.predict_lab_risks(_encuesta(sexo="masculino", age_years=58, weight_kg=95, height_cm=170))}
+    assert "target_hba1c_high" in targets
+    assert not targets & set(cli.EXCLUDED_TARGETS)
+
