@@ -31,6 +31,7 @@ SuplementoActual = Literal[
     "omega_3",
     "multivitaminico",
     "proteina",
+    "vitamina_b12",
     "otro",
 ]
 Restriccion = Literal[
@@ -49,6 +50,11 @@ CondicionSeguridad = Literal[
     "problema_tiroideo",
     "anticoagulantes",
     "medicacion_cronica",
+    # Añadidos 2026-10-22 para activar reglas de interaccion que existian sin pregunta equivalente.
+    "diabetes_medicada",
+    "inmunosupresion",
+    "sedantes",
+    "hipertension",
 ]
 Objetivo = Literal[
     "energia",
@@ -87,6 +93,21 @@ TrainingType = Literal["no_aplica", "fuerza", "cardio", "mixto", "movilidad"]
 RecoveryDifficulty = Literal["no", "leve", "moderada", "alta"]
 SupplementFrequency = Literal["diario", "varias_semana", "ocasional", "no_se"]
 BinaryUnknown = Literal["no", "si", "no_se"]
+# Añadidos 2026-10-23: el modelo real de laboratorio (NHANES, `condition_lab_model`) usa tabaco (SMQ020/SMQ040)
+# y salud autopercibida (HSD010) como features; sin pregunta iban siempre como faltantes.
+Tabaco = Literal["nunca", "ex", "actual"]
+SaludAutopercibida = Literal["excelente", "muy_buena", "buena", "regular", "mala"]
+# Añadidos 2026-10-24 (contrato 2026-10-24.1): seguimiento de fatiga, factores de riesgo de hierro, vitamina D y B12,
+# y si la persona tiene analisis recientes. Todos opcionales; sin respuesta = dato faltante, nunca "no".
+AnalisisUltimoAnio = Literal["si_a_mano", "si_sin_resultados", "no", "no_se"]
+FatigaDuracion = Literal["menos_2_semanas", "2_semanas_3_meses", "mas_3_meses"]
+SiNoAVeces = Literal["si", "no", "a_veces"]
+ProtectorSolar = Literal["nunca", "a_veces", "siempre"]
+PielExpuesta = Literal["cara_manos", "brazos", "brazos_piernas"]
+SiNoNoAplica = Literal["si", "no", "no_aplica"]
+DonaSangre = Literal["no", "1_al_anio", "2_o_mas_al_anio"]
+AniosDietaVegetal = Literal["menos_1", "1_3", "mas_3"]
+MedicamentoB12 = Literal["metformina", "antiacidos_ibp"]
 CaffeineSource = Literal["cafe", "te", "energizante", "preworkout", "gaseosa_cola", "chocolate", "otro"]
 
 
@@ -99,7 +120,9 @@ class EncuestaInput(BaseModel):
     edad_rango: Literal["menos_18", "18_30", "31_50", "mas_50"] = "18_30"
     horas_sueno: Literal["menos_5h", "5_7h", "7_9h", "mas_9h"]
     frecuencia_ejercicio: Literal["casi_nunca", "1_2_semana", "3_4_semana", "diario"]
-    dieta: Literal["poco_variada", "regular", "bastante_variada", "muy_balanceada"]
+    # Opcional desde 2026-10-24: la app ya no la pregunta (cambiaba la deteccion en 3 de 120 casos; el bloque de
+    # alimentos concreto captura lo mismo, ver scripts/clinical/valor_preguntas.py). Se acepta por compatibilidad.
+    dieta: Literal["poco_variada", "regular", "bastante_variada", "muy_balanceada"] | None = None
     fatiga: Literal["siempre", "a_menudo", "a_veces", "casi_nunca"]
     exposicion_solar: Literal["menos_15min", "15_30min", "30_60min", "mas_1h"]
     frecuencia_enfermedad: Literal["muy_seguido", "3_4_anio", "1_2_anio", "casi_nunca"]
@@ -154,13 +177,26 @@ class EncuestaInput(BaseModel):
     exercise_days_week: int | None = Field(default=None, ge=0, le=7)
     training_type: TrainingType | None = None
     recovery_difficulty: RecoveryDifficulty | None = None
+    tabaco: Tabaco | None = None
+    salud_autopercibida: SaludAutopercibida | None = None
+    analisis_ultimo_anio: AnalisisUltimoAnio | None = None
+    fatiga_duracion: FatigaDuracion | None = None
+    fatiga_mejora_descanso: SiNoAVeces | None = None
+    protector_solar: ProtectorSolar | None = None
+    piel_expuesta: PielExpuesta | None = None
+    menstruacion_abundante: SiNoNoAplica | None = None
+    parto_ultimo_anio: Literal["si", "no"] | None = None
+    dona_sangre: DonaSangre | None = None
+    anios_dieta_vegetal: AniosDietaVegetal | None = None
+    medicamentos_b12: list[MedicamentoB12] = Field(default_factory=list, max_length=2)
+    alimentos_fortificados_b12: BinaryUnknown | None = None
     toma_suplementos: TomaSuplementos = "no"
     suplementos_actuales: list[SuplementoActual] = Field(default_factory=list, max_length=8)
     suplementos_frecuencia: SupplementFrequency | None = None
     suplementos_dosis_conocida: bool | None = None
     suplementos_dosis_actual: dict[SuplementoActual, SuplementoDosisActual] = Field(default_factory=dict, max_length=8)
     restricciones: list[Restriccion] = Field(default_factory=list, max_length=6)
-    condiciones_seguridad: list[CondicionSeguridad] = Field(default_factory=list, max_length=6)
+    condiciones_seguridad: list[CondicionSeguridad] = Field(default_factory=list, max_length=10)
     presupuesto: Presupuesto | None = None
     presupuesto_min: float | None = Field(default=None, ge=0, le=2000)
     presupuesto_max: float | None = Field(default=None, ge=0, le=2000)
@@ -214,6 +250,12 @@ class EncuestaInput(BaseModel):
         if self.sexo == "masculino" and "embarazo_lactancia" in self.condiciones_seguridad:
             raise ValueError("Embarazo o lactancia no es compatible con sexo masculino.")
 
+        if self.sexo == "masculino" and (self.menstruacion_abundante == "si" or self.parto_ultimo_anio == "si"):
+            raise ValueError("Menstruacion o parto reciente no es compatible con sexo masculino.")
+
+        if self.tipo_dieta not in ("vegano", "vegetariano"):
+            self.anios_dieta_vegetal = None
+
         if self.objetivo_principal:
             principal_to_goals = {
                 "energia": ["energia"],
@@ -245,10 +287,11 @@ class EncuestaInput(BaseModel):
             self.red_meat_servings_week = 0
             self.poultry_servings_week = 0
 
+        # Solo se suma si ambas se respondieron: una sin responder no es "cero porciones".
         if self.meat_servings_week is None and (
-            self.red_meat_servings_week is not None or self.poultry_servings_week is not None
+            self.red_meat_servings_week is not None and self.poultry_servings_week is not None
         ):
-            self.meat_servings_week = (self.red_meat_servings_week or 0) + (self.poultry_servings_week or 0)
+            self.meat_servings_week = self.red_meat_servings_week + self.poultry_servings_week
 
         if self.dairy_servings_day is None and self.dairy_servings_week is not None:
             self.dairy_servings_day = round(self.dairy_servings_week / 7, 4)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 
-SURVEY_CONTRACT_VERSION = "2026-06-25.1"
+SURVEY_CONTRACT_VERSION = "2026-10-24.1"
 
 SURVEY_ENUMS: dict[str, list[str]] = {
     "edad_rango": ["menos_18", "18_30", "31_50", "mas_50"],
@@ -64,7 +64,21 @@ SURVEY_ENUMS: dict[str, list[str]] = {
     "iron_anemia_history": ["no", "si", "no_se"],
     "training_type": ["no_aplica", "fuerza", "cardio", "mixto", "movilidad"],
     "recovery_difficulty": ["no", "leve", "moderada", "alta"],
+    "tabaco": ["nunca", "ex", "actual"],
+    "salud_autopercibida": ["excelente", "muy_buena", "buena", "regular", "mala"],
     "alcohol": ["nunca", "raro", "ocasional", "frecuente"],
+    # Contrato 2026-10-24.1: seguimiento de fatiga, factores de hierro / vitamina D / B12 y analisis recientes.
+    "analisis_ultimo_anio": ["si_a_mano", "si_sin_resultados", "no", "no_se"],
+    "fatiga_duracion": ["menos_2_semanas", "2_semanas_3_meses", "mas_3_meses"],
+    "fatiga_mejora_descanso": ["si", "no", "a_veces"],
+    "protector_solar": ["nunca", "a_veces", "siempre"],
+    "piel_expuesta": ["cara_manos", "brazos", "brazos_piernas"],
+    "menstruacion_abundante": ["si", "no", "no_aplica"],
+    "parto_ultimo_anio": ["si", "no"],
+    "dona_sangre": ["no", "1_al_anio", "2_o_mas_al_anio"],
+    "anios_dieta_vegetal": ["menos_1", "1_3", "mas_3"],
+    "medicamentos_b12": ["metformina", "antiacidos_ibp"],
+    "alimentos_fortificados_b12": ["no", "si", "no_se"],
     "toma_suplementos": ["no", "si"],
     "suplementos_actuales": [
         "vitamina_d",
@@ -76,6 +90,7 @@ SURVEY_ENUMS: dict[str, list[str]] = {
         "omega_3",
         "multivitaminico",
         "proteina",
+        "vitamina_b12",
         "otro",
     ],
     "suplementos_frecuencia": ["diario", "varias_semana", "ocasional", "no_se"],
@@ -96,11 +111,17 @@ SURVEY_ENUMS: dict[str, list[str]] = {
         "problema_tiroideo",
         "anticoagulantes",
         "medicacion_cronica",
+        "diabetes_medicada",
+        "inmunosupresion",
+        "sedantes",
+        "hipertension",
     ],
 }
 
 SURVEY_RULES: dict[str, Any] = {
     "max_objetivos": 4,
+    # Desde 2026-10-24.1 los objetivos solo ordenan condiciones y componentes ya detectados; no suben riesgos.
+    "objetivos_solo_ordenan": True,
     "toma_suplementos_si_requires_suplementos_actuales": True,
     "toma_suplementos_no_requires_empty_suplementos_actuales": True,
     "exclusive_values": {
@@ -117,14 +138,49 @@ SURVEY_RULES: dict[str, Any] = {
             "field": "training_type",
             "value_not_in": ["no_aplica", None],
             "when": {"exercise_days_week": 0},
-        }
+        },
+        {"field": "menstruacion_abundante", "value": "si", "when": {"sexo": "masculino"}},
+        {"field": "parto_ultimo_anio", "value": "si", "when": {"sexo": "masculino"}},
     ],
+    # Preguntas que solo se muestran en ciertos casos (la app las oculta; el backend las ignora si no aplican).
+    "conditional_fields": {
+        "fatiga_duracion": {"fatiga": ["a_menudo", "siempre"]},
+        "fatiga_mejora_descanso": {"fatiga": ["a_menudo", "siempre"]},
+        "menstruacion_abundante": {"sexo": ["femenino"]},
+        "parto_ultimo_anio": {"sexo": ["femenino"]},
+        "anios_dieta_vegetal": {"tipo_dieta": ["vegano", "vegetariano"]},
+    },
+    # Bloque de alimentos: todas las porciones se cuentan por semana con la escala 0, 1, 3, 5, 7, 14
+    # (no consumo, 1/sem, 2-3/sem, 4-6/sem, 1 al dia, 2+ al dia). La proteina se estima solo si el bloque esta
+    # completo (los grupos que excluye el tipo de dieta cuentan como 0); con un grupo sin responder queda faltante.
+    # Campos que el backend acepta pero la app ya no pregunta (compatibilidad con clientes anteriores).
+    "deprecated_ui_fields": {
+        "dieta": "Autoevaluacion de variedad; cambiaba la deteccion en 3/120 casos. Usar el bloque de alimentos.",
+    },
+    # Pasos opcionales que la app muestra solo si cambian el resultado (EncuestaUtils.STEP_GATES).
+    "conditional_steps": {
+        "sol_detalle": "exposicion_solar in [menos_15min, 15_30min]",
+        "factores_hierro": "(sexo == femenino and 12 <= age_years <= 50) or fatiga in [a_menudo, siempre]",
+        "factores_b12": "tipo_dieta in [vegano, vegetariano] or age_years >= 50",
+        "medicamentos_b12_paso": "condiciones_seguridad contiene diabetes_medicada o medicacion_cronica, o age_years >= 50",
+        "fatiga_detalle": "fatiga in [a_menudo, siempre]",
+        "lab_entry / valores_clave": "analisis_ultimo_anio == si_a_mano",
+    },
+    "food_block": {
+        "fields": [
+            "red_meat_servings_week", "poultry_servings_week", "fish_servings_week",
+            "eggs_servings_week", "legume_servings_week", "dairy_servings_week",
+        ],
+        "scale_values": [0, 1, 3, 5, 7, 14],
+        "partial_block_means": "protein_unknown",
+    },
     "hard_safety_values": {
         "edad_rango": ["menos_18"],
         "condiciones_seguridad": [
             "embarazo_lactancia",
             "enfermedad_renal",
             "enfermedad_hepatica",
+            "inmunosupresion",
         ],
     },
     "targeted_safety_values": {
@@ -132,7 +188,15 @@ SURVEY_RULES: dict[str, Any] = {
             "problema_tiroideo",
             "anticoagulantes",
             "medicacion_cronica",
+            "diabetes_medicada",
+            "sedantes",
+            "hipertension",
         ],
+    },
+    # Codigos de seguridad que el backend deriva de otras respuestas (no se preguntan). Solo alimentan las
+    # reglas de interaccion de componentes; no cambian safety_level.
+    "derived_safety_values": {
+        "insomnio": "sleep_quality == 'mala' or night_wakeups == '3_o_mas' or horas_sueno == 'menos_5h'",
     },
     "exact_fields": {
         "age_years": {"min": 1, "max": 120, "derived_field": "edad_rango"},
@@ -164,6 +228,31 @@ SURVEY_RULES: dict[str, Any] = {
         "fatigue_days_week": {"min": 0, "max": 7, "missing_means": "unknown"},
         "alcohol_drinks_week": {"min": 0, "max": 80, "missing_means": "unknown"},
         "exercise_days_week": {"min": 0, "max": 7},
+        "tabaco": {
+            "values": ["nunca", "ex", "actual"],
+            "missing_means": "unknown",
+            "ui_note": "Opcional. Alimenta el modelo real de riesgo de laboratorio (lab_risk_estimates); no bloquea productos.",
+        },
+        "salud_autopercibida": {
+            "values": ["excelente", "muy_buena", "buena", "regular", "mala"],
+            "missing_means": "unknown",
+            "ui_note": "Opcional. 'En general, ¿cómo diría que es su salud?' Alimenta lab_risk_estimates.",
+        },
+        "analisis_ultimo_anio": {
+            "values": ["si_a_mano", "si_sin_resultados", "no", "no_se"],
+            "missing_means": "unknown",
+            "ui_note": "Primera pregunta. Con 'si_a_mano' la app ofrece subir el examen o tipear 5 valores clave (lab_results).",
+        },
+        "fatiga_duracion": {"values": ["menos_2_semanas", "2_semanas_3_meses", "mas_3_meses"], "missing_means": "unknown"},
+        "fatiga_mejora_descanso": {"values": ["si", "no", "a_veces"], "missing_means": "unknown"},
+        "protector_solar": {"values": ["nunca", "a_veces", "siempre"], "missing_means": "unknown"},
+        "piel_expuesta": {"values": ["cara_manos", "brazos", "brazos_piernas"], "missing_means": "unknown"},
+        "menstruacion_abundante": {"values": ["si", "no", "no_aplica"], "missing_means": "unknown"},
+        "parto_ultimo_anio": {"values": ["si", "no"], "missing_means": "unknown"},
+        "dona_sangre": {"values": ["no", "1_al_anio", "2_o_mas_al_anio"], "missing_means": "unknown"},
+        "anios_dieta_vegetal": {"values": ["menos_1", "1_3", "mas_3"], "missing_means": "unknown"},
+        "medicamentos_b12": {"type": "multi", "values": ["metformina", "antiacidos_ibp"], "max": 2, "missing_means": "unknown"},
+        "alimentos_fortificados_b12": {"values": ["no", "si", "no_se"], "missing_means": "unknown"},
         "suplementos_dosis_conocida": {"type": "boolean"},
         "preferred_pack_size": {"values": [3, 5], "default": 3},
     },

@@ -23,6 +23,7 @@ api_router.include_router(components.router, prefix="/components", tags=["Compon
 api_router.include_router(prices.router, prefix="/prices", tags=["Prices"])
 api_router.include_router(recommend.router, prefix="/recommend", tags=["Recommendation"])
 api_router.include_router(survey_contract.router, prefix="/survey-contract", tags=["Survey"])
+api_router.include_router(survey_contract.events_router, prefix="/survey", tags=["Survey"])
 api_router.include_router(feedback.router, prefix="/feedback", tags=["Feedback"])
 api_router.include_router(history.router, prefix="/history", tags=["History"])
 api_router.include_router(labs.router, prefix="/labs", tags=["Labs"])

@@ -622,3 +622,25 @@ class CatalogRsReview(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class SurveyStepEvent(Base):
+    """Embudo de la encuesta: que pasos se ven, se completan y donde se abandona (contrato 2026-10-24.1).
+
+    No cuelga de una recomendacion: quien abandona nunca llega a tenerla. `survey_session_id` lo genera la app
+    al iniciar cada encuesta. No guarda respuestas, solo la clave del paso.
+    """
+
+    __tablename__ = "survey_step_events"
+    __table_args__ = (Index("ix_survey_step_events_session_step", "survey_session_id", "step_key"),)
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    survey_session_id: Mapped[str] = mapped_column(String(80), index=True)
+    step_key: Mapped[str] = mapped_column(String(80), index=True)
+    event_type: Mapped[str] = mapped_column(String(20), index=True)  # view | complete | submit
+    position: Mapped[int | None] = mapped_column(Integer)
+    visible_steps: Mapped[int | None] = mapped_column(Integer)
+    contract_version: Mapped[str | None] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+

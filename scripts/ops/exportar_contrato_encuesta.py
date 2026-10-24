@@ -16,7 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         type=Path,
-        default=ROOT_DIR.parent / "frontend-suplematch" / "src" / "contracts" / "surveyContract.json",
+        default=ROOT_DIR.parent / "frontend-suplematch" / "src" / "data" / "surveyContract.json",
     )
     return parser
 

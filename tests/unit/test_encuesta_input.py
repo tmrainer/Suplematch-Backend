@@ -65,7 +65,9 @@ def test_extended_survey_fields_feed_existing_model_features():
     assert features["caida_cabello"] == 3
     assert features["meta_energia"] == 1
     assert features["meta_belleza"] == 1
-    assert features["meta_rendimiento"] == 1
+    # Elegir el objetivo "rendimiento" ya no enciende la bandera (contrato 2026-10-24.1): sin actividad declarada
+    # alta, queda en 0. Los objetivos solo ordenan resultados.
+    assert features["meta_rendimiento"] == 0
 
 
 def test_optimized_survey_fields_feed_diet_and_wellness_features():
@@ -204,3 +206,17 @@ def test_exact_anthropometrics_reject_unreasonable_values():
 
     with pytest.raises(ValidationError):
         EncuestaInput(**_payload(height_value=3.0, height_unit="m"))
+
+
+def test_smoking_and_self_rated_health_are_optional_closed_answers():
+    from app.domains.survey.contrato import SURVEY_ENUMS, SURVEY_RULES, survey_contract
+
+    encuesta = EncuestaInput(**_payload(tabaco="ex", salud_autopercibida="buena"))
+    assert encuesta.tabaco == "ex" and encuesta.salud_autopercibida == "buena"
+    assert EncuestaInput(**_payload()).tabaco is None
+    with pytest.raises(ValueError):
+        EncuestaInput(**_payload(tabaco="fumo_mucho"))
+    assert SURVEY_ENUMS["tabaco"] == ["nunca", "ex", "actual"]
+    assert SURVEY_ENUMS["salud_autopercibida"] == ["excelente", "muy_buena", "buena", "regular", "mala"]
+    assert set(SURVEY_RULES["optimized_fields"]) >= {"tabaco", "salud_autopercibida"}
+    assert survey_contract()["version"] >= "2026-10-23.1"
