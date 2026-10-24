@@ -32,8 +32,10 @@ def _with_temp_feedback_store(callback):
     original_recommendation_path = feedback_store.RECOMMENDATION_EVENTS_PATH
     original_feedback_path = feedback_store.USER_FEEDBACK_EVENTS_PATH
     original_db_path = feedback_store.FEEDBACK_DB_PATH
+    original_override = feedback_store.LEGACY_ENABLED_OVERRIDE
 
     with TemporaryDirectory() as tmp_dir:
+        feedback_store.LEGACY_ENABLED_OVERRIDE = True
         tmp_path = Path(tmp_dir)
         feedback_store.RECOMMENDATION_EVENTS_PATH = tmp_path / "recommendation_events.json"
         feedback_store.USER_FEEDBACK_EVENTS_PATH = tmp_path / "user_feedback_events.json"
@@ -45,6 +47,7 @@ def _with_temp_feedback_store(callback):
             feedback_store.RECOMMENDATION_EVENTS_PATH = original_recommendation_path
             feedback_store.USER_FEEDBACK_EVENTS_PATH = original_feedback_path
             feedback_store.FEEDBACK_DB_PATH = original_db_path
+            feedback_store.LEGACY_ENABLED_OVERRIDE = original_override
 
 
 def test_feedback_changes_pack_scores_visibly():

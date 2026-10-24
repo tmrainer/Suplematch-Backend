@@ -15,6 +15,7 @@ from app.db.models import (
     RecommendedPack,
     RecommendedPackItem,
 )
+from app.domains.feedback.repositorio_eventos import RecommendationEventRepository
 
 
 def _clean(value: Any) -> str | None:
@@ -109,6 +110,13 @@ class RecommendationRepository:
             self.db.add(db_pack)
             self.db.flush()
             self._save_pack_items(db_pack, pack)
+
+        # Una impresion por pack mostrado (con su rank): la base de eventos no depende del frontend.
+        RecommendationEventRepository(self.db).add_pack_impressions(
+            session=session,
+            packs=packs_ranked,
+            conditions=conditions,
+        )
 
         self.db.commit()
         self.db.refresh(session)

@@ -41,12 +41,15 @@ def _with_temp_store(callback):
         feedback_store.RECOMMENDATION_EVENTS_PATH = p / "recommendation_events.json"
         feedback_store.USER_FEEDBACK_EVENTS_PATH  = p / "user_feedback_events.json"
         feedback_store.FEEDBACK_DB_PATH           = p / "feedback.sqlite3"
+        _prev_override = feedback_store.LEGACY_ENABLED_OVERRIDE
+        feedback_store.LEGACY_ENABLED_OVERRIDE = True
         try:
             callback()
         finally:
             feedback_store.RECOMMENDATION_EVENTS_PATH = original_rec
             feedback_store.USER_FEEDBACK_EVENTS_PATH  = original_fb
             feedback_store.FEEDBACK_DB_PATH           = original_db
+            feedback_store.LEGACY_ENABLED_OVERRIDE = _prev_override
 
 
 def _simulate_votes(pack_id: str, component_ids: list[str], rating: int, n: int) -> None:

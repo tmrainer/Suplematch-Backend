@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     DIGEMID_CSV_PATH: Path = BASE_DIR / "data/raw/digemid/digemid_limpio.csv"
     PRODUCT_COMPONENTS_CSV_PATH: Path = BASE_DIR / "data/training/supplement_model/product_components.csv"
     APPROVED_CATALOG_PATH: Path = BASE_DIR / "data/catalog/approved_catalog.csv"
+    # Feedback: Postgres es la unica fuente de verdad. El store SQLite/JSON legado solo se activa
+    # explicitamente (demos sin BD); en contenedores se pierde al redeployar y diverge entre replicas.
+    LEGACY_FEEDBACK_SQLITE_ENABLED: bool = False
+    # Rechazar feedback cuyo recommendation_id no exista en Postgres (evita manipular el ranking).
+    FEEDBACK_REQUIRE_KNOWN_RECOMMENDATION: bool = True
+    # Retencion de datos de salud: los LabReport mas antiguos que este umbral se redactan
+    # (texto OCR, payload y biomarcadores) via LabAnalysisService.purge_expired / scripts/ops/purgar_lab_reports.py.
+    LAB_REPORT_RETENTION_DAYS: int = 365
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 60
     RATE_LIMIT_WINDOW_SECONDS: int = 60

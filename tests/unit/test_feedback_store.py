@@ -15,6 +15,8 @@ def _with_temp_feedback_store(callback):
         feedback_store.RECOMMENDATION_EVENTS_PATH = tmp_path / "recommendation_events.json"
         feedback_store.USER_FEEDBACK_EVENTS_PATH = tmp_path / "user_feedback_events.json"
         feedback_store.FEEDBACK_DB_PATH = tmp_path / "feedback.sqlite3"
+        _prev_override = feedback_store.LEGACY_ENABLED_OVERRIDE
+        feedback_store.LEGACY_ENABLED_OVERRIDE = True
 
         try:
             callback(tmp_path)
@@ -22,6 +24,7 @@ def _with_temp_feedback_store(callback):
             feedback_store.RECOMMENDATION_EVENTS_PATH = original_recommendation_path
             feedback_store.USER_FEEDBACK_EVENTS_PATH = original_feedback_path
             feedback_store.FEEDBACK_DB_PATH = original_db_path
+            feedback_store.LEGACY_ENABLED_OVERRIDE = _prev_override
 
 
 def test_feedback_store_persists_events_in_sqlite():

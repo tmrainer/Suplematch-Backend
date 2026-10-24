@@ -475,6 +475,10 @@ class RecommendationFeedback(Base):
     chosen_product_id: Mapped[UUID | None] = mapped_column(ForeignKey("commercial_products.id", ondelete="SET NULL"), index=True)
     product_context_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     conditions_context_json: Mapped[list] = mapped_column(JSONB, default=list)
+    # pack_key|COND_A+COND_B+COND_C (ver app/domains/feedback/contexto.py). Nullable: historico previo.
+    context_key: Mapped[str | None] = mapped_column(String(400), index=True)
+    # Outcomes declarados (purchased, still_taking_30d, perceived_benefit) + reward calculada.
+    outcome_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     rating: Mapped[int | None] = mapped_column(Integer)
     was_relevant: Mapped[bool | None] = mapped_column(Boolean)
     would_follow: Mapped[bool | None] = mapped_column(Boolean)
@@ -482,6 +486,48 @@ class RecommendationFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     chosen_product: Mapped[CommercialProduct | None] = relationship()
+
+
+RECOMMENDATION_EVENT_TYPES: tuple[str, ...] = (
+    "impression",
+    "click",
+    "product_click",
+    "purchase_intent",
+    "dismiss",
+    "still_taking_30d",
+    "stopped",
+)
+
+
+class RecommendationEvent(Base):
+    """Interacciones con recomendaciones mostradas (impresion, click, compra, retencion a 30 dias).
+
+    Base de datos de interacciones para el futuro recomendador (bandit contextual / learning-to-rank).
+    `position` guarda el rank mostrado para poder corregir el sesgo de posicion; `context_key` agrupa
+    por pack + condiciones principales. Ver docs/recommender_events.md.
+    """
+
+    __tablename__ = "recommendation_events"
+    __table_args__ = (
+        Index("ix_recommendation_events_session_type", "recommendation_session_id", "event_type"),
+        Index("ix_recommendation_events_context_type", "context_key", "event_type"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    recommendation_session_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("recommendation_sessions.id", ondelete="SET NULL"), index=True
+    )
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    anonymous_session_id: Mapped[str | None] = mapped_column(String(120), index=True)
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    pack_key: Mapped[str | None] = mapped_column(String(160), index=True)
+    component_id: Mapped[str | None] = mapped_column(String(120))
+    product_id: Mapped[UUID | None] = mapped_column(ForeignKey("commercial_products.id", ondelete="SET NULL"), index=True)
+    position: Mapped[int | None] = mapped_column(Integer)
+    conditions_context_json: Mapped[list] = mapped_column(JSONB, default=list)
+    context_key: Mapped[str | None] = mapped_column(String(400), index=True)
+    payload_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class SupplementReview(Base):

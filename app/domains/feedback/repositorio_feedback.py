@@ -8,18 +8,33 @@ from sqlalchemy.orm import Session
 
 from app.db.models import CommercialProduct, RecommendationFeedback, RecommendationSession, RecommendedPack
 from app.domains.feedback.esquemas import FeedbackInput
+from app.domains.feedback.contexto import build_context_key
+from app.domains.feedback.recompensa import outcome_payload
 
 
 class FeedbackRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def recommendation_exists(self, recommendation_id: str) -> bool:
+        return (
+            self.db.scalar(
+                select(RecommendationSession.id).where(RecommendationSession.recommendation_id == recommendation_id)
+            )
+            is not None
+        )
+
     def save_feedback(
         self,
         data: FeedbackInput,
         *,
         user_id: UUID | None = None,
-    ) -> RecommendationFeedback:
+    ) -> tuple[RecommendationFeedback, bool]:
+        """Guarda o actualiza el feedback. Devuelve (feedback, created).
+
+        Dedupe: un mismo usuario (o la misma sesion anonima) solo tiene un feedback por
+        (recomendacion, pack); un segundo envio actualiza rating y comentario en vez de sumar un voto.
+        """
         recommendation_session = self.db.scalar(
             select(RecommendationSession).where(
                 RecommendationSession.recommendation_id == data.recommendation_id
@@ -35,8 +50,36 @@ class FeedbackRepository:
                 )
             )
 
-        rating = int(data.rating)
+        rating = max(1, min(5, int(data.rating)))
         chosen_product_id = self._uuid_or_none(data.chosen_product_id)
+
+        if recommendation_session is not None:
+            existing_query = select(RecommendationFeedback).where(
+                RecommendationFeedback.recommendation_session_id == recommendation_session.id,
+                RecommendationFeedback.pack_key == data.pack_id,
+            )
+            existing_query = (
+                existing_query.where(RecommendationFeedback.user_id == user_id)
+                if user_id is not None
+                else existing_query.where(RecommendationFeedback.user_id.is_(None))
+            )
+            existing = self.db.scalar(existing_query.order_by(RecommendationFeedback.created_at.desc()).limit(1))
+            if existing is not None:
+                existing.rating = rating
+                existing.was_relevant = rating >= 3
+                existing.would_follow = rating >= 4
+                existing.comment = data.comment
+                existing.component_ids_json = data.component_ids
+                existing.selected_product_ids_json = data.selected_product_ids
+                existing.chosen_product_id = chosen_product_id
+                existing.product_context_json = data.product_context
+                existing.conditions_context_json = data.conditions
+                existing.context_key = build_context_key(data.pack_id, data.conditions)
+                existing.outcome_json = outcome_payload(data)
+                self.db.commit()
+                self.db.refresh(existing)
+                return existing, False
+
         feedback = RecommendationFeedback(
             user_id=user_id,
             recommendation_session_id=recommendation_session.id if recommendation_session else None,
@@ -47,6 +90,8 @@ class FeedbackRepository:
             chosen_product_id=chosen_product_id,
             product_context_json=data.product_context,
             conditions_context_json=data.conditions,
+            context_key=build_context_key(data.pack_id, data.conditions),
+            outcome_json=outcome_payload(data),
             rating=rating,
             was_relevant=rating >= 3,
             would_follow=rating >= 4,
@@ -55,7 +100,7 @@ class FeedbackRepository:
         self.db.add(feedback)
         self.db.commit()
         self.db.refresh(feedback)
-        return feedback
+        return feedback, True
 
     def _uuid_or_none(self, value: str | None) -> UUID | None:
         if not value:

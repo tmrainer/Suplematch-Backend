@@ -92,13 +92,24 @@ def rerank_packs(
     recomendaciones: list[dict[str, Any]],
     conditions: list[str],
     alertas: list[Any] | None = None,
+    feedback_stats: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Ordena packs candidatos. `feedback_stats` permite inyectar estadisticas (Postgres); si es None se
+    consulta el store legado, que esta vacio salvo LEGACY_FEEDBACK_SQLITE_ENABLED. El score final con
+    feedback real de Postgres lo aplica RecommendationMetricsRepository.apply_metrics_to_packs.
+
+    Contrato de `feedback_stats`: `{pack_id: {"n": int, "avg_score": float}}` donde `avg_score` es la
+    recompensa media en [0, 1] (ver app/domains/feedback/recompensa.py), no el rating crudo. Las stats
+    deben venir ya resueltas por `context_key` (pack_key|COND_A+COND_B+COND_C, ver
+    app/domains/feedback/contexto.py): el caller elige por pack el agregado del contexto del usuario
+    actual y, si ese contexto tiene menos de MIN_CONTEXT_FEEDBACK votos, el agregado global del pack.
+    Esta funcion no conoce las condiciones del usuario mas alla de la cobertura, por eso indexa por pack_id."""
     candidate_packs = _make_candidate_packs(recomendaciones)
 
     if not candidate_packs:
         return []
 
-    stats = get_feedback_stats_by_pack()
+    stats = feedback_stats if feedback_stats is not None else get_feedback_stats_by_pack()
     total_feedback = sum(int(v["n"]) for v in stats.values()) or 1
 
     ranked = []

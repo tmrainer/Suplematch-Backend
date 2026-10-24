@@ -15,6 +15,15 @@ RECOMMENDATION_EVENTS_PATH = settings.RECOMMENDATION_EVENTS_PATH
 USER_FEEDBACK_EVENTS_PATH = settings.USER_FEEDBACK_EVENTS_PATH
 FEEDBACK_DB_PATH = settings.FEEDBACK_DB_PATH
 
+# Override para tests/demos; None = usar settings.LEGACY_FEEDBACK_SQLITE_ENABLED.
+LEGACY_ENABLED_OVERRIDE: bool | None = None
+
+
+def legacy_store_enabled() -> bool:
+    if LEGACY_ENABLED_OVERRIDE is not None:
+        return LEGACY_ENABLED_OVERRIDE
+    return bool(settings.LEGACY_FEEDBACK_SQLITE_ENABLED)
+
 
 def _ensure_files() -> None:
     for path in [RECOMMENDATION_EVENTS_PATH, USER_FEEDBACK_EVENTS_PATH]:
@@ -192,6 +201,8 @@ def save_recommendation_event(
     packs_ranked: list[dict[str, Any]],
 ) -> str:
     recommendation_id = f"rec_{uuid4().hex}"
+    if not legacy_store_enabled():
+        return recommendation_id
 
     event = {
         "recommendation_id": recommendation_id,
@@ -233,6 +244,8 @@ def save_feedback_event(
     extra: dict[str, Any] | None = None,
 ) -> str:
     feedback_id = f"fb_{uuid4().hex}"
+    if not legacy_store_enabled():
+        return feedback_id
 
     final_rating = rating_overall if rating_overall is not None else rating
 
@@ -281,6 +294,8 @@ def save_feedback_event(
 
 
 def load_recommendation_events() -> list[dict[str, Any]]:
+    if not legacy_store_enabled():
+        return []
     with _connect() as conn:
         rows = conn.execute(
             """
@@ -302,6 +317,8 @@ def load_recommendation_events() -> list[dict[str, Any]]:
 
 
 def load_feedback_events() -> list[dict[str, Any]]:
+    if not legacy_store_enabled():
+        return []
     with _connect() as conn:
         rows = conn.execute(
             """
@@ -338,6 +355,8 @@ def load_feedback_events() -> list[dict[str, Any]]:
 
 def get_feedback_stats_by_pack() -> dict[str, dict[str, Any]]:
     stats: dict[str, dict[str, Any]] = {}
+    if not legacy_store_enabled():
+        return stats
 
     with _connect() as conn:
         # Eventos con pack_id explícito — agregados en SQL

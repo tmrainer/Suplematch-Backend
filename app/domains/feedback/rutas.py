@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.dependencies import db_session, optional_current_user, require_admin
 from app.db.models import User
-from app.domains.feedback.esquemas import FeedbackInput
+from app.domains.feedback.esquemas import FeedbackInput, RecommendationEventsBatch, RecommendationEventsResult
 from app.domains.feedback.servicio_feedback import FeedbackService
 
 router = APIRouter()
@@ -16,6 +16,16 @@ def save_feedback(
     user: User | None = Depends(optional_current_user),
 ):
     return FeedbackService(db).save_feedback(data, user=user)
+
+
+@router.post("/events", response_model=RecommendationEventsResult)
+def save_events(
+    batch: RecommendationEventsBatch,
+    db: Session = Depends(db_session),
+    user: User | None = Depends(optional_current_user),
+):
+    """Registra en lote (max 50) impresiones, clicks, intencion de compra y retencion de packs/productos."""
+    return FeedbackService(db).save_events(batch, user=user)
 
 
 @router.get("/summary")

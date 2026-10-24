@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Float, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import RecommendationFeedback, RecommendedPack
+from app.domains.feedback.contexto import MIN_CONTEXT_FEEDBACK, build_context_key, select_feedback_stats
 from app.domains.reviews.repositorio_metricas_resenas import DEFAULT_REVIEW_SCORE, ReviewMetricsRepository
 
 
@@ -13,13 +14,24 @@ class RecommendationMetricsRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def apply_metrics_to_packs(self, packs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def apply_metrics_to_packs(
+        self,
+        packs: list[dict[str, Any]],
+        conditions: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Enriquece y reordena packs con metricas reales de Postgres.
+
+        `conditions` (las del perfil actual) permite usar primero el feedback contextual
+        (`context_key = pack_key|COND_A+COND_B+COND_C`): si ese contexto tiene al menos
+        MIN_CONTEXT_FEEDBACK votos se usa; si no, se cae al feedback global del pack_key.
+        """
         total_pack_exposures = self.db.scalar(select(func.count(RecommendedPack.id))) or 0
 
         updated = []
         for pack in packs:
             pack_key = str(pack.get("pack_id") or "")
-            feedback_score, feedback_count = self._feedback_score(pack_key)
+            feedback = self._feedback_score(pack_key, conditions)
+            feedback_score, feedback_count = feedback["score"], feedback["feedback_count"]
             exposure_score, exposure_count = self._exposure_score(pack_key, total_pack_exposures)
             reviews_score, reviews_count = self._reviews_score(pack)
             products_score = self._products_score(pack)
@@ -48,6 +60,10 @@ class RecommendationMetricsRepository:
                     "score_products": float(products_score),
                     "score_diversity": float(diversity_score),
                     "feedback_count": int(feedback_count),
+                    "feedback_context_count": int(feedback["feedback_context_count"]),
+                    "feedback_global_count": int(feedback["feedback_global_count"]),
+                    "feedback_source": feedback["source"],
+                    "feedback_context_key": feedback.get("context_key"),
                     "reviews_count": int(reviews_count),
                     "exposure_count": int(exposure_count),
                 }
@@ -59,20 +75,33 @@ class RecommendationMetricsRepository:
             pack["rank"] = index
         return updated
 
-    def _feedback_score(self, pack_key: str) -> tuple[float, int]:
+    def _feedback_score(self, pack_key: str, conditions: list[str] | None = None) -> dict[str, Any]:
+        """Score bayesiano de recompensa (no rating crudo): contexto primero, pack global como respaldo."""
         if not pack_key:
-            return 0.70, 0
+            result = select_feedback_stats(None, None)
+            result["context_key"] = None
+            return result
 
+        context_key = build_context_key(pack_key, conditions) if conditions else None
+        context_stats = self._reward_stats(RecommendationFeedback.context_key == context_key) if context_key else None
+        global_stats = self._reward_stats(RecommendationFeedback.pack_key == pack_key)
+        result = select_feedback_stats(context_stats, global_stats, min_context_n=MIN_CONTEXT_FEEDBACK)
+        result["context_key"] = context_key
+        return result
+
+    def _reward_stats(self, *where) -> tuple[float | None, int]:
+        """(avg_reward, n) para un filtro. Usa outcome_json.reward y cae al rating normalizado si falta."""
+        reward_expr = func.coalesce(
+            RecommendationFeedback.outcome_json["reward"].astext.cast(Float),
+            (RecommendationFeedback.rating - 1.0) / 4.0,
+        )
         row = self.db.execute(
-            select(
-                func.avg(RecommendationFeedback.rating),
-                func.count(RecommendationFeedback.id),
-            ).where(RecommendationFeedback.pack_key == pack_key)
+            select(func.avg(reward_expr), func.count(RecommendationFeedback.id)).where(*where)
         ).one()
-        avg_rating, count = row
-        if not avg_rating:
-            return 0.70, 0
-        return max(0.0, min(1.0, (float(avg_rating) - 1.0) / 4.0)), int(count or 0)
+        avg_reward, count = row
+        if not count:
+            return None, 0
+        return (float(avg_reward) if avg_reward is not None else None), int(count)
 
     def _exposure_score(self, pack_key: str, total_pack_exposures: int) -> tuple[float, int]:
         if not pack_key or total_pack_exposures <= 0:
