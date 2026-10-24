@@ -1,0 +1,133 @@
+{
+  "_doc": "Insumos del pipeline. 'versioned': en git. Los no versionados deben existir en la maquina de entrenamiento/ops; 'sha256' se llena con `python scripts/ops/verificar_insumos.py --update` y sirve para detectar cambios silenciosos. Ver docs/plan_fiabilidad.md Fase 0.",
+  "insumos": [
+    {
+      "path": "data/raw/digemid/digemid_limpio.csv",
+      "versioned": false,
+      "origen": "Extraccion manual del portal DIGEMID (sin CSV/API oficial, verificado 2026-10-22). Documentar fecha de extraccion en 'nota'.",
+      "generador": null,
+      "sha256": "eeb9fd3789a598aa35e00a78cd9fe7cf440b62002c4ecd4efe6bb32e7ef98262",
+      "nota": ""
+    },
+    {
+      "path": "data/training/supplement_model/product_components.csv",
+      "versioned": false,
+      "origen": "Mapeo RS -> component_id generado fuera del repo (match_method fuzzy_translated/exact_translated).",
+      "generador": "NO EXISTE EN EL REPO: recuperar o reescribir",
+      "sha256": "889130efc2c385643abe730c3b448a9f45c90bbe82096d30ec33949c69ffa505",
+      "nota": ""
+    },
+    {
+      "path": "data/training/supplement_model/Component_Master_Clean.csv",
+      "versioned": false,
+      "origen": "Maestro de componentes para el GNN del Modelo 2.",
+      "generador": "NO EXISTE EN EL REPO",
+      "sha256": "2c603ffea343bedf01b866db78045d0b908df8c684ffc5fea1b79ba202934b7f",
+      "nota": ""
+    },
+    {
+      "path": "data/training/supplement_model/Component_Relationship_Edges_Clean.csv",
+      "versioned": false,
+      "origen": "Aristas del grafo de componentes para el GNN.",
+      "generador": "NO EXISTE EN EL REPO",
+      "sha256": "3e2033035645099c717c3115dc34ba69fe103801a9715704d099654bf24f2ec8",
+      "nota": ""
+    },
+    {
+      "path": "models/runtime/condition_mvp_model.pkl",
+      "versioned": false,
+      "origen": "Entrenado con datos sinteticos.",
+      "generador": "python scripts/training/entrenar_modelo_condiciones.py --rows 2500 --seed 42",
+      "sha256": "0ba356a8e1477b55f43b902172e02dd4aefdf9699d7809d340e8df089f1f03b3",
+      "nota": ""
+    },
+    {
+      "path": "models/runtime/modelo2_artifacts.pkl",
+      "versioned": false,
+      "origen": "Embeddings GraphSAGE + pares.",
+      "generador": "python scripts/training/modelo2_train.py",
+      "sha256": "bfd698699bb726120bad019c3a9b1f325d45a2b10bbdaf3568eead9d706de927",
+      "nota": ""
+    },
+    {
+      "path": "models/runtime/condition_lab_model.pkl",
+      "versioned": false,
+      "origen": "Modelo real: NHANES 2015-2016 (train) / 2017-2018 (test), features solo de cuestionario.",
+      "generador": "python scripts/training/entrenar_condiciones_nhanes.py",
+      "sha256": "b6cc26f3754b62d012204a25c7eb259b08093c0937505a442f83dd00f05b8ff1",
+      "nota": "Model card en models/runtime/condition_lab_model_card.json"
+    },
+    {
+      "path": "data/raw/nhanes/2015_cycle/DEMO_I.XPT",
+      "versioned": false,
+      "origen": "NHANES CDC (descarga publica; el script baja todos los XPT necesarios).",
+      "generador": "python scripts/training/entrenar_condiciones_nhanes.py --force-download",
+      "sha256": "c9297c6c37ae8f78f29be9568fa2a03cf3b112616a39afee04030fc775a66a0d",
+      "nota": "Representa el conjunto de XPT de ambos ciclos"
+    },
+    {
+      "path": "data/catalog/approved_catalog.csv",
+      "versioned": true,
+      "origen": "Catalogo comercial aprobado y limpiado.",
+      "generador": "scripts/catalog/construir_catalogo_aprobado.py + enriquecer_catalogo_verificable.py + limpiar_catalogo_aprobado.py",
+      "sha256": "7273621adf2c5e1d9e6e411e7c2478e0f2b2fcb2b414ed0448fc4ce6a12b928f",
+      "nota": ""
+    },
+    {
+      "path": "data/knowledge/biomarkers.csv",
+      "versioned": true,
+      "origen": "Umbrales NIH ODS / OMS / MedlinePlus (fuentes en source_ids).",
+      "generador": null,
+      "sha256": "379db7b33ab0ec204fd4a79ad6692e38cca9e632739f7b159c02893229ccb1b7",
+      "nota": ""
+    },
+    {
+      "path": "data/knowledge/conditions.csv",
+      "versioned": true,
+      "origen": "Conocimiento curado.",
+      "generador": null,
+      "sha256": "073c17edf9f6ca69de5dd826c82abfe12c0184e73eac25e02a76c9807b4b8adf",
+      "nota": ""
+    },
+    {
+      "path": "data/knowledge/condition_rules.csv",
+      "versioned": true,
+      "origen": "Reglas heuristicas (weight_basis=expert_heuristic).",
+      "generador": null,
+      "sha256": "9c2a62684e3928556c7ff90176ee0e0c4b97fd9ca4d2b246f8e70f14fe6a20ca",
+      "nota": ""
+    },
+    {
+      "path": "data/knowledge/condition_component_links.csv",
+      "versioned": true,
+      "origen": "Conocimiento curado.",
+      "generador": null,
+      "sha256": "81d5e9cde1694960cece19c6def5a7e4e33f775c260e13a2aa730ea379b7ce45",
+      "nota": ""
+    },
+    {
+      "path": "data/raw/endes/2022/endes_2022.zip",
+      "versioned": false,
+      "origen": "ENDES 2022 completa, datosabiertos.gob.pe/sites/default/files/2022_4.zip (68 MB, descargada 2026-10-22)",
+      "generador": "curl -L -o data/raw/endes/2022/endes_2022.zip https://www.datosabiertos.gob.pe/sites/default/files/2022_4.zip",
+      "sha256": "fabdf7074ee441a1c132b0702d6ffeb5fe9c49d5e0185cfd8383e7a597ea430a",
+      "nota": "Modulos extraidos en data/raw/endes/2022/csv/"
+    },
+    {
+      "path": "data/raw/endes/2024/endes_2024.zip",
+      "versioned": false,
+      "origen": "ENDES 2024 completa, datosabiertos.gob.pe/sites/default/files/2024.zip (71 MB, descargada 2026-10-22)",
+      "generador": "curl -L -o data/raw/endes/2024/endes_2024.zip https://www.datosabiertos.gob.pe/sites/default/files/2024.zip",
+      "sha256": "832fd314e4ef94796cb5b24000dc25884fbeaf5a15b6fccc9d2701d83d63913f",
+      "nota": "Zips anidados por modulo; extraer con scripts/training/validar_anemia_endes.py (ver docstring)"
+    },
+    {
+      "path": "models/runtime/anemia_endes_model.pkl",
+      "versioned": false,
+      "origen": "Modelo nativo ENDES (referencia, AUC 0.57: NO apto para produccion) + recalibrador isotonico del modelo NHANES.",
+      "generador": "python scripts/training/validar_anemia_endes.py",
+      "sha256": "611be160cc66be2c3780427a692d4c7ca8aae546d60ae29e8d07b1d4b8b53260",
+      "nota": "Solo evidencia de que la anemia no se infiere desde encuesta en Peru"
+    }
+  ]
+}

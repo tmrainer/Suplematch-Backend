@@ -16,5 +16,55 @@ services:
       timeout: 5s
       retries: 10
 
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        INSTALL_PLAYWRIGHT: "false"   # solo necesario para el scraper visual DIGEMID (desactivado por defecto)
+    container_name: suplematch-backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://suplematch:suplematch@postgres:5432/suplematch
+      RUN_MIGRATIONS: "true"
+      RUN_SEED: "true"
+      LEGACY_FEEDBACK_SQLITE_ENABLED: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Artefactos de modelo y catalogo no versionados: montar desde el host (ver docs/insumos_versionado.md).
+      - ./models/runtime:/app/models/runtime:ro
+      - ./data/catalog:/app/data/catalog:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/health/ready | grep -q '\"status\": *\"ok\"' || curl -fsS http://localhost:8000/api/v1/health >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # Mantenimiento diario (purga de LabReport vencidos + verificacion de insumos). Ejecutar con:
+  #   docker compose run --rm maintenance            (o programarlo en el cron del host)
+  maintenance:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        INSTALL_PLAYWRIGHT: "false"
+    profiles: ["maintenance"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://suplematch:suplematch@postgres:5432/suplematch
+      RUN_MIGRATIONS: "false"
+      RUN_SEED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["bash", "scripts/ops/mantenimiento_diario.sh"]
+
 volumes:
   suplematch-postgres-data:

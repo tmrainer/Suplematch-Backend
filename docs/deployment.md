@@ -824,3 +824,15 @@ Mide:
 
 Este reporte no reentrena modelos automáticamente. Sirve para decidir cuándo ya
 hay suficiente feedback real para calibrar ranking o preparar reentrenamiento.
+
+
+## Mantenimiento programado (añadido 2026-10-22)
+
+- `scripts/ops/mantenimiento_diario.sh`: purga (redacta) reportes de laboratorio con más de `LAB_REPORT_RETENTION_DAYS` días (365 por defecto) y verifica hashes de insumos. Ejecutar a diario.
+- Cron en el host (hora Lima): `15 3 * * * cd /ruta/Suplematch-Backend && bash scripts/ops/mantenimiento_diario.sh >> /var/log/suplematch/mantenimiento.log 2>&1`
+- En Docker Compose: `docker compose exec -T backend bash scripts/ops/mantenimiento_diario.sh` desde el cron del host, o un servicio `maintenance` con imagen `backend` y `command: ["bash","scripts/ops/mantenimiento_diario.sh"]` disparado por el orquestador.
+- Verificar primero con `--dry-run`.
+
+## Migraciones nuevas
+
+`20261022_0013_recommendation_events` (eventos de recomendación, `context_key`/`outcome_json` en feedback) y `20261022_0014_catalog_rs_review` (cola de revisión de RS). Idempotentes; `alembic upgrade head` las aplica. Verificadas contra PostgreSQL 16 el 2026-10-22 (ver `docs/plan_fiabilidad.md`).
