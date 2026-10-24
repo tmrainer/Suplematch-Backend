@@ -5,7 +5,8 @@ from typing import Any
 from sqlalchemy import Float, func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import RecommendationFeedback, RecommendedPack
+from app.db.models import RecommendationFeedback, RecommendationItemFeedback, RecommendedPack
+from app.domains.feedback.calificacion_suplementos import rerank_within_tiers, user_rating
 from app.domains.feedback.contexto import MIN_CONTEXT_FEEDBACK, build_context_key, select_feedback_stats
 from app.domains.reviews.repositorio_metricas_resenas import DEFAULT_REVIEW_SCORE, ReviewMetricsRepository
 
@@ -74,6 +75,41 @@ class RecommendationMetricsRepository:
         for index, pack in enumerate(updated, start=1):
             pack["rank"] = index
         return updated
+
+    def apply_item_feedback(self, recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Agrega `user_rating` a cada suplemento y reordena solo dentro de su nivel (calificacion_suplementos)."""
+        component_ids = sorted({str(item["component_id"]) for item in recommendations if item.get("component_id")})
+        if not component_ids:
+            return recommendations
+        reward_expr = func.coalesce(
+            RecommendationItemFeedback.outcome_json["reward"].astext.cast(Float),
+            (RecommendationItemFeedback.rating - 1.0) / 4.0,
+        )
+        rows = self.db.execute(
+            select(
+                RecommendationItemFeedback.component_id,
+                RecommendationItemFeedback.context_key,
+                func.sum(reward_expr),
+                func.sum(RecommendationItemFeedback.rating),
+                func.count(RecommendationItemFeedback.id),
+            )
+            .where(RecommendationItemFeedback.component_id.in_(component_ids))
+            .group_by(RecommendationItemFeedback.component_id, RecommendationItemFeedback.context_key)
+        ).all()
+        context_stats: dict[str, tuple[float | None, float | None, int]] = {}
+        totals: dict[str, list[float]] = {}
+        for component_id, context_key, reward_sum, rating_sum, count in rows:
+            count = int(count or 0)
+            if not count:
+                continue
+            context_stats[context_key] = (float(reward_sum) / count, float(rating_sum) / count, count)
+            total = totals.setdefault(component_id, [0.0, 0.0, 0])
+            total[0] += float(reward_sum)
+            total[1] += float(rating_sum)
+            total[2] += count
+        component_stats = {key: (value[0] / value[2], value[1] / value[2], int(value[2])) for key, value in totals.items()}
+        rated = [{**item, "user_rating": user_rating(item, context_stats, component_stats)} for item in recommendations]
+        return rerank_within_tiers(rated)
 
     def _feedback_score(self, pack_key: str, conditions: list[str] | None = None) -> dict[str, Any]:
         """Score bayesiano de recompensa (no rating crudo): contexto primero, pack global como respaldo."""

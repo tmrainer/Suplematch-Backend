@@ -1248,6 +1248,8 @@ class RecommendationService:
             )
             if self.db is not None:
                 packs_ranked = RecommendationMetricsRepository(self.db).apply_metrics_to_packs(packs_ranked, conditions=conditions)
+        if self.db is not None:
+            recommendations = RecommendationMetricsRepository(self.db).apply_item_feedback(recommendations)
         recommendations = _annotate_current_supplements(recommendations, encuesta)
         recommendations = _order_recommendations_by_goals(recommendations, getattr(encuesta, "objetivos", None))
         packs_ranked = _filter_pack_products_for_current_supplements(packs_ranked, encuesta)

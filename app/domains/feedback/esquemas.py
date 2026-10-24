@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.domains.feedback.recompensa import PerceivedBenefit
 
@@ -15,6 +15,16 @@ RecommendationEventType = Literal[
 ]
 
 MAX_EVENTS_PER_BATCH = 50
+MAX_ITEM_RATINGS = 20
+
+
+class ItemRatingInput(BaseModel):
+    """Estrellas (1-5) para un suplemento de la recomendacion. La condicion no se recibe: la pone el servidor."""
+
+    component_id: str = Field(min_length=1, max_length=120)
+    rating: int = Field(ge=1, le=5)
+    purchased: bool | None = None
+    still_taking_30d: bool | None = None
 
 
 class FeedbackInput(BaseModel):
@@ -31,6 +41,16 @@ class FeedbackInput(BaseModel):
     purchased: bool | None = None
     still_taking_30d: bool | None = None
     perceived_benefit: PerceivedBenefit | None = None
+    # Opcional: calificacion por suplemento, solo de los que la persona vio (docs/propuesta_recomendacion_por_suplemento.md).
+    item_ratings: list[ItemRatingInput] = Field(default_factory=list, max_length=MAX_ITEM_RATINGS)
+
+    @field_validator("item_ratings")
+    @classmethod
+    def _one_rating_per_component(cls, value: list[ItemRatingInput]) -> list[ItemRatingInput]:
+        ids = [item.component_id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("item_ratings: un suplemento solo puede calificarse una vez por envio")
+        return value
 
 
 class RecommendationEventInput(BaseModel):

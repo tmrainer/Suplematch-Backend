@@ -6,15 +6,24 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import CommercialProduct, RecommendationFeedback, RecommendationSession, RecommendedPack
+from app.db.models import (
+    CommercialProduct,
+    RecommendationFeedback,
+    RecommendationItem,
+    RecommendationItemFeedback,
+    RecommendationSession,
+    RecommendedPack,
+)
 from app.domains.feedback.esquemas import FeedbackInput
-from app.domains.feedback.contexto import build_context_key
+from app.domains.feedback.contexto import build_context_key, build_item_context_key
 from app.domains.feedback.recompensa import outcome_payload
 
 
 class FeedbackRepository:
     def __init__(self, db: Session):
         self.db = db
+        # component_id de item_ratings descartados en el ultimo save_feedback (no estaban en la recomendacion).
+        self.last_ignored_item_ratings: list[str] = []
 
     def recommendation_exists(self, recommendation_id: str) -> bool:
         return (
@@ -76,6 +85,7 @@ class FeedbackRepository:
                 existing.conditions_context_json = data.conditions
                 existing.context_key = build_context_key(data.pack_id, data.conditions)
                 existing.outcome_json = outcome_payload(data)
+                self._replace_item_ratings(existing, recommendation_session, data, user_id)
                 self.db.commit()
                 self.db.refresh(existing)
                 return existing, False
@@ -98,9 +108,55 @@ class FeedbackRepository:
             comment=data.comment,
         )
         self.db.add(feedback)
+        self._replace_item_ratings(feedback, recommendation_session, data, user_id)
         self.db.commit()
         self.db.refresh(feedback)
         return feedback, True
+
+    def _replace_item_ratings(
+        self,
+        feedback: RecommendationFeedback,
+        recommendation_session: RecommendationSession | None,
+        data: FeedbackInput,
+        user_id: UUID | None,
+    ) -> list[str]:
+        """Guarda las estrellas por suplemento. Devuelve los component_id ignorados.
+
+        Con sesion conocida solo se aceptan suplementos que esa recomendacion mostro, y la condicion sale de
+        `recommendation_items` (el cliente no la elige). Sin sesion (entornos que no exigen recomendacion
+        conocida) la condicion queda vacia.
+        """
+        shown: dict[str, str | None] | None = None
+        if recommendation_session is not None:
+            shown = {
+                str(external_id): condition
+                for external_id, condition in self.db.execute(
+                    select(RecommendationItem.external_component_id, RecommendationItem.condition_code).where(
+                        RecommendationItem.recommendation_session_id == recommendation_session.id,
+                        RecommendationItem.external_component_id.is_not(None),
+                    )
+                ).all()
+            }
+        feedback.item_ratings.clear()
+        ignored: list[str] = []
+        for item in data.item_ratings:
+            if shown is not None and item.component_id not in shown:
+                ignored.append(item.component_id)
+                continue
+            condition = shown.get(item.component_id) if shown is not None else None
+            feedback.item_ratings.append(
+                RecommendationItemFeedback(
+                    user_id=user_id,
+                    recommendation_session_id=recommendation_session.id if recommendation_session else None,
+                    component_id=item.component_id,
+                    condition_code=condition,
+                    context_key=build_item_context_key(item.component_id, condition),
+                    rating=item.rating,
+                    outcome_json=outcome_payload(item),
+                )
+            )
+        self.last_ignored_item_ratings = ignored
+        return ignored
 
     def _uuid_or_none(self, value: str | None) -> UUID | None:
         if not value:

@@ -486,6 +486,36 @@ class RecommendationFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     chosen_product: Mapped[CommercialProduct | None] = relationship()
+    item_ratings: Mapped[list[RecommendationItemFeedback]] = relationship(
+        back_populates="feedback", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class RecommendationItemFeedback(Base):
+    """Calificacion de 1 a 5 estrellas de un suplemento recomendado (docs/propuesta_recomendacion_por_suplemento.md).
+
+    Se agrega por `context_key = component_id|condicion`: un suplemento puede servir para una condicion y no para
+    otra. La condicion la pone el servidor desde `recommendation_items`, no el cliente. Cuelga del feedback general:
+    un nuevo envio del mismo feedback reemplaza sus calificaciones en vez de sumar votos.
+    """
+
+    __tablename__ = "recommendation_item_feedback"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    recommendation_feedback_id: Mapped[UUID] = mapped_column(
+        ForeignKey("recommendation_feedback.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    recommendation_session_id: Mapped[UUID | None] = mapped_column(ForeignKey("recommendation_sessions.id", ondelete="SET NULL"), index=True)
+    component_id: Mapped[str] = mapped_column(String(120), index=True)
+    condition_code: Mapped[str | None] = mapped_column(String(120), index=True)
+    context_key: Mapped[str] = mapped_column(String(260), index=True)
+    rating: Mapped[int] = mapped_column(Integer)
+    # purchased, still_taking_30d + reward calculada (misma formula que el feedback general).
+    outcome_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    feedback: Mapped[RecommendationFeedback] = relationship(back_populates="item_ratings")
 
 
 RECOMMENDATION_EVENT_TYPES: tuple[str, ...] = (

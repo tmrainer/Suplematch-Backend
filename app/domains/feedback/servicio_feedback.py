@@ -29,6 +29,8 @@ class FeedbackService:
                 "rating": data.rating,
                 "reward": round(reward(data), 4),
                 "context_key": feedback.context_key,
+                "item_ratings_saved": len(feedback.item_ratings),
+                "item_ratings_ignored": repository.last_ignored_item_ratings,
             }
 
         # Sin BD (demos locales): solo el store legado si esta habilitado explicitamente.

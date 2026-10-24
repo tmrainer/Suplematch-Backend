@@ -31,6 +31,11 @@ MIN_CONTEXT_FEEDBACK = MIN_FEEDBACK_TO_RERANK
 FEEDBACK_PRIOR = 0.70
 FEEDBACK_BAYES_M = 8
 
+# Calificacion por suplemento (docs/propuesta_recomendacion_por_suplemento.md): mas inercia que los packs. Un mismo
+# suplemento aparece en muchas recomendaciones, asi que un voto debe pesar menos y hacen falta mas para mover el orden.
+ITEM_FEEDBACK_BAYES_M = 20
+MIN_ITEM_FEEDBACK_TO_RERANK = 10
+
 IMPRESSION_EVENT = "impression"
 
 
@@ -55,6 +60,14 @@ def build_context_key(pack_key: Any, conditions: Iterable[Any] | None) -> str | 
     if not key:
         return None
     return f"{key}{CONTEXT_SEPARATOR}{CONDITION_JOINER.join(principal_conditions(conditions))}"
+
+
+def build_item_context_key(component_id: Any, condition: Any) -> str | None:
+    """`component_id|CONDICION` (condicion vacia si la recomendacion no la trae). None sin component_id."""
+    key = str(component_id or "").strip()
+    if not key:
+        return None
+    return f"{key}{CONTEXT_SEPARATOR}{str(condition or '').strip()}"
 
 
 def _get(event: Any, name: str) -> Any:

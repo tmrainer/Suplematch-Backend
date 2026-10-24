@@ -80,6 +80,17 @@ class CategorizedConditionResult(BaseModel):
             self.risk_index = self.probability
 
 
+class UserRating(BaseModel):
+    """Calificacion de usuarios para este suplemento (ver app/domains/feedback/calificacion_suplementos.py)."""
+
+    stars: float | None = None  # promedio 1-5; None hasta tener votos suficientes
+    count: int = 0  # votos usados para el promedio
+    score: float  # score bayesiano de recompensa usado para ordenar dentro del nivel
+    source: str  # context | global | insufficient | none
+    context_count: int = 0
+    total_count: int = 0
+
+
 class RecommendationItem(BaseModel):
     component_id: str | None = None
     name: str
@@ -134,6 +145,7 @@ class RecommendationItem(BaseModel):
     commercial_eligible: bool = True
     commercial_recommendation_blocked: bool = False
     commercial_block_reason: str | None = None
+    user_rating: UserRating | None = None
 
 
 class PackComponent(BaseModel):
