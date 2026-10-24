@@ -55,6 +55,8 @@ MODEL_CARD_PATH = MODEL_DIR / "condition_lab_model_card.json"
 CYCLES = {
     "2015_2016": {"year": "2015", "suffix": "I"},
     "2017_2018": {"year": "2017", "suffix": "J"},
+    # Solo validacion externa (scripts/training/validar_condiciones_nhanes_externo.py); no entra al entrenamiento.
+    "2021_2023": {"year": "2021", "suffix": "L"},
 }
 TRAIN_CYCLE = "2015_2016"
 TEST_CYCLE = "2017_2018"
