@@ -22,6 +22,10 @@ from app.domains.admin.esquemas import (
     CatalogJobCancelOut,
     CatalogJobStatusOut,
     CatalogQualityOut,
+    CatalogRsReviewDecisionInput,
+    CatalogRsReviewListOut,
+    CatalogRsReviewOut,
+    CatalogRsReviewSummaryOut,
     ImportRunOut,
     IngredientSafetyRuleCreate,
     IngredientSafetyRuleOut,
@@ -30,6 +34,7 @@ from app.domains.admin.esquemas import (
     ProductAdminUpdate,
     ProductPriceSnapshotOut,
 )
+from app.domains.admin.repositorio_revision_rs import CatalogRsReviewRepository
 from app.domains.admin.servicio_candidatos_catalogo import CatalogCandidateService
 from app.domains.admin.servicio_jobs_catalogo import (
     approve_catalog_import,
@@ -249,6 +254,70 @@ def promote_catalog_candidate(
         product_id=product_id,
         message="Candidato promovido al catálogo activo.",
     )
+
+
+@router.get("/catalog/rs-review", response_model=CatalogRsReviewListOut)
+def list_catalog_rs_reviews(
+    status_filter: str | None = Query(default="pending", alias="status"),
+    sample_reason: str | None = Query(default=None, pattern="^(inferred|random_sample)$"),
+    pharmacy: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(db_session),
+):
+    """Cola de revisión humana de RS inferidos (+ muestra aleatoria). `status=all` lista todos."""
+    if status_filter in {"", "all"}:
+        status_filter = None
+    elif status_filter not in {"pending", "approved", "rejected", "needs_info"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status inválido.")
+    rows, total = CatalogRsReviewRepository(db).list_reviews(
+        status=status_filter,
+        sample_reason=sample_reason,
+        pharmacy=pharmacy,
+        limit=limit,
+        offset=offset,
+    )
+    return CatalogRsReviewListOut(
+        items=[CatalogRsReviewOut.model_validate(row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/catalog/rs-review/summary", response_model=CatalogRsReviewSummaryOut)
+def catalog_rs_review_summary(
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(db_session),
+):
+    return CatalogRsReviewRepository(db).summary()
+
+
+@router.patch("/catalog/rs-review/{review_id}", response_model=CatalogRsReviewOut)
+def decide_catalog_rs_review(
+    review_id: str,
+    data: CatalogRsReviewDecisionInput,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(db_session),
+):
+    repo = CatalogRsReviewRepository(db)
+    try:
+        review = repo.decide(
+            review_id,
+            status=data.status,
+            reviewer_note=data.reviewer_note,
+            reviewer_user_id=admin.id,
+        )
+        db.commit()
+    except LookupError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.refresh(review)
+    return CatalogRsReviewOut.model_validate(review)
 
 
 @router.get("/catalog/jobs/status", response_model=CatalogJobStatusOut)

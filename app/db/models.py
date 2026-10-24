@@ -589,3 +589,36 @@ class AdminAction(Base):
     before_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     after_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CatalogRsReview(Base):
+    """Cola de revisión humana de registros sanitarios (RS) del catálogo.
+
+    Una fila por producto comercial (pharmacy + sku) cuyo RS fue inferido por
+    nombre contra DIGEMID (`sample_reason="inferred"`) o que entró en la muestra
+    aleatoria de control (`sample_reason="random_sample"`). Ver docs/catalog_rs_review.md.
+    """
+
+    __tablename__ = "catalog_rs_reviews"
+    __table_args__ = (
+        UniqueConstraint("pharmacy", "sku", "registro_sanitario_key", name="uq_catalog_rs_reviews_pharmacy_sku_rs"),
+        Index("ix_catalog_rs_reviews_status_sample", "status", "sample_reason"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    pharmacy: Mapped[str] = mapped_column(String(160), index=True)
+    sku: Mapped[str] = mapped_column(String(160), index=True)
+    url: Mapped[str | None] = mapped_column(Text)
+    commercial_name: Mapped[str | None] = mapped_column(Text)
+    registro_sanitario_key: Mapped[str] = mapped_column(String(80), index=True)
+    digemid_producto: Mapped[str | None] = mapped_column(Text)
+    digemid_composicion: Mapped[str | None] = mapped_column(Text)
+    registro_sanitario_source: Mapped[str | None] = mapped_column(String(80), index=True)
+    match_reason: Mapped[str | None] = mapped_column(Text)
+    sample_reason: Mapped[str] = mapped_column(String(40), index=True)  # inferred | random_sample
+    status: Mapped[str] = mapped_column(String(40), default="pending", index=True)  # pending|approved|rejected|needs_info
+    reviewer_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

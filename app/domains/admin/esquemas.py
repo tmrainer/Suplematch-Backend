@@ -227,3 +227,50 @@ class ProductPriceSnapshotOut(BaseModel):
     stock: int | None
     registro_sanitario: str | None
     seen_at: datetime
+
+
+class CatalogRsReviewOut(BaseModel):
+    """Entrada de la cola de revisión de RS. Incluye nombre comercial vs. nombre y
+    composición DIGEMID para que el revisor compare (docs/catalog_rs_review.md)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    pharmacy: str
+    sku: str
+    url: str | None = None
+    commercial_name: str | None = None
+    registro_sanitario_key: str
+    digemid_producto: str | None = None
+    digemid_composicion: str | None = None
+    registro_sanitario_source: str | None = None
+    match_reason: str | None = None
+    sample_reason: Literal["inferred", "random_sample"]
+    status: Literal["pending", "approved", "rejected", "needs_info"]
+    reviewer_user_id: UUID | None = None
+    reviewer_note: str | None = None
+    decided_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CatalogRsReviewListOut(BaseModel):
+    items: list[CatalogRsReviewOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class CatalogRsReviewDecisionInput(BaseModel):
+    status: Literal["pending", "approved", "rejected", "needs_info"]
+    reviewer_note: str | None = Field(default=None, max_length=2000)
+
+
+class CatalogRsReviewSummaryOut(BaseModel):
+    total: int
+    pending: int
+    decided: int
+    progress: float
+    by_status: dict[str, int] = Field(default_factory=dict)
+    by_sample_reason: dict[str, int] = Field(default_factory=dict)
+    by_sample_reason_and_status: dict[str, dict[str, int]] = Field(default_factory=dict)
