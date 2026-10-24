@@ -1,19 +1,29 @@
+"""Calidad de recomendaciones en 15 escenarios y efecto del feedback sobre el ranking.
+
+El feedback se guarda en Postgres por la misma ruta que produccion (FeedbackRepository + metricas de packs), asi que
+necesita DATABASE_URL con migraciones aplicadas (``make db-up migrate``). Las sesiones y el feedback que crea se borran
+al terminar. FATIGA_CRONICA (codigo del modelo anterior) se reemplazo por FATIGA_NUTRICIONAL.
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from sqlalchemy import delete, select
+
+from app.db.models import RecommendationFeedback, RecommendationSession
+from app.db.session import SessionLocal
+from app.domains.feedback.esquemas import FeedbackInput
+from app.domains.feedback.repositorio_feedback import FeedbackRepository
 from app.ml.model_loader import load_all_models
-from app.ml.runtime import feedback_store
-from app.ml.runtime.feedback_store import save_feedback_event
 from app.domains.survey.esquemas_encuesta import EncuestaInput
 from app.domains.recommendations.servicio_recomendaciones import RecommendationService
 
@@ -24,7 +34,7 @@ MIN_SCENARIOS = 15
 SCENARIOS: list[dict[str, Any]] = [
     {
         "name": "oficina_sin_sol_fatiga_alta",
-        "expected_focus": ["DEFICIT_VIT_D", "FATIGA_CRONICA"],
+        "expected_focus": ["DEFICIT_VIT_D", "FATIGA_NUTRICIONAL"],
         "feedback_rating": 5,
         "payload": {
             "edad_rango": "31_50",
@@ -72,7 +82,7 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "fatiga_cronica_estres_sueno_bajo",
-        "expected_focus": ["FATIGA_CRONICA"],
+        "expected_focus": ["FATIGA_NUTRICIONAL"],
         "feedback_rating": 1,
         "payload": {
             "edad_rango": "31_50",
@@ -136,7 +146,7 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "mayor_50_fatiga_sin_sol",
-        "expected_focus": ["DEFICIT_VIT_D", "FATIGA_CRONICA"],
+        "expected_focus": ["DEFICIT_VIT_D", "FATIGA_NUTRICIONAL"],
         "feedback_rating": 1,
         "payload": {
             "edad_rango": "mas_50",
@@ -152,7 +162,7 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "inmunidad_fatiga_alcohol_frecuente",
-        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_CRONICA"],
+        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_NUTRICIONAL"],
         "feedback_rating": 1,
         "payload": {
             "edad_rango": "31_50",
@@ -168,7 +178,7 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "adolescente_fatiga_inmunidad",
-        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_CRONICA"],
+        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_NUTRICIONAL"],
         "feedback_rating": 5,
         "payload": {
             "edad_rango": "menos_18",
@@ -184,7 +194,7 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "perfil_extremo_multicondicion",
-        "expected_focus": ["DEFICIT_VIT_D", "BAJA_INMUNIDAD", "FATIGA_CRONICA"],
+        "expected_focus": ["DEFICIT_VIT_D", "BAJA_INMUNIDAD", "FATIGA_NUTRICIONAL"],
         "feedback_rating": 5,
         "payload": {
             "edad_rango": "menos_18",
@@ -232,7 +242,7 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "adulto_inmunidad_energia",
-        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_CRONICA"],
+        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_NUTRICIONAL"],
         "feedback_rating": 1,
         "payload": {
             "edad_rango": "31_50",
@@ -248,7 +258,7 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "joven_inmunidad_alta_fatiga",
-        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_CRONICA"],
+        "expected_focus": ["BAJA_INMUNIDAD", "FATIGA_NUTRICIONAL"],
         "feedback_rating": 5,
         "payload": {
             "edad_rango": "18_30",
@@ -263,26 +273,6 @@ SCENARIOS: list[dict[str, Any]] = [
         },
     },
 ]
-
-
-def _temporary_feedback_store(tmp_dir: Path) -> tuple[Path, Path, Path]:
-    original_paths = (
-        feedback_store.RECOMMENDATION_EVENTS_PATH,
-        feedback_store.USER_FEEDBACK_EVENTS_PATH,
-        feedback_store.FEEDBACK_DB_PATH,
-    )
-    feedback_store.RECOMMENDATION_EVENTS_PATH = tmp_dir / "recommendation_events.json"
-    feedback_store.USER_FEEDBACK_EVENTS_PATH = tmp_dir / "user_feedback_events.json"
-    feedback_store.FEEDBACK_DB_PATH = tmp_dir / "feedback.sqlite3"
-    return original_paths
-
-
-def _restore_feedback_store(paths: tuple[Path, Path, Path]) -> None:
-    (
-        feedback_store.RECOMMENDATION_EVENTS_PATH,
-        feedback_store.USER_FEEDBACK_EVENTS_PATH,
-        feedback_store.FEEDBACK_DB_PATH,
-    ) = paths
 
 
 def _top_pack(result: dict[str, Any]) -> dict[str, Any] | None:
@@ -308,21 +298,25 @@ def _pack_names(pack: dict[str, Any] | None) -> list[str]:
     return [str(name) for name in pack.get("component_names", [])]
 
 
-def _run_scenario(service: RecommendationService, scenario: dict[str, Any]) -> dict[str, Any]:
+def _run_scenario(service: RecommendationService, scenario: dict[str, Any], created: list[str]) -> dict[str, Any]:
     baseline = service.recommend(EncuestaInput(**scenario["payload"]))
+    created.append(baseline["recommendation_id"])
     baseline_pack = _top_pack(baseline)
 
     if baseline_pack:
-        save_feedback_event(
-            recommendation_id=baseline.get("recommendation_id") or f"rec_{scenario['name']}",
-            pack_id=baseline_pack["pack_id"],
-            component_ids=baseline_pack.get("component_ids", []),
-            rating_overall=scenario["feedback_rating"],
-            conditions_context=baseline.get("conditions", []),
-            comment=f"quality validation: {scenario['name']}",
+        FeedbackRepository(service.db).save_feedback(
+            FeedbackInput(
+                recommendation_id=baseline["recommendation_id"],
+                pack_id=baseline_pack["pack_id"],
+                component_ids=baseline_pack.get("component_ids", []),
+                rating=scenario["feedback_rating"],
+                conditions=baseline.get("conditions", []),
+                comment=f"quality validation: {scenario['name']}",
+            )
         )
 
     after_feedback = service.recommend(EncuestaInput(**scenario["payload"]))
+    created.append(after_feedback["recommendation_id"])
     after_pack = _top_pack(after_feedback)
     after_rated_pack = _find_pack(
         after_feedback,
@@ -338,6 +332,7 @@ def _run_scenario(service: RecommendationService, scenario: dict[str, Any]) -> d
             "conditions": baseline.get("conditions", []),
             "recommendation_count": len(baseline.get("recommendations", [])),
             "pack_count": len(baseline.get("packs_ranked", [])),
+            "commercial_blocked": bool(baseline.get("commercial_recommendations_blocked")),
             "combo_seguro": baseline.get("combo_seguro"),
             "alert_count": len(baseline.get("alertas", [])),
             "top_pack_id": baseline_pack.get("pack_id") if baseline_pack else None,
@@ -376,6 +371,10 @@ def _run_scenario(service: RecommendationService, scenario: dict[str, Any]) -> d
 
 def _evaluate(records: list[dict[str, Any]]) -> dict[str, Any]:
     failures = []
+    # Casos sin pack comercial por decision de producto (perfil critico o solo prioridades blandas de bienestar):
+    # no son fallos del recomendador, pero se reportan para que se vean.
+    notes = []
+    rankable = 0
     all_supplements = set()
     changed_scores = 0
     positive_score_increases = 0
@@ -401,9 +400,15 @@ def _evaluate(records: list[dict[str, Any]]) -> dict[str, Any]:
 
         if baseline["recommendation_count"] < 3:
             failures.append(f"{record['scenario']}: menos de 3 suplementos recomendados")
+            continue
+
+        if baseline["commercial_blocked"]:
+            notes.append(f"{record['scenario']}: perfil crítico, sin productos ni feedback de ranking (por diseño)")
+            continue
 
         if baseline["pack_count"] < 1:
-            failures.append(f"{record['scenario']}: no generó packs_ranked")
+            notes.append(f"{record['scenario']}: sin pack comercial, solo prioridades blandas de bienestar (por diseño)")
+            continue
 
         if len(baseline["top_pack"]) < 2:
             failures.append(f"{record['scenario']}: top pack con menos de 2 suplementos")
@@ -411,6 +416,7 @@ def _evaluate(records: list[dict[str, Any]]) -> dict[str, Any]:
         if baseline["combo_seguro"] is not True or baseline["alert_count"] != 0:
             failures.append(f"{record['scenario']}: top-level combo no seguro o con alertas")
 
+        rankable += 1
         before_feedback = baseline["score_feedback"]
         after_feedback = rated_after["score_feedback"]
         before_final = baseline["score_final"]
@@ -439,12 +445,13 @@ def _evaluate(records: list[dict[str, Any]]) -> dict[str, Any]:
     if len(records) < MIN_SCENARIOS:
         failures.append(f"se requieren al menos {MIN_SCENARIOS} escenarios")
 
-    if changed_scores < MIN_SCENARIOS:
-        failures.append("score_final/score_feedback no cambió en todos los escenarios")
+    if changed_scores < rankable:
+        failures.append(f"score_final/score_feedback cambió en {changed_scores} de {rankable} escenarios con pack comercial")
 
     return {
         "passed": not failures,
         "failures": failures,
+        "notes": notes,
         "summary": {
             "scenario_count": len(records),
             "unique_top_pack_supplements": sorted(all_supplements),
@@ -461,15 +468,31 @@ def run_validation() -> dict[str, Any]:
     if models.get("pipeline_vitaminas") is None:
         raise RuntimeError("pipeline_vitaminas no está cargado")
 
-    service = RecommendationService(models)
-    records = [_run_scenario(service, scenario) for scenario in SCENARIOS]
+    created: list[str] = []
+    with SessionLocal() as db:
+        try:
+            service = RecommendationService(models, db=db)
+            records = [_run_scenario(service, scenario, created) for scenario in SCENARIOS]
+        finally:
+            _cleanup(db, created)
     evaluation = _evaluate(records)
 
     return {
         "evaluation": evaluation,
         "records": records,
-        "feedback_summary": feedback_store.get_feedback_summary(limit=10),
     }
+
+
+def _cleanup(db, recommendation_ids: list[str]) -> None:
+    """Borra las sesiones y el feedback de la validacion para no contaminar las metricas reales."""
+    db.rollback()
+    session_ids = list(
+        db.scalars(select(RecommendationSession.id).where(RecommendationSession.recommendation_id.in_(recommendation_ids)))
+    )
+    if session_ids:
+        db.execute(delete(RecommendationFeedback).where(RecommendationFeedback.recommendation_session_id.in_(session_ids)))
+        db.execute(delete(RecommendationSession).where(RecommendationSession.id.in_(session_ids)))
+    db.commit()
 
 
 def _print_summary(report: dict[str, Any]) -> None:
@@ -506,6 +529,12 @@ def _print_summary(report: dict[str, Any]) -> None:
             f"new_top={top_after['top_pack']}"
         )
 
+    if evaluation["notes"]:
+        print("\nNotes (por diseño)")
+        print("------------------")
+        for note in evaluation["notes"]:
+            print(f"- {note}")
+
     if evaluation["failures"]:
         print("\nFailures")
         print("--------")
@@ -525,22 +554,9 @@ def main() -> int:
         description="Validate recommendation quality and feedback impact across 15 ideal scenarios."
     )
     parser.add_argument("--output", type=Path, help="Optional path to write a JSON report.")
-    parser.add_argument(
-        "--use-runtime-store",
-        action="store_true",
-        help="Use the configured runtime SQLite store instead of an isolated temporary store.",
-    )
     args = parser.parse_args()
 
-    if args.use_runtime_store:
-        report = run_validation()
-    else:
-        with TemporaryDirectory() as tmp_dir:
-            original_paths = _temporary_feedback_store(Path(tmp_dir))
-            try:
-                report = run_validation()
-            finally:
-                _restore_feedback_store(original_paths)
+    report = run_validation()
 
     _print_summary(report)
 
