@@ -107,3 +107,12 @@ def test_negative_feedback_lowers_pack_scores():
         assert negative["score_final"] < base_pack["score_final"]
 
     _with_temp_feedback_store(run)
+
+
+def test_no_pack_when_no_component_is_pack_eligible():
+    # Regresion: solo prioridades blandas (commercial_eligible=False) generaban un pack vacio con id md5("").
+    soft = [
+        {"component_id": "cmp_ashwagandha", "nombre": "Ashwagandha", "condicion": "ESTRES_SUENO", "score": 0.8, "commercial_eligible": False},
+        {"component_id": "cmp_magnesium", "nombre": "Magnesio", "condicion": "ESTRES_SUENO", "score": 0.7, "commercial_eligible": False},
+    ]
+    assert rerank_packs(soft, ["ESTRES_SUENO"], feedback_stats={}) == []

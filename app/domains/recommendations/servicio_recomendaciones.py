@@ -687,6 +687,8 @@ def _categorized_condition_results(
             "rule_score": detail.get("rule_score"),
             "calibrated_by_rules": bool(detail.get("calibrated_by_rules")),
             "score_basis": str(detail.get("score_basis") or ("rules_only" if not detail else "model")),
+            "second_opinion_probability": detail.get("second_opinion_probability"),
+            "second_opinion_reason": detail.get("second_opinion_reason"),
             "allowed_for_commercial_recommendation": kind not in {"safety_flag", "wellness_priority"},
             "requires_disclaimer": True,
             "explanation": _condition_result_explanation(condition, kind),

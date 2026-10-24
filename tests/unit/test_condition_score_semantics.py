@@ -39,3 +39,19 @@ def test_response_declares_how_to_read_condition_scores() -> None:
     fields = RecommendationResponse.model_fields
     assert fields["condition_score_semantics"].default == "indice_riesgo_reglas"
     assert fields["condition_score_label"].default == RULE_RISK_INDEX_LABEL
+
+
+def test_second_opinion_detail_passes_response_validation() -> None:
+    # Regresion: score_basis "rules+second_opinion_nhanes" hacia fallar la validacion de /recommend (500).
+    detail = {
+        "condition": "DEFICIT_VIT_D",
+        "probability": 0.44,
+        "positive": True,
+        "score_basis": "rules+second_opinion_nhanes",
+        "second_opinion_probability": 0.44,
+        "second_opinion_reason": "complementary_family",
+    }
+    results, _wellness, _safety = _categorized_condition_results(["DEFICIT_VIT_D"], {"DEFICIT_VIT_D": 0.44}, [detail])
+    [item] = [CategorizedConditionResult(**result) for result in results if result["code"] == "DEFICIT_VIT_D"]
+    assert item.score_basis == "rules+second_opinion_nhanes"
+    assert item.second_opinion_reason == "complementary_family"

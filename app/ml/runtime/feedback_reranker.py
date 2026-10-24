@@ -55,6 +55,11 @@ def _make_candidate_packs(recomendaciones: list[dict[str, Any]]) -> list[list[di
 
     recs = recs[:6]
 
+    if not recs:
+        # Sin componentes elegibles (p. ej. solo prioridades blandas): ningun pack. Un pack vacio compartia el id
+        # md5("") entre todos estos perfiles y mezclaba su feedback.
+        return []
+
     if len(recs) <= 3:
         return [recs]
 

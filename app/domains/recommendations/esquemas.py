@@ -67,7 +67,10 @@ class CategorizedConditionResult(BaseModel):
     model_probability: float | None = None
     rule_score: float | None = None
     calibrated_by_rules: bool = False
-    score_basis: Literal["model", "model+rules", "rules_only"] = "model"
+    # "rules+second_opinion_nhanes": el modelo real (NHANES) confirmo una condicion limitrofe (ver apply_second_opinion).
+    score_basis: Literal["model", "model+rules", "rules_only", "rules+second_opinion_nhanes"] = "model"
+    second_opinion_probability: float | None = None
+    second_opinion_reason: Literal["borderline", "complementary_family"] | None = None
     allowed_for_commercial_recommendation: bool = True
     requires_disclaimer: bool = True
     explanation: str
