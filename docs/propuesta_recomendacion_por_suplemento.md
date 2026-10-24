@@ -1,6 +1,8 @@
 # Propuesta: recomendar suplementos individuales con calificación de 1 a 5 estrellas
 
-Fecha: 2026-10-24. Estado: **evaluación, no implementado**. Reemplazaría los packs (grupos de 3 suplementos) por una
+Fecha: 2026-10-24. Estado: **pasos 1 y 2 implementados el 2026-10-24** (estrellas por suplemento en paralelo a los
+packs; ver `docs/recommender_events.md` §3b). El paso 3 (quitar packs del ranking) sigue pendiente. La regla "el
+feedback no supera la evidencia" quedó implementada de forma conservadora y falta confirmarla con el nutricionista. Reemplazaría los packs (grupos de 3 suplementos) por una
 lista de suplementos individuales, cada uno calificable por el usuario con 1 a 5 estrellas.
 
 ## Por qué

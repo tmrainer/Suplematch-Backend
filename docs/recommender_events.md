@@ -112,6 +112,23 @@ El reranker (`feedback_reranker.rerank_packs`) no cambió de firma: su `feedback
 venir ya resuelto por `context_key` (el caller decide contexto vs global por pack) y con
 `avg_score` = recompensa media, no rating.
 
+## 3b. Estrellas por suplemento (`recommendation_item_feedback`, 2026-10-24)
+
+`POST /feedback` acepta `item_ratings: [{component_id, rating 1-5, purchased?, still_taking_30d?}]` (máx. 20, uno por
+suplemento) además de la pregunta general, que sigue igual. Reglas:
+
+- Solo se guardan suplementos que esa recomendación mostró (`recommendation_items`); el resto vuelve en
+  `item_ratings_ignored`. La condición sale del servidor, no del cliente.
+- Reenviar el mismo feedback reemplaza sus estrellas (no suma votos).
+- Agregación por `component_id|CONDICION`; con menos de `MIN_ITEM_FEEDBACK_TO_RERANK = 10` votos en ese contexto se usa
+  el suplemento en todas sus condiciones, y con menos el score queda en el prior (0.70, `m = 20`).
+- `/recommend` devuelve `recommendations[].user_rating` (`stars` solo con votos suficientes, `count`, `score`,
+  `source`) y reordena **solo dentro del mismo nivel** (prioridad + `evidence_grade` + bloqueo comercial): el feedback
+  nunca pasa un suplemento por encima de otro con más evidencia ni levanta un bloqueo
+  (`app/domains/feedback/calificacion_suplementos.py`).
+- Los packs no cambian (siguen con su feedback propio). Tests: `tests/unit/test_item_ratings.py`,
+  `tests/integration/test_item_feedback.py`.
+
 ## 4. Por qué la posición importa (sesgo de posición)
 
 Un pack en la posición 1 recibe muchos más clicks que el mismo pack en la posición 3 aunque sea
