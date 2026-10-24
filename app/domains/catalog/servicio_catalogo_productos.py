@@ -9,7 +9,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.domains.catalog.catalogo_csv import CatalogProduct, _catalog_by_component, _clean
+from app.domains.catalog.catalogo_csv import (
+    CatalogProduct,
+    ProductComposition,
+    _catalog_by_component,
+    _catalog_compositions,
+    _clean,
+)
 from app.domains.catalog.repositorio_catalogo import CatalogRepository
 from app.domains.reviews.repositorio_metricas_resenas import DEFAULT_REVIEW_SCORE, ReviewMetricsRepository
 from app.domains.catalog.repositorio_reglas_seguridad import SafetyRuleRepository
@@ -58,7 +64,6 @@ class ProductCatalogService:
             products = self._score_product_dicts(
                 products,
                 used_pharmacies={},
-                used_rs=set(),
                 used_product_ids=set(),
             )
             products = [product for product in products if not product.get("product_safety_blocked")]
@@ -67,7 +72,7 @@ class ProductCatalogService:
 
         products = self._products_by_component().get(component_id, [])
         scored = [
-            self._score_catalog_product(product, used_pharmacies={}, used_rs=set(), used_product_keys=set())
+            self._score_catalog_product(product, used_pharmacies={}, used_product_keys=set())
             for product in products
         ]
         scored = [product for product in scored if not product.get("product_safety_blocked")]
@@ -84,7 +89,6 @@ class ProductCatalogService:
 
         selected: list[dict[str, Any]] = []
         used_pharmacies: dict[str, int] = {}
-        used_rs: set[str] = set()
         used_product_keys: set[str] = set()
 
         for component_id in component_ids:
@@ -97,7 +101,6 @@ class ProductCatalogService:
                 key=lambda product: self._pack_product_score(
                     product,
                     used_pharmacies=used_pharmacies,
-                    used_rs=used_rs,
                     used_product_keys=used_product_keys,
                 ),
                 reverse=True,
@@ -111,7 +114,6 @@ class ProductCatalogService:
                 scored_product = self._score_catalog_product(
                     product,
                     used_pharmacies=used_pharmacies,
-                    used_rs=used_rs,
                     used_product_keys=used_product_keys,
                 )
                 if scored_product.get("product_safety_blocked"):
@@ -119,7 +121,6 @@ class ProductCatalogService:
 
                 selected.append(scored_product)
                 used_product_keys.add(product.product_key)
-                used_rs.add(product.registro_sanitario)
                 used_pharmacies[product.pharmacy] = used_pharmacies.get(product.pharmacy, 0) + 1
                 picked_for_component += 1
 
@@ -135,7 +136,6 @@ class ProductCatalogService:
     ) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []
         used_pharmacies: dict[str, int] = {}
-        used_rs: set[str] = set()
         used_product_ids: set[str] = set()
         repo = CatalogRepository(self.db)
 
@@ -146,7 +146,6 @@ class ProductCatalogService:
             candidates = self._score_product_dicts(
                 candidates,
                 used_pharmacies=used_pharmacies,
-                used_rs=used_rs,
                 used_product_ids=used_product_ids,
             )
             candidates = [product for product in candidates if not product.get("product_safety_blocked")]
@@ -165,8 +164,6 @@ class ProductCatalogService:
 
                 selected.append(product)
                 used_product_ids.add(product_id)
-                if product.get("registro_sanitario"):
-                    used_rs.add(str(product["registro_sanitario"]))
                 pharmacy = str(product.get("pharmacy") or "")
                 used_pharmacies[pharmacy] = used_pharmacies.get(pharmacy, 0) + 1
                 picked_for_component += 1
@@ -250,13 +247,11 @@ class ProductCatalogService:
         product: CatalogProduct,
         *,
         used_pharmacies: dict[str, int],
-        used_rs: set[str],
         used_product_keys: set[str],
     ) -> float:
         scored = self._score_catalog_product(
             product,
             used_pharmacies=used_pharmacies,
-            used_rs=used_rs,
             used_product_keys=used_product_keys,
         )
         duplicate_penalty = 1.0 if product.product_key in used_product_keys else 0.0
@@ -267,17 +262,36 @@ class ProductCatalogService:
         product: CatalogProduct,
         *,
         used_pharmacies: dict[str, int],
-        used_rs: set[str],
         used_product_keys: set[str],
     ) -> dict[str, Any]:
         response = product.to_response()
         response["stock"] = None
         response["last_seen_at"] = None
         response["catalog_product_key"] = product.product_key
+        # La cola de revisión de RS vive en Postgres; en modo CSV no hay decisiones
+        # que aplicar, así que el producto se expone como `not_required`.
+        response.setdefault("rs_review_status", "not_required")
         response["product_component_count"] = self._csv_product_component_count(product.product_key)
+
+        # Composición COMPLETA del producto comercial (todas las filas del CSV con el
+        # mismo pharmacy+sku/url), no solo el ingrediente por el que fue elegido.
+        # Las reglas de seguridad (vitamina A en embarazo, yodo en tiroides, etc.)
+        # leen `digemid_composicion` y `product_ingredients` vía product_text().
+        composition = self._csv_product_composition(product)
+        if composition is not None:
+            response["product_ingredients"] = list(composition.ingredients)
+            response["digemid_composicion"] = composition.digemid_composicion or response.get("digemid_composicion")
+            if composition.component_ids:
+                response["product_component_count"] = max(1, len(composition.component_ids))
+        else:
+            response["product_ingredients"] = [product.ingredient] if product.ingredient else []
+
+        verified_flags = set(product.restriction_flags_verified)
+        if composition is not None:
+            verified_flags.update(composition.restriction_flags_verified)
+        response["restriction_flags_verified"] = sorted(verified_flags)
         response["restriction_flags_inferred"] = infer_restriction_flags(response)
-        response["restriction_flags_verified"] = []
-        response["restriction_flags"] = response["restriction_flags_inferred"]
+        response["restriction_flags"] = response["restriction_flags_verified"] or response["restriction_flags_inferred"]
         duplicate_penalty = 1.0 if product.product_key in used_product_keys else 0.0
         return self._apply_product_scores(
             response,
@@ -290,7 +304,6 @@ class ProductCatalogService:
                 "verified_review_ratio": 0.0,
             },
             used_pharmacies=used_pharmacies,
-            used_rs=used_rs,
             duplicate_penalty=duplicate_penalty,
             exposure_metrics=None,
         )
@@ -300,7 +313,6 @@ class ProductCatalogService:
         products: list[dict[str, Any]],
         *,
         used_pharmacies: dict[str, int],
-        used_rs: set[str],
         used_product_ids: set[str],
     ) -> list[dict[str, Any]]:
         review_metrics_by_product = {}
@@ -314,11 +326,12 @@ class ProductCatalogService:
         for product in products:
             product_id = str(product.get("product_id") or product.get("url") or "")
             duplicate_penalty = 1.0 if product_id in used_product_ids else 0.0
+            product = dict(product)
+            product.setdefault("rs_review_status", "not_required")
             scored_product = self._apply_product_scores(
-                dict(product),
+                product,
                 review_metrics=review_metrics_by_product.get(product_id),
                 used_pharmacies=used_pharmacies,
-                used_rs=used_rs,
                 duplicate_penalty=duplicate_penalty,
                 exposure_metrics=exposure_metrics_by_product.get(product_id),
             )
@@ -331,7 +344,6 @@ class ProductCatalogService:
         *,
         review_metrics: dict[str, Any] | None,
         used_pharmacies: dict[str, int],
-        used_rs: set[str],
         duplicate_penalty: float,
         exposure_metrics: dict[str, Any] | None,
     ) -> dict[str, Any]:
@@ -592,6 +604,9 @@ class ProductCatalogService:
             return 0.62
         return 0.45
 
+    def _csv_product_composition(self, product: CatalogProduct) -> ProductComposition | None:
+        return _catalog_compositions(str(self.catalog_path)).get(product.composition_key)
+
     def _csv_product_component_count(self, product_key: str) -> int:
         return self._csv_product_component_counts().get(product_key, 1)
 
@@ -800,7 +815,6 @@ class ProductCatalogService:
         product: dict[str, Any],
         *,
         used_pharmacies: dict[str, int],
-        used_rs: set[str],
         used_product_ids: set[str],
     ) -> float:
         product_id = str(product.get("product_id") or product.get("url") or "")
@@ -809,7 +823,6 @@ class ProductCatalogService:
             dict(product),
             review_metrics=None,
             used_pharmacies=used_pharmacies,
-            used_rs=used_rs,
             duplicate_penalty=duplicate_penalty,
             exposure_metrics=None,
         )

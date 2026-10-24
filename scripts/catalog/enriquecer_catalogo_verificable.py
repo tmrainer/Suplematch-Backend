@@ -191,7 +191,49 @@ def normalize_unit(unit: Any) -> str:
     return text
 
 
-def amount_to_mg(amount: float, unit: str, component_id: str, ingredient: str) -> float | None:
+# Factores UI -> mg de vitamina E según la forma (NIH ODS, Vitamin E Health
+# Professional Fact Sheet): 1 UI = 0.67 mg de d-alfa-tocoferol (RRR, "natural")
+# y 1 UI = 0.45 mg de dl-alfa-tocoferol (all-rac, sintético).
+VITAMIN_E_UI_TO_MG_NATURAL = 0.67
+VITAMIN_E_UI_TO_MG_SYNTHETIC = 0.45
+# Cuando la forma no se distingue se usa 0.67: para evaluar límites superiores
+# de seguridad es conservador asumir el factor que produce MÁS mg (una dosis
+# estimada mayor nunca deja pasar por debajo del límite a un producto que en
+# realidad lo supera). El factor sintético solo se aplica con evidencia textual.
+VITAMIN_E_UI_TO_MG_DEFAULT = VITAMIN_E_UI_TO_MG_NATURAL
+
+_VITAMIN_E_SYNTHETIC_MARKERS = (
+    r"\bdl[\s-]*alfa\b",
+    r"\bdl[\s-]*alpha\b",
+    r"\ball[\s-]*rac\b",
+    r"\bsintetic[ao]s?\b",
+    r"\bsynthetic\b",
+)
+_VITAMIN_E_NATURAL_MARKERS = (
+    r"(?<![a-z])d[\s-]*alfa\b",
+    r"(?<![a-z])d[\s-]*alpha\b",
+    r"\brrr\b",
+    r"\bnatural\b",
+)
+
+
+def vitamin_e_ui_to_mg_factor(*texts: Any) -> float:
+    """Elige el factor UI->mg de vitamina E a partir de la forma declarada."""
+    text = normalize_text(*texts)
+    if has_any(text, _VITAMIN_E_SYNTHETIC_MARKERS):
+        return VITAMIN_E_UI_TO_MG_SYNTHETIC
+    if has_any(text, _VITAMIN_E_NATURAL_MARKERS):
+        return VITAMIN_E_UI_TO_MG_NATURAL
+    return VITAMIN_E_UI_TO_MG_DEFAULT
+
+
+def amount_to_mg(
+    amount: float,
+    unit: str,
+    component_id: str,
+    ingredient: str,
+    context_text: str = "",
+) -> float | None:
     normalized_unit = normalize_unit(unit)
     if normalized_unit in UNIT_TO_MG:
         return amount * UNIT_TO_MG[normalized_unit]
@@ -206,11 +248,15 @@ def amount_to_mg(amount: float, unit: str, component_id: str, ingredient: str) -
         ):
             return amount * 0.000025
         if "vitamina e" in component_text or "vitamin e" in component_text or "tocofer" in component_text:
-            return amount * 0.67
+            return amount * vitamin_e_ui_to_mg_factor(ingredient, context_text)
         if "vitamina a" in component_text or "vitamin a" in component_text or "retinol" in component_text:
             return amount * 0.0003
 
     return None
+
+
+def vitamin_e_context(row: dict[str, str]) -> str:
+    return normalize_text(row.get("digemid_composicion"), row.get("digemid_producto"), row.get("commercial_name"))
 
 
 def infer_amount(row: dict[str, str]) -> tuple[str, str, str, str]:
@@ -221,7 +267,13 @@ def infer_amount(row: dict[str, str]) -> tuple[str, str, str, str]:
 
     parsed_amount = parse_number(amount)
     if parsed_amount is not None and unit and not amount_mg:
-        converted = amount_to_mg(parsed_amount, unit, clean(row.get("component_id")), clean(row.get("ingredient")))
+        converted = amount_to_mg(
+            parsed_amount,
+            unit,
+            clean(row.get("component_id")),
+            clean(row.get("ingredient")),
+            vitamin_e_context(row),
+        )
         if converted is not None:
             return amount, unit, f"{converted:.6g}", source or "component_amount_conversion"
 
@@ -252,7 +304,17 @@ def infer_amount(row: dict[str, str]) -> tuple[str, str, str, str]:
     inferred_amount = preferred.group(1).replace(",", ".")
     inferred_unit = normalize_unit(preferred.group(2))
     parsed = parse_number(inferred_amount)
-    converted = amount_to_mg(parsed, inferred_unit, clean(row.get("component_id")), clean(row.get("ingredient"))) if parsed is not None else None
+    converted = (
+        amount_to_mg(
+            parsed,
+            inferred_unit,
+            clean(row.get("component_id")),
+            clean(row.get("ingredient")),
+            vitamin_e_context(row),
+        )
+        if parsed is not None
+        else None
+    )
 
     return (
         amount or inferred_amount,
@@ -305,7 +367,7 @@ def commercial_confidence(row: dict[str, str]) -> tuple[str, str, str]:
 
     if clean(row.get("registro_sanitario")):
         source = clean(row.get("registro_sanitario_source"))
-        if source == "digemid_name_match":
+        if source in {"digemid_name_match", "digemid_name_inference"}:
             score += 0.18
             reasons.append("RS inferido por DIGEMID/nombre")
         elif source == "image_ocr":

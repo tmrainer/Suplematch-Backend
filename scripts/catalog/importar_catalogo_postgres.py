@@ -4,6 +4,7 @@ import argparse
 import csv
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -25,6 +26,8 @@ from app.db.models import (
     utcnow,
 )
 from app.db.session import SessionLocal
+from app.domains.admin.repositorio_revision_rs import CatalogRsReviewRepository
+from app.domains.admin.servicio_revision_rs import DEFAULT_SAMPLE_RATIO, DEFAULT_SAMPLE_SEED, select_review_items
 from app.domains.catalog.seguridad_productos import catalog_verification_status, infer_restriction_flags, verified_restriction_flags
 
 
@@ -64,6 +67,52 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+# Estados que pasan a "inactive" cuando el producto desaparece del CSV. "blocked"
+# es una decisión manual de curaduría y no se toca.
+DEACTIVATABLE_STATUSES = frozenset({"active", "preferred"})
+INACTIVE_STATUS = "inactive"
+MISSING_FROM_CATALOG_REASON = "missing_from_catalog_csv"
+
+
+def product_identity(pharmacy_name: Any, sku: Any, url: Any) -> tuple[str, str]:
+    """Identidad de un producto comercial: (slug de farmacia, sku o url), igual que `_get_product`."""
+    return (slugify(clean(pharmacy_name)), clean(sku) or clean(url))
+
+
+def csv_product_identities(rows: Iterable[dict[str, str]]) -> set[tuple[str, str]]:
+    identities = set()
+    for row in rows:
+        identity = product_identity(row.get("pharmacy"), row.get("sku"), row.get("url"))
+        if identity[0] and identity[1]:
+            identities.add(identity)
+    return identities
+
+
+def select_products_to_deactivate(
+    existing: Iterable[tuple[tuple[str, str], str]],
+    seen: set[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Lógica pura: qué productos existentes en BD deben desactivarse.
+
+    `existing` son pares ((pharmacy_slug, sku), commercial_status) de la BD y
+    `seen` las identidades presentes en el CSV importado. Solo se desactivan
+    productos de farmacias que SÍ aparecen en el CSV (un CSV parcial de una
+    farmacia no debe apagar el catálogo de las demás) y cuyo estado sea
+    desactivable (`active`/`preferred`).
+    """
+    pharmacies_in_csv = {identity[0] for identity in seen}
+    to_deactivate = []
+    for identity, status in existing:
+        if identity in seen:
+            continue
+        if identity[0] not in pharmacies_in_csv:
+            continue
+        if clean(status).lower() not in DEACTIVATABLE_STATUSES:
+            continue
+        to_deactivate.append(identity)
+    return to_deactivate
+
+
 def row_payload(row: dict[str, str]) -> dict[str, Any]:
     payload = dict(row)
     payload["restriction_flags_inferred"] = infer_restriction_flags(payload)
@@ -76,8 +125,19 @@ def row_payload(row: dict[str, str]) -> dict[str, Any]:
 
 
 class CatalogImporter:
-    def __init__(self, catalog_path: Path):
+    def __init__(
+        self,
+        catalog_path: Path,
+        deactivate_missing: bool = True,
+        populate_rs_review: bool = True,
+        rs_review_sample_ratio: float = DEFAULT_SAMPLE_RATIO,
+        rs_review_seed: str = DEFAULT_SAMPLE_SEED,
+    ):
         self.catalog_path = catalog_path
+        self.deactivate_missing = deactivate_missing
+        self.populate_rs_review = populate_rs_review
+        self.rs_review_sample_ratio = rs_review_sample_ratio
+        self.rs_review_seed = rs_review_seed
 
     def run(self) -> dict[str, int]:
         rows = read_rows(self.catalog_path)
@@ -87,6 +147,10 @@ class CatalogImporter:
             "components": 0,
             "links": 0,
             "errors": 0,
+            "deactivated": 0,
+            "rs_review_inserted": 0,
+            "rs_review_updated": 0,
+            "rs_review_skipped_decided": 0,
         }
 
         with SessionLocal() as db:
@@ -126,10 +190,21 @@ class CatalogImporter:
                 if (stats["products"] + stats["errors"]) % 500 == 0:
                     db.commit()
 
+            if self.deactivate_missing:
+                stats["deactivated"] = self._deactivate_missing_products(db, csv_product_identities(rows))
+
+            if self.populate_rs_review:
+                review_stats = self._populate_rs_review_queue(db, rows)
+                stats["rs_review_inserted"] = review_stats["inserted"]
+                stats["rs_review_updated"] = review_stats["updated"]
+                stats["rs_review_skipped_decided"] = review_stats["skipped_decided"]
+
             import_run.status = "completed" if stats["errors"] == 0 else "completed_with_errors"
             import_run.finished_at = utcnow()
             import_run.total_accepted = stats["products"]
             import_run.total_rejected = stats["errors"]
+            if stats["deactivated"]:
+                import_run.notes = f"deactivated_missing={stats['deactivated']}"
             db.commit()
 
         stats["components"] = len(component_cache)
@@ -141,8 +216,45 @@ class CatalogImporter:
             components=stats["components"],
             links=stats["links"],
             errors=stats["errors"],
+            deactivated=stats["deactivated"],
+            rs_review_inserted=stats["rs_review_inserted"],
+            rs_review_updated=stats["rs_review_updated"],
+            rs_review_skipped_decided=stats["rs_review_skipped_decided"],
         )
         return stats
+
+    def _populate_rs_review_queue(self, db, rows: list[dict[str, str]]) -> dict[str, int]:
+        """Cola de revisión humana de RS (docs/catalog_rs_review.md).
+
+        100% de los productos con RS inferido por nombre + muestra aleatoria
+        determinista del resto. Nunca pisa una decisión ya tomada (status != pending).
+        """
+        items = select_review_items(rows, sample_ratio=self.rs_review_sample_ratio, seed=self.rs_review_seed)
+        return CatalogRsReviewRepository(db).upsert_items(items)
+
+    def _deactivate_missing_products(self, db, seen: set[tuple[str, str]]) -> int:
+        """Marca `inactive` los productos de BD que ya no aparecen en el CSV."""
+        if not seen:
+            return 0
+        products_by_identity: dict[tuple[str, str], CommercialProduct] = {}
+        existing: list[tuple[tuple[str, str], str]] = []
+        for product, pharmacy in db.execute(select(CommercialProduct, Pharmacy).join(Pharmacy)):
+            identity = (pharmacy.slug, clean(product.sku) or clean(product.url))
+            products_by_identity[identity] = product
+            existing.append((identity, product.commercial_status or ""))
+
+        deactivated = 0
+        now = utcnow()
+        for identity in select_products_to_deactivate(existing, seen):
+            product = products_by_identity[identity]
+            payload = dict(product.raw_payload_json or {})
+            payload["previous_commercial_status"] = product.commercial_status
+            payload["deactivated_reason"] = MISSING_FROM_CATALOG_REASON
+            payload["deactivated_at"] = now.isoformat()
+            product.raw_payload_json = payload
+            product.commercial_status = INACTIVE_STATUS
+            deactivated += 1
+        return deactivated
 
     def _get_pharmacy(
         self,
@@ -265,6 +377,9 @@ class CatalogImporter:
         product.source_strategy = clean(row.get("source_strategy")) or product.source_strategy
         product.last_seen_at = utcnow()
         product.raw_payload_json = row_payload(row)
+        if product.commercial_status == INACTIVE_STATUS:
+            # El producto volvió a aparecer en el catálogo.
+            product.commercial_status = "active"
 
     def _link_product_component(
         self,
@@ -332,17 +447,42 @@ class CatalogImporter:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Importa approved_catalog.csv a PostgreSQL.")
     parser.add_argument("--catalog", type=Path, default=settings.APPROVED_CATALOG_PATH)
+    parser.add_argument(
+        "--no-deactivate-missing",
+        action="store_true",
+        help="No marcar como inactive los productos en BD que ya no aparecen en el CSV.",
+    )
+    parser.add_argument(
+        "--no-rs-review",
+        action="store_true",
+        help="No poblar la cola de revisión humana de RS (catalog_rs_reviews).",
+    )
+    parser.add_argument(
+        "--rs-review-sample-ratio",
+        type=float,
+        default=DEFAULT_SAMPLE_RATIO,
+        help="Fracción del catálogo con RS no inferido que entra como muestra aleatoria (default 0.05).",
+    )
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
-    stats = CatalogImporter(args.catalog).run()
+    stats = CatalogImporter(
+        args.catalog,
+        deactivate_missing=not args.no_deactivate_missing,
+        populate_rs_review=not args.no_rs_review,
+        rs_review_sample_ratio=args.rs_review_sample_ratio,
+    ).run()
     print(f"rows={stats['rows']}")
     print(f"products_seen={stats['products']}")
     print(f"components_seen={stats['components']}")
     print(f"links_seen={stats['links']}")
     print(f"errors={stats['errors']}")
+    print(f"deactivated_missing={stats['deactivated']}")
+    print(f"rs_review_inserted={stats['rs_review_inserted']}")
+    print(f"rs_review_updated={stats['rs_review_updated']}")
+    print(f"rs_review_skipped_decided={stats['rs_review_skipped_decided']}")
     return 0 if stats["errors"] == 0 else 1
 
 

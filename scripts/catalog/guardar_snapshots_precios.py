@@ -43,6 +43,25 @@ def key(pharmacy: str, sku: str, url: str) -> tuple[str, str]:
     return (clean(pharmacy).lower(), clean(sku or url).lower())
 
 
+def unique_product_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Una fila por producto comercial (farmacia + sku/url).
+
+    El catálogo aprobado tiene una fila por (producto, componente); precio,
+    stock y disponibilidad son del producto, así que un snapshot por fila
+    duplicaría el mismo precio tantas veces como componentes tenga. Se
+    conserva la primera fila de cada producto.
+    """
+    seen: set[tuple[str, str]] = set()
+    unique: list[dict[str, str]] = []
+    for row in rows:
+        row_key = key(row.get("pharmacy", ""), row.get("sku", ""), row.get("url", ""))
+        if row_key in seen:
+            continue
+        seen.add(row_key)
+        unique.append(row)
+    return unique
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Guarda snapshots de precio/stock desde catálogo aprobado.")
     parser.add_argument("--catalog", type=Path, default=Path("data/catalog/approved_catalog.csv"))
@@ -51,13 +70,14 @@ def main() -> int:
 
     job_id = UUID(args.catalog_job_id) if args.catalog_job_id else None
     rows = read_rows(args.catalog)
+    product_rows = unique_product_rows(rows)
     with SessionLocal() as db:
         products = {
             key(pharmacy.name, product.sku or "", product.url or ""): product
             for product, pharmacy in db.execute(select(CommercialProduct, Pharmacy).join(Pharmacy))
         }
         inserted = 0
-        for row in rows:
+        for row in product_rows:
             row_key = key(row.get("pharmacy", ""), row.get("sku", ""), row.get("url", ""))
             product = products.get(row_key)
             db.add(
@@ -81,7 +101,7 @@ def main() -> int:
                 db.commit()
         db.commit()
 
-    print(f"price_snapshots=ok inserted={inserted} catalog={args.catalog}")
+    print(f"price_snapshots=ok rows={len(rows)} products={len(product_rows)} inserted={inserted} catalog={args.catalog}")
     return 0
 
 

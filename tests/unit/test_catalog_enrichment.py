@@ -96,3 +96,46 @@ def test_enrich_row_commercial_confidence_differentiates_name_match():
 
     assert enriched["commercial_confidence_level"] == "media"
     assert "RS inferido por DIGEMID/nombre" in enriched["commercial_confidence_reasons"]
+
+
+def test_vitamin_e_ui_factor_depends_on_declared_form():
+    from scripts.catalog.enriquecer_catalogo_verificable import (
+        VITAMIN_E_UI_TO_MG_NATURAL,
+        VITAMIN_E_UI_TO_MG_SYNTHETIC,
+        amount_to_mg,
+        vitamin_e_ui_to_mg_factor,
+    )
+
+    # NIH ODS: 1 UI = 0.67 mg d-alfa-tocoferol (natural); 1 UI = 0.45 mg dl-alfa-tocoferol (sintético)
+    assert VITAMIN_E_UI_TO_MG_NATURAL == 0.67
+    assert VITAMIN_E_UI_TO_MG_SYNTHETIC == 0.45
+    assert vitamin_e_ui_to_mg_factor("DL-ALFA ACETATO DE TOCOFEROL") == 0.45
+    assert vitamin_e_ui_to_mg_factor("dl-alpha tocopheryl acetate") == 0.45
+    assert vitamin_e_ui_to_mg_factor("Vitamina E sintetica 400 UI") == 0.45
+    assert vitamin_e_ui_to_mg_factor("D-ALFA TOCOFEROL") == 0.67
+    assert vitamin_e_ui_to_mg_factor("Vitamina E natural 400 UI") == 0.67
+    # Sin forma declarada: 0.67 (más mg estimados = conservador para límites superiores)
+    assert vitamin_e_ui_to_mg_factor("VITAMINA E (TOCOFEROL)") == 0.67
+
+    assert amount_to_mg(400, "UI", "vitamina_e", "DL-ALFA ACETATO DE TOCOFEROL") == 180.0
+    assert amount_to_mg(400, "UI", "vitamina_e", "VITAMINA E (TOCOFEROL)") == 268.0
+    # El contexto (composición DIGEMID) puede aportar la forma aunque el ingrediente no la diga
+    assert amount_to_mg(400, "UI", "vitamina_e", "VITAMINA E", "DL-ALFA ACETATO DE TOCOFERILO 400 UI") == 180.0
+
+
+def test_enrich_row_uses_synthetic_vitamin_e_factor_from_digemid_composition():
+    row = {
+        "commercial_name": "Vitamina E 400 UI Capsula Blanda",
+        "ingredient": "DL-ALFA ACETATO DE TOCOFEROL",
+        "component_id": "vitamina_e",
+        "digemid_forma_farmaceutica": "CAPSULA BLANDA",
+        "digemid_composicion": "DL-ALFA ACETATO DE TOCOFEROL 400.000000 UI",
+        "amount": "400",
+        "unit": "UI",
+        "amount_mg": "",
+    }
+
+    enriched = enrich_row(row, "2026-06-23T00:00:00+00:00")
+
+    assert enriched["amount_mg"] == "180"
+    assert enriched["amount_source"] == "component_amount_conversion"

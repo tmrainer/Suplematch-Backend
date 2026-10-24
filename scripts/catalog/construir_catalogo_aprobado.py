@@ -6,6 +6,17 @@ import re
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts.catalog.filtros_categoria import categoria_no_suplemento
+except ImportError:  # ejecucion directa: python3 scripts/catalog/construir_catalogo_aprobado.py
+    from filtros_categoria import categoria_no_suplemento
+
+# Un RS inferido por nombre que termina asociado a muchos productos comerciales distintos es casi
+# siempre un falso positivo (ej. RS de "MAGNESIO" asignado a 93 productos). Se rechaza el grupo entero.
+MAX_INFERRED_RS_FANOUT = 5
+# Valores de `registro_sanitario_source` que indican RS inferido por nombre (scraper actual y legado).
+INFERRED_RS_SOURCES = {"digemid_name_match", "digemid_name_inference"}
+
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_SCRAPED = ROOT_DIR.parent / "suplematch-scraper/output/supplements_exhaustive_clean.csv"
@@ -134,6 +145,7 @@ def build_catalog_with_rejections(
 
     catalog_rows: list[dict[str, Any]] = []
     rejected_rows: list[dict[str, Any]] = []
+    products_by_row_index: dict[int, dict[str, str]] = {}
     seen = set()
 
     for product in scraped_rows:
@@ -156,11 +168,20 @@ def build_catalog_with_rejections(
         if availability != "available":
             reasons.append(f"no_disponible:{availability or 'sin_estado'}")
 
+        category_reason = categoria_no_suplemento(
+            product.get("commercial_name"),
+            product.get("formal_name"),
+            product.get("brand"),
+        )
+        if category_reason:
+            reasons.append(f"categoria_no_suplemento:{category_reason}")
+
         if reasons:
             rejected_rows.append(build_rejection_row(product, rs_key, reasons))
             continue
 
         digemid = digemid_by_rs[rs_key]
+        rs_source = clean(product.get("registro_sanitario_source"))
 
         for component in components_by_rs[rs_key]:
             dedupe_key = (
@@ -174,6 +195,7 @@ def build_catalog_with_rejections(
                 continue
 
             seen.add(dedupe_key)
+            products_by_row_index[len(catalog_rows)] = product
             catalog_rows.append(
                 {
                     "pharmacy": clean(product.get("pharmacy")),
@@ -181,6 +203,7 @@ def build_catalog_with_rejections(
                     "formal_name": clean(product.get("formal_name")),
                     "registro_sanitario": rs_raw,
                     "registro_sanitario_key": rs_key,
+                    "registro_sanitario_source": rs_source,
                     "digemid_item": clean(digemid.get("item")),
                     "digemid_producto": clean(digemid.get("Producto")),
                     "digemid_distribuidor": clean(digemid.get("Distribuidor")),
@@ -213,7 +236,48 @@ def build_catalog_with_rejections(
                 }
             )
 
+    catalog_rows, fanout_rejections = reject_inferred_rs_fanout(catalog_rows, products_by_row_index)
+    rejected_rows.extend(fanout_rejections)
     return catalog_rows, rejected_rows
+
+
+def reject_inferred_rs_fanout(
+    catalog_rows: list[dict[str, Any]],
+    products_by_row_index: dict[int, dict[str, str]],
+    max_fanout: int = MAX_INFERRED_RS_FANOUT,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Rechaza grupos de RS inferido por nombre asociados a demasiados productos comerciales distintos."""
+    names_by_rs: dict[str, set[str]] = {}
+    for row in catalog_rows:
+        if row.get("registro_sanitario_source") not in INFERRED_RS_SOURCES:
+            continue
+        names_by_rs.setdefault(row["registro_sanitario_key"], set()).add(row["commercial_name"].lower())
+
+    over_fanout = {rs for rs, names in names_by_rs.items() if len(names) > max_fanout}
+    if not over_fanout:
+        return catalog_rows, []
+
+    kept: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    seen_products: set[tuple[str, str]] = set()
+    for index, row in enumerate(catalog_rows):
+        rs_key = row["registro_sanitario_key"]
+        if rs_key not in over_fanout or row.get("registro_sanitario_source") not in INFERRED_RS_SOURCES:
+            kept.append(row)
+            continue
+        product_key = (row["pharmacy"].lower(), row["sku"])
+        if product_key in seen_products:
+            continue
+        seen_products.add(product_key)
+        product = products_by_row_index.get(index, row)
+        rejected.append(
+            build_rejection_row(
+                product,
+                rs_key,
+                [f"rs_inferido_fanout:{rs_key}:{len(names_by_rs[rs_key])}>{max_fanout}"],
+            )
+        )
+    return kept, rejected
 
 
 def build_catalog(

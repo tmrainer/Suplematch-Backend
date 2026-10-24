@@ -5,6 +5,7 @@ import csv
 import json
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -44,14 +45,43 @@ def read_catalog(path: Path) -> dict[tuple[str, str], dict[str, str]]:
         return rows
 
 
+# Columnas de motivo de rechazo según el productor del CSV:
+#   construir_catalogo_aprobado.py -> catalog_rejection_reason (varios motivos unidos por ";")
+#                                     + scraper_rejection_reason
+#   scraper_suplementos.py         -> rejection_reason
+REJECTION_REASON_COLUMNS = (
+    "catalog_rejection_reason",
+    "rejection_reason",
+    "scraper_rejection_reason",
+    "reason",
+)
+
+
+def rejection_reason_column(fieldnames: Iterable[str] | None) -> str | None:
+    names = set(fieldnames or [])
+    for column in REJECTION_REASON_COLUMNS:
+        if column in names:
+            return column
+    return None
+
+
+def rejection_reasons(row: dict[str, Any], column: str | None) -> list[str]:
+    if column is None:
+        return ["unknown"]
+    reasons = [clean(part) for part in clean(row.get(column)).split(";")]
+    reasons = [reason for reason in reasons if reason]
+    return reasons or ["unknown"]
+
+
 def summarize_rejects(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
-        return {"rows": 0, "by_reason": {}}
+        return {"rows": 0, "by_reason": {}, "reason_column": None}
     with path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
+        column = rejection_reason_column(reader.fieldnames)
         rows = list(reader)
-    reasons = Counter(clean(row.get("reason")) or "unknown" for row in rows)
-    return {"rows": len(rows), "by_reason": dict(reasons.most_common(20))}
+    reasons = Counter(reason for row in rows for reason in rejection_reasons(row, column))
+    return {"rows": len(rows), "by_reason": dict(reasons.most_common(20)), "reason_column": column}
 
 
 def main() -> int:

@@ -403,3 +403,114 @@ def test_commercial_ranker_uses_budget_when_available(tmp_path):
     assert "Elegido por mejor precio" in products[0]["selection_reasons"]
     assert products[0]["commercial_quality_flags"]["has_valid_registration"] is True
     assert products[0]["commercial_quality_flags"]["is_unit_component"] is True
+
+
+def _write_rows(path, rows):
+    fieldnames = sorted({key for row in rows for key in row})
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _multivitamin_rows():
+    composition = "VITAMINA A 25,000.000000 UI ZINC 15.000000 mg YODURO DE POTASIO 0.196000 mg"
+    base = {
+        "pharmacy": "Inkafarma",
+        "commercial_name": "Multivitaminico Completo",
+        "formal_name": "Multivitaminico",
+        "registro_sanitario": "DE-MULTI",
+        "digemid_producto": "MULTIVITAMINICO",
+        "digemid_composicion": composition,
+        "component_match_score": "95",
+        "price": "18.0",
+        "currency": "PEN",
+        "availability": "available",
+        "url": "https://example.test/multi",
+        "sku": "multi",
+        "brand": "A",
+        "regulatory_status": "digemid_match",
+        "contains_gelatin": "true",
+        "softgel_verified": "true",
+        "label_status": "verified",
+        "label_verified_at": "2026-06-30T00:00:00+00:00",
+        "label_verification_source": "digemid_composicion+digemid_forma_farmaceutica",
+    }
+    return [
+        {**base, "component_id": "cmp_zinc", "ingredient": "ZINC", "amount": "15", "unit": "mg", "amount_mg": "15"},
+        {**base, "component_id": "cmp_vit_a", "ingredient": "VITAMINA A", "amount": "25000", "unit": "UI", "amount_mg": ""},
+        {**base, "component_id": "cmp_iodine", "ingredient": "YODURO DE POTASIO", "amount": "0.196", "unit": "mg", "amount_mg": "0.196"},
+        {
+            "pharmacy": "Mifarma",
+            "commercial_name": "Zinc Unitario",
+            "formal_name": "Zinc",
+            "registro_sanitario": "DE-ZINC",
+            "digemid_producto": "ZINC",
+            "digemid_composicion": "SULFATO DE ZINC 50.000000 mg",
+            "component_id": "cmp_zinc",
+            "ingredient": "SULFATO DE ZINC",
+            "amount": "50",
+            "unit": "mg",
+            "amount_mg": "50",
+            "component_match_score": "100",
+            "price": "25.0",
+            "currency": "PEN",
+            "availability": "available",
+            "url": "https://example.test/zinc",
+            "sku": "zinc",
+            "brand": "B",
+            "regulatory_status": "digemid_match",
+        },
+    ]
+
+
+def test_csv_product_carries_full_composition_and_verified_flags(tmp_path):
+    catalog_path = tmp_path / "approved_catalog.csv"
+    _write_rows(catalog_path, _multivitamin_rows())
+    _catalog_by_component.cache_clear()
+    product_catalog_module._catalog_compositions.cache_clear()
+
+    service = ProductCatalogService(catalog_path=catalog_path)
+    products = service.products_for_component("cmp_zinc", limit=3)
+    multi = next(product for product in products if product["sku"] == "multi")
+
+    assert multi["ingredient"] == "ZINC"
+    assert set(multi["product_ingredients"]) == {"ZINC", "VITAMINA A", "YODURO DE POTASIO"}
+    assert "VITAMINA A 25,000.000000 UI" in multi["digemid_composicion"]
+    assert multi["product_component_count"] == 3
+    # Flags verificados del enriquecimiento, no lista vacía
+    assert multi["restriction_flags_verified"] == ["may_contain_gelatin"]
+    assert multi["restriction_flags"] == ["may_contain_gelatin"]
+    assert multi["label_status"] == "verified"
+    assert multi["commercial_quality_flags"]["has_verified_label_flags"] is True
+
+
+def test_csv_pregnancy_blocks_multivitamin_chosen_for_zinc_because_of_vitamin_a(tmp_path):
+    catalog_path = tmp_path / "approved_catalog.csv"
+    _write_rows(catalog_path, _multivitamin_rows())
+    _catalog_by_component.cache_clear()
+    product_catalog_module._catalog_compositions.cache_clear()
+
+    service = ProductCatalogService(catalog_path=catalog_path, safety_conditions=["embarazo_lactancia"])
+    products = service.products_for_component("cmp_zinc", limit=3)
+
+    assert [product["sku"] for product in products] == ["zinc"]
+
+    pack = service.select_products_for_pack(["cmp_zinc"])
+    assert [product["sku"] for product in pack] == ["zinc"]
+
+
+def test_csv_thyroid_condition_blocks_multivitamin_with_iodine_in_composition(tmp_path):
+    catalog_path = tmp_path / "approved_catalog.csv"
+    _write_rows(catalog_path, _multivitamin_rows())
+    _catalog_by_component.cache_clear()
+    product_catalog_module._catalog_compositions.cache_clear()
+
+    service = ProductCatalogService(catalog_path=catalog_path, safety_conditions=["problema_tiroideo"])
+    products = service.products_for_component("cmp_zinc", limit=3)
+
+    assert [product["sku"] for product in products] == ["zinc"]
+
+    # Sin condición, el multivitamínico sigue disponible para zinc
+    unrestricted = ProductCatalogService(catalog_path=catalog_path).products_for_component("cmp_zinc", limit=3)
+    assert {product["sku"] for product in unrestricted} == {"zinc", "multi"}

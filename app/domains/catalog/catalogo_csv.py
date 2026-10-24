@@ -7,6 +7,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.domains.catalog.seguridad_productos import verified_restriction_flags
+
+
 @dataclass(frozen=True)
 class CatalogProduct:
     pharmacy: str
@@ -33,10 +36,22 @@ class CatalogProduct:
     commercial_confidence_score: float | None = None
     commercial_confidence_level: str | None = None
     commercial_confidence_reasons: str | None = None
+    # Composición oficial de la fila y flags verificados por el enriquecimiento
+    # (`contains_*`, `*_verified`, `label_status`), ver docs/catalog_quality_enrichment.md.
+    digemid_composicion: str | None = None
+    restriction_flags_verified: tuple[str, ...] = ()
+    label_status: str | None = None
+    label_verified_at: str | None = None
+    label_verification_source: str | None = None
 
     @property
     def product_key(self) -> str:
         return f"{self.pharmacy}|{self.sku or self.url}|{self.registro_sanitario}"
+
+    @property
+    def composition_key(self) -> tuple[str, str]:
+        """Identifica el producto comercial (farmacia + sku/url) sin importar el componente."""
+        return composition_key(self.pharmacy, self.sku, self.url)
 
     def to_response(self) -> dict[str, Any]:
         return {
@@ -64,7 +79,26 @@ class CatalogProduct:
             "commercial_confidence_score": self.commercial_confidence_score,
             "commercial_confidence_level": self.commercial_confidence_level,
             "commercial_confidence_reasons": self.commercial_confidence_reasons,
+            "digemid_composicion": self.digemid_composicion,
+            "restriction_flags_verified": list(self.restriction_flags_verified),
+            "label_status": self.label_status,
+            "label_verified_at": self.label_verified_at,
+            "label_verification_source": self.label_verification_source,
         }
+
+
+@dataclass(frozen=True)
+class ProductComposition:
+    """Composición completa de un producto comercial: unión de todas sus filas del CSV."""
+
+    ingredients: tuple[str, ...]
+    component_ids: tuple[str, ...]
+    digemid_composicion: str
+    restriction_flags_verified: tuple[str, ...]
+
+
+def composition_key(pharmacy: Any, sku: Any, url: Any) -> tuple[str, str]:
+    return ((_clean(pharmacy) or "").lower(), (_clean(sku) or _clean(url) or "").lower())
 
 
 def _clean(value: Any) -> str | None:
@@ -136,10 +170,61 @@ def _load_rows(path: Path) -> list[CatalogProduct]:
                     commercial_confidence_score=_float(row.get("commercial_confidence_score")),
                     commercial_confidence_level=_clean(row.get("commercial_confidence_level")),
                     commercial_confidence_reasons=_clean(row.get("commercial_confidence_reasons")),
+                    digemid_composicion=_clean(row.get("digemid_composicion")),
+                    restriction_flags_verified=tuple(verified_restriction_flags(row)),
+                    label_status=_clean(row.get("label_status")),
+                    label_verified_at=_clean(row.get("label_verified_at")),
+                    label_verification_source=_clean(row.get("label_verification_source")),
                 )
             )
 
     return products
+
+
+def _load_compositions(path: Path) -> dict[tuple[str, str], ProductComposition]:
+    """Agrupa TODAS las filas del CSV por producto comercial (farmacia + sku/url).
+
+    No aplica los filtros de precio/disponibilidad de `_load_rows`: la seguridad
+    debe ver la composición completa aunque alguna fila componente esté incompleta.
+    """
+    if not path.exists():
+        return {}
+
+    ingredients: dict[tuple[str, str], list[str]] = {}
+    component_ids: dict[tuple[str, str], list[str]] = {}
+    compositions: dict[tuple[str, str], list[str]] = {}
+    flags: dict[tuple[str, str], set[str]] = {}
+
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        for row in csv.DictReader(handle):
+            key = composition_key(row.get("pharmacy"), row.get("sku"), row.get("url"))
+            if not key[0] or not key[1]:
+                continue
+            ingredient = _clean(row.get("ingredient"))
+            component_id = _clean(row.get("component_id"))
+            composition = _clean(row.get("digemid_composicion"))
+            if ingredient and ingredient not in ingredients.setdefault(key, []):
+                ingredients[key].append(ingredient)
+            if component_id and component_id not in component_ids.setdefault(key, []):
+                component_ids[key].append(component_id)
+            if composition and composition not in compositions.setdefault(key, []):
+                compositions[key].append(composition)
+            flags.setdefault(key, set()).update(verified_restriction_flags(row))
+
+    return {
+        key: ProductComposition(
+            ingredients=tuple(ingredients.get(key, [])),
+            component_ids=tuple(component_ids.get(key, [])),
+            digemid_composicion=" ".join(compositions.get(key, [])),
+            restriction_flags_verified=tuple(sorted(flags.get(key, set()))),
+        )
+        for key in flags
+    }
+
+
+@lru_cache(maxsize=4)
+def _catalog_compositions(path_value: str) -> dict[tuple[str, str], ProductComposition]:
+    return _load_compositions(Path(path_value))
 
 
 @lru_cache(maxsize=4)

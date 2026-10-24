@@ -3,6 +3,15 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+import pytest
+
+from app.core.config import settings
+
+needs_model2 = pytest.mark.skipif(
+    not (Path(settings.MODEL_DIR) / "modelo2_artifacts.pkl").exists() or __import__("importlib.util").util.find_spec("torch") is None,
+    reason="modelo2_artifacts.pkl o torch no disponibles (artefacto no versionado)",
+)
+
 from scripts.catalog.parser_composicion import parse_composition
 from scripts.scraping.scraper_suplementos import (
     ProductRow,
@@ -39,12 +48,14 @@ def test_parser_handles_thousands_and_decimal_separators_for_creatine() -> None:
             "amount": 4000.0,
             "unit": "mg",
             "amount_mg": 4000.0,
+            "salt_form": None,
         },
         {
             "ingredient": "CREATINA MONOHIDRATO",
             "amount": 3250.0,
             "unit": "mg",
             "amount_mg": 3250.0,
+            "salt_form": None,
         },
     ]
 
@@ -54,6 +65,8 @@ def test_creatine_catalog_rows_do_not_map_to_vitamin_c() -> None:
         "data/training/supplement_model/product_components.csv",
         "data/catalog/approved_catalog.csv",
     ]:
+        if not (ROOT / relative_path).exists():
+            pytest.skip(f"{relative_path} no esta versionado; ver docs/plan_fiabilidad.md Fase 0")
         rows = _read_csv(ROOT / relative_path)
         creatine_rows = [
             row
@@ -76,6 +89,7 @@ def test_product_catalog_returns_creatine_products_under_creatine_component() ->
     assert any("CREATIN" in product["ingredient"].upper() for product in products)
 
 
+@needs_model2
 def test_model2_resolves_sports_creatine_to_creatine_component() -> None:
     result = recomendar_suplementos(
         ["RENDIMIENTO_DEPORTIVO"],

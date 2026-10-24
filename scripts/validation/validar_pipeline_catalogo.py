@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.catalog.filtros_categoria import categoria_no_suplemento  # noqa: E402
+from scripts.catalog.coincidencia_nombres import nombres_coinciden  # noqa: E402
+
 
 RAW_REQUIRED_COLUMNS = {
     "pharmacy",
@@ -91,6 +95,63 @@ def duplicate_count(rows: list[dict[str, str]]) -> int:
     return duplicates
 
 
+def validate_categories(rows: list[dict[str, str]], errors: list[str]) -> dict[str, Any]:
+    """Ningun cosmetico, topico o producto de higiene puede estar en el catalogo aprobado."""
+    flagged: dict[str, int] = {}
+    examples: list[str] = []
+    for row in rows:
+        reason = categoria_no_suplemento(row.get("commercial_name"), row.get("formal_name"), row.get("brand"))
+        if reason:
+            flagged[reason] = flagged.get(reason, 0) + 1
+            if len(examples) < 10:
+                examples.append(row.get("commercial_name") or "")
+    total = sum(flagged.values())
+    if total:
+        errors.append(f"approved_non_supplement_rows={total}")
+    return {"rows": total, "by_reason": flagged, "examples": examples}
+
+
+def validate_rs_fanout(rows: list[dict[str, str]], max_fanout: int, errors: list[str]) -> dict[str, Any]:
+    """Un RS asociado a demasiados nombres comerciales distintos indica matching por nombre erroneo."""
+    names_by_rs: dict[str, set[str]] = {}
+    for row in rows:
+        rs_key = (row.get("registro_sanitario_key") or row.get("registro_sanitario") or "").strip()
+        name = (row.get("commercial_name") or "").strip().lower()
+        if rs_key and name:
+            names_by_rs.setdefault(rs_key, set()).add(name)
+    over = {rs: len(names) for rs, names in names_by_rs.items() if len(names) > max_fanout}
+    if over:
+        worst = sorted(over.items(), key=lambda item: -item[1])[:10]
+        errors.append("approved_rs_fanout_over_max=" + ",".join(f"{rs}:{count}" for rs, count in worst))
+    return {"max_fanout": max_fanout, "rs_over_max": len(over), "worst": dict(sorted(over.items(), key=lambda item: -item[1])[:10])}
+
+
+def validate_name_overlap(rows: list[dict[str, str]], warnings: list[str]) -> dict[str, Any]:
+    """Advierte cuando el nombre comercial no comparte ningun token con el nombre DIGEMID asociado."""
+    mismatched = 0
+    checked = 0
+    examples: list[str] = []
+    for row in rows:
+        digemid_name = row.get("digemid_producto") or ""
+        if not digemid_name:
+            continue
+        checked += 1
+        if not nombres_coinciden(row.get("commercial_name"), digemid_name):
+            mismatched += 1
+            if len(examples) < 10:
+                examples.append(f"{row.get('commercial_name')} -> {digemid_name}")
+    if mismatched:
+        warnings.append(f"approved_name_without_digemid_overlap={mismatched}")
+    return {"checked": checked, "mismatched": mismatched, "ratio": pct(mismatched, checked), "examples": examples}
+
+
+def validate_rs_source_column(columns: list[str], warnings: list[str]) -> bool:
+    if "registro_sanitario_source" not in columns:
+        warnings.append("approved_missing_registro_sanitario_source_column")
+        return False
+    return True
+
+
 def validate_columns(columns: list[str], required: set[str], label: str, errors: list[str]) -> None:
     missing = sorted(required - set(columns))
     if missing:
@@ -152,6 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-invalid-price-ratio", type=float, default=0.01)
     parser.add_argument("--max-raw-age-hours", type=int, default=48)
     parser.add_argument("--require-pharmacy", action="append", default=[])
+    parser.add_argument("--max-rs-fanout", type=int, default=5)
     return parser
 
 
@@ -199,6 +261,11 @@ def main() -> int:
     if duplicate_rows:
         warnings.append(f"approved_duplicate_keys={duplicate_rows}")
 
+    categories_report = validate_categories(approved_rows, errors)
+    fanout_report = validate_rs_fanout(approved_rows, args.max_rs_fanout, errors)
+    name_overlap_report = validate_name_overlap(approved_rows, warnings)
+    validate_rs_source_column(approved_columns, warnings)
+
     report = {
         "mode": args.mode,
         "status": "failed" if errors else "passed",
@@ -229,6 +296,9 @@ def main() -> int:
                 max_invalid_ratio=args.max_invalid_price_ratio,
             ),
             "availability": validate_availability(approved_rows, errors),
+            "categories": categories_report,
+            "rs_fanout": fanout_report,
+            "name_overlap": name_overlap_report,
         },
         "rejects": {
             "path": str(args.rejects) if args.rejects else None,
