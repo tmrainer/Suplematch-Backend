@@ -276,3 +276,11 @@ Los 4 que fallaban, uno por uno:
 
 El validador ahora limpia el feedback después de cada escenario: dos escenarios con el mismo pack se contaminaban la
 línea base. Aparte: el manifiesto decía `--rows 2500` para el Modelo 1, pero el modelo servido usaba 10 000 filas.
+
+### Precisión real con exámenes de usuarios (2026-10-24)
+
+`scripts/validation/precision_real.py` mide, por condición, la precisión y la sensibilidad de lo que la encuesta
+estima (sin exámenes) contra el examen de la misma persona, para el sistema servido, solo reglas + NHANES y solo
+NHANES (`docs/precision_real.md`). Hoy la base no tiene pares reales: el reporte sale vacío hasta que haya usuarios
+con exámenes. `build_pipeline_input` (servicio de recomendaciones) es ahora el único camino que arma la entrada del
+pipeline, compartido por `/recommend` y la medición.
