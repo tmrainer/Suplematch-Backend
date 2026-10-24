@@ -144,6 +144,6 @@ y el producto vuelve a servirse (con `rs_review_status="pending"`) hasta la nuev
 
 - `tests/unit/test_catalog_rs_review.py`: selección pura, determinismo y estabilidad de la
   muestra, contexto de `match_reason`, cobertura del 100% de inferidos sobre el CSV real.
-- `tests/integration/test_catalog_rs_review.py` (requiere Postgres): upsert sin pisar
+- `tests/integration/test_catalog_rs_review_api.py` (requiere Postgres): upsert sin pisar
   decisiones, ocultamiento de rechazados en `products_for_component`/`search_products`,
   independencia entre RS antiguo y nuevo, resumen, exportación CSV con filtros.
