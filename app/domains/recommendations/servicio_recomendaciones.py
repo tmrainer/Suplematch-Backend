@@ -1158,6 +1158,32 @@ def _attach_products_to_packs(
     return packs
 
 
+def build_pipeline_input(
+    feature_builder: FeatureBuilder,
+    encuesta: EncuestaInput,
+    lab_analysis: dict[str, Any] | None,
+    lab_risk_estimates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Entrada del pipeline (Modelos 1 y 2) para una encuesta. Tambien la usa la medicion de precision real
+    (app/ml/evaluation/pares_reales.py), para que prediga exactamente lo mismo que se sirve."""
+    payload = feature_builder.build_pipeline_payload(encuesta)
+    # Pass lab results to Model 1 MVP so observed_lab signals activate
+    if lab_analysis:
+        for bm in lab_analysis.get("biomarkers") or []:
+            payload[f"lab_{bm['code']}_status"] = bm.get("status", "missing")
+    # Pass security context so Model 2 interaction rules evaluate correctly
+    payload["condiciones_seguridad"] = [
+        *list(getattr(encuesta, "condiciones_seguridad", []) or []),
+        *_derived_safety_context(encuesta),
+    ]
+    payload["condiciones_seguridad_derivadas"] = _derived_safety_context(encuesta)
+    payload["restricciones"] = list(getattr(encuesta, "restricciones", []) or [])
+    payload["_second_opinion"] = second_opinion_from_lab_risks(lab_risk_estimates)
+    payload["restricciones_alergias"] = list(getattr(encuesta, "restricciones", []) or [])
+    payload["suplementos_actuales"] = list(getattr(encuesta, "suplementos_actuales", []) or [])
+    return payload
+
+
 class RecommendationService:
     def __init__(self, models: dict, db: Session | None = None):
         self.models = models
@@ -1172,24 +1198,10 @@ class RecommendationService:
             raise ModelNotLoadedError()
 
         try:
-            payload = self.feature_builder.build_pipeline_payload(encuesta)
-            # Pass lab results to Model 1 MVP so observed_lab signals activate
             lab_analysis = _lab_analysis_for_survey(encuesta)
-            if lab_analysis:
-                for bm in lab_analysis.get("biomarkers") or []:
-                    payload[f"lab_{bm['code']}_status"] = bm.get("status", "missing")
-            # Pass security context so Model 2 interaction rules evaluate correctly
-            payload["condiciones_seguridad"] = [
-                *list(getattr(encuesta, "condiciones_seguridad", []) or []),
-                *_derived_safety_context(encuesta),
-            ]
-            payload["condiciones_seguridad_derivadas"] = _derived_safety_context(encuesta)
-            payload["restricciones"] = list(getattr(encuesta, "restricciones", []) or [])
             # Modelo real (NHANES): se calcula una vez; desempata condiciones limitrofes y se devuelve al cliente.
             lab_risk_estimates = predict_lab_risks(encuesta)
-            payload["_second_opinion"] = second_opinion_from_lab_risks(lab_risk_estimates)
-            payload["restricciones_alergias"] = list(getattr(encuesta, "restricciones", []) or [])
-            payload["suplementos_actuales"] = list(getattr(encuesta, "suplementos_actuales", []) or [])
+            payload = build_pipeline_input(self.feature_builder, encuesta, lab_analysis, lab_risk_estimates)
             resultado = pipeline(payload, verbose=False)
             resultado = _to_builtin(resultado)
         except (FileNotFoundError, ModuleNotFoundError, ImportError, OSError) as exc:
