@@ -2,12 +2,27 @@ import csv
 import sys
 from pathlib import Path
 
+import pytest
+
+from app.core.config import settings
+
 
 ROOT = Path(__file__).resolve().parents[2]
 KNOWLEDGE = ROOT / "data" / "knowledge"
 EVALUATION = ROOT / "data" / "evaluation" / "condition_model"
 REAL_CASES = ROOT / "data" / "evaluation" / "condition_model" / "real_cases"
 sys.path.insert(0, str(ROOT / "scripts" / "training"))
+
+# Los artefactos de evaluacion/reportes y el .pkl no se versionan (ver .gitignore y docs/plan_fiabilidad.md).
+# En un checkout limpio estos tests se omiten en lugar de fallar; en la maquina de entrenamiento se ejecutan.
+needs_training_artifacts = pytest.mark.skipif(
+    not (EVALUATION.exists() and (ROOT / "data" / "reports" / "condition_model").exists()),
+    reason="faltan data/evaluation y data/reports (no versionados)",
+)
+needs_condition_model = pytest.mark.skipif(
+    not (Path(settings.MODEL_DIR) / "condition_mvp_model.pkl").exists(),
+    reason="condition_mvp_model.pkl no esta en MODEL_DIR (no versionado)",
+)
 
 
 def _read_csv(name: str):
@@ -129,6 +144,7 @@ def test_component_guidance_interactions_and_claims_have_sources() -> None:
         assert set(_split(row["source_ids"])).issubset(sources)
 
 
+@needs_training_artifacts
 def test_condition_rules_use_declared_model_features():
     feature_contract = ROOT / "data" / "training" / "condition_model" / "condition_feature_contract.csv"
     assert feature_contract.exists()
@@ -140,6 +156,7 @@ def test_condition_rules_use_declared_model_features():
         assert rule["field"] in features
 
 
+@needs_training_artifacts
 def test_condition_golden_cases_cover_all_labels_and_use_valid_expectations():
     labels = {condition["condition_code"] for condition in _read_csv("conditions.csv")}
     cases_path = EVALUATION / "golden_cases.csv"
@@ -168,6 +185,7 @@ def test_condition_golden_cases_cover_all_labels_and_use_valid_expectations():
     assert {"SAFETY_RENAL", "SAFETY_HEPATICA", "SAFETY_TIROIDEA"}.issubset(expected_negative)
 
 
+@needs_training_artifacts
 def test_condition_holdout_report_contains_at_least_1000_cases():
     summary_path = ROOT / "data" / "reports" / "condition_model" / "06_holdout_1000_summary.csv"
     condition_path = ROOT / "data" / "reports" / "condition_model" / "06_holdout_1000_condition_metrics.csv"
@@ -189,6 +207,7 @@ def test_condition_holdout_report_contains_at_least_1000_cases():
     assert condition_metrics == labels
 
 
+@needs_training_artifacts
 def test_real_case_demo_outputs_are_anonymized():
     anonymized_path = REAL_CASES / "demo_real_cases_anonymized.csv"
     predictions_path = ROOT / "data" / "reports" / "condition_model" / "07_demo_real_cases_predictions.csv"
@@ -213,6 +232,7 @@ def test_real_case_demo_outputs_are_anonymized():
     assert int(summary["rejected_cases"]) == 0
 
 
+@needs_training_artifacts
 def test_nhanes_public_cases_are_anonymized_and_predicted():
     cases_path = REAL_CASES / "nhanes_2017_2018_condition_cases.csv"
     predictions_path = ROOT / "data" / "reports" / "condition_model" / "08_nhanes_2017_2018_predictions.csv"
@@ -258,6 +278,7 @@ def test_nhanes_public_cases_are_anonymized_and_predicted():
     assert all(row["status"] in {"cached", "downloaded"} for row in source_rows)
 
 
+@needs_training_artifacts
 def test_nhanes_benchmark_has_rule_derived_labels_and_metrics():
     labels_path = ROOT / "data" / "evaluation" / "condition_model" / "nhanes_2017_2018_benchmark_labels.csv"
     details_path = ROOT / "data" / "reports" / "condition_model" / "09_nhanes_2017_2018_benchmark_details.csv"
@@ -295,6 +316,7 @@ def test_nhanes_benchmark_has_rule_derived_labels_and_metrics():
     assert metrics["DEFICIT_B12"]["evaluated_cases"] == "0"
 
 
+@needs_training_artifacts
 def test_nhanes_multi_cycle_benchmark_expands_coverage_and_calibration():
     cases_path = REAL_CASES / "nhanes_multi_cycle_condition_cases.csv"
     predictions_path = ROOT / "data" / "reports" / "condition_model" / "08_nhanes_multi_cycle_predictions.csv"
@@ -364,10 +386,14 @@ def test_nhanes_multi_cycle_benchmark_expands_coverage_and_calibration():
     import joblib
 
     model = joblib.load(ROOT / "models" / "runtime" / "condition_mvp_model.pkl")
-    assert model["thresholds"]["DEFICIT_FOLATO"] == 0.27
+    # El umbral concreto depende del reentrenamiento (validacion interna) y de la calibracion NHANES aplicada;
+    # se verifica que sea un umbral de decision valido y que la calibracion quedo registrada en el artefacto.
+    assert 0.05 <= model["thresholds"]["DEFICIT_FOLATO"] <= 0.80
     assert "threshold_calibration" in model
+    assert model.get("threshold_selection") == "internal_validation_split"
 
 
+@needs_training_artifacts
 def test_nhanes_multi_cycle_evidence_and_executive_reports_exist():
     evidence_path = ROOT / "data" / "reports" / "condition_model" / "09_nhanes_multi_cycle_benchmark_evidence_group_metrics.csv"
     executive_path = ROOT / "data" / "reports" / "condition_model" / "09_nhanes_multi_cycle_benchmark_executive_report.csv"
@@ -401,6 +427,7 @@ def test_real_case_pii_column_detection_blocks_direct_identifiers():
     ]
 
 
+@needs_training_artifacts
 def test_condition_mvp_training_report_exists_after_pipeline_run():
     report = ROOT / "data" / "reports" / "condition_model" / "04_training_metrics.csv"
     assert report.exists()
@@ -413,6 +440,7 @@ def test_condition_mvp_training_report_exists_after_pipeline_run():
     assert (ROOT / "data" / "reports" / "condition_model" / "04_training_metrics_by_label.csv").exists()
 
 
+@needs_condition_model
 def test_condition_mvp_runtime_predicts_probabilities():
     from app.ml.runtime.condition_mvp_inference import predict_condition_probabilities
 
@@ -447,6 +475,7 @@ def test_condition_mvp_runtime_predicts_probabilities():
     assert b12["signal_strength"] == "alta"
 
 
+@needs_condition_model
 def test_condition_mvp_runtime_separates_soft_survey_signals():
     from app.ml.runtime.condition_mvp_inference import predict_condition_probabilities
 
@@ -469,6 +498,7 @@ def test_condition_mvp_runtime_separates_soft_survey_signals():
     assert stress["evidence_level"] == "self_reported_symptoms"
 
 
+@needs_condition_model
 def test_condition_mvp_runtime_adds_contextual_wellness_probabilities():
     from app.ml.runtime.condition_mvp_inference import predict_condition_probabilities
 
@@ -496,12 +526,6 @@ def test_condition_mvp_runtime_adds_contextual_wellness_probabilities():
         }
     )
 
-    contextual = {
-        item["condition"]: item
-        for item in result
-        if item.get("runtime_contextual")
-    }
-
     expected = {
         "SALUD_VISUAL",
         "SALUD_DIGESTIVA",
@@ -510,12 +534,17 @@ def test_condition_mvp_runtime_adds_contextual_wellness_probabilities():
         "SALUD_CARDIOVASCULAR_CONTEXTUAL",
         "SALUD_COGNITIVA",
     }
-    assert expected.issubset(contextual)
-    assert all(contextual[condition]["positive"] for condition in expected)
-    assert all(contextual[condition]["model_probability"] == 0.0 for condition in expected)
-    assert all(contextual[condition]["calibrated_by_rules"] is True for condition in expected)
+    by_condition: dict[str, list[dict]] = {}
+    for item in result:
+        by_condition.setdefault(item["condition"], []).append(item)
+    # Una sola fila por condicion: antes la regla de contexto agregaba un duplicado de lo que ya predice el modelo
+    # y el indice mostrado era el de la ultima fila (positivos con indice 0.00).
+    assert all(len(items) == 1 for items in by_condition.values()), {k: len(v) for k, v in by_condition.items() if len(v) > 1}
+    assert expected.issubset(by_condition)
+    assert all(by_condition[condition][0]["positive"] for condition in expected)
 
 
+@needs_condition_model
 def test_condition_mvp_runtime_detects_safety_lab_signals():
     from app.ml.runtime.condition_mvp_inference import predict_condition_probabilities
 

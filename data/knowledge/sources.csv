@@ -40,3 +40,13 @@ version,source_id,title,organization,url,used_for
 2026-06-18.2,nccih_turmeric,Turmeric,NIH National Center for Complementary and Integrative Health,https://www.nccih.nih.gov/health/turmeric,inflammation_context|safety_context
 2026-06-18.2,nccih_coq10,Coenzyme Q10,NIH National Center for Complementary and Integrative Health,https://www.nccih.nih.gov/health/coenzyme-q10,lipid_context|energy_context|interaction_context
 2026-06-18.3,nih_ods_exercise_performance_hp,Dietary Supplements for Exercise and Athletic Performance - Health Professional Fact Sheet,NIH Office of Dietary Supplements,https://ods.od.nih.gov/factsheets/ExerciseAndAthleticPerformance-HealthProfessional/,creatine|performance_context|safety_context
+2026-10-22.1,who_haemoglobin_cutoffs_2024,Guideline on haemoglobin cutoffs to define anaemia in individuals and populations (2024),World Health Organization,https://iris.who.int/server/api/core/bitstreams/f9f74397-1440-478d-a63c-26f29a01552f/content,"Cortes de hemoglobina por sexo, edad y embarazo (Tablas 2 y 3)"
+2026-10-22.1,who_ferritin_2020,WHO guideline on use of ferritin concentrations to assess iron status in individuals and populations (2020),World Health Organization,https://www.who.int/publications/i/item/9789240000124,Corte de ferritina para deficiencia de hierro
+2026-10-22.1,medlineplus_hematocrit_test,Hematocrit Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/hematocrit-test/,Rango de hematocrito
+2026-10-22.1,medlineplus_iron_tests,Iron Tests,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/iron-tests/,Hierro serico y ferritina
+2026-10-22.1,medlineplus_potassium_test,Potassium Blood Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/potassium-blood-test/,Rango de potasio
+2026-10-22.1,medlineplus_hba1c_test,Hemoglobin A1C (HbA1c) Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/hemoglobin-a1c-hba1c-test/,Cortes de HbA1c
+2026-10-22.1,medlineplus_uric_acid_test,Uric Acid Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/uric-acid-test/,Rango de acido urico
+2026-10-22.1,medlineplus_crp_test,C-Reactive Protein (CRP) Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/c-reactive-protein-crp-test/,Rango de PCR
+2026-10-22.1,medlineplus_magnesium_test,Magnesium Blood Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/magnesium-blood-test/,Rango de magnesio
+2026-10-22.1,medlineplus_calcium_test,Calcium Blood Test,MedlinePlus / NIH,https://medlineplus.gov/lab-tests/calcium-blood-test/,Rango de calcio

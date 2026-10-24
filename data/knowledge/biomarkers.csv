@@ -1,19 +1,34 @@
-version,biomarker_code,display_name,unit,low,borderline,critical_low,high,critical_high,condition_code,safety_condition,source_ids
-2026-06-16.2,vitamin_d,Vitamina D 25-OH,ng/mL,20,30,12,,,DEFICIT_VIT_D,,nih_ods_vitamin_d_hp
-2026-06-16.2,b12,Vitamina B12,pg/mL,200,300,150,,,DEFICIT_B12,,nih_ods_vitamin_b12_hp
-2026-06-16.2,ferritin,Ferritina,ng/mL,30,,10,,,DEFICIT_HIERRO,,nih_ods_iron_hp
-2026-06-16.2,hemoglobin,Hemoglobina,g/dL,12,,8,,,DEFICIT_HIERRO,,nih_ods_iron_hp
-2026-06-16.2,magnesium,Magnesio,mg/dL,1.7,,1.2,,,DEFICIT_MAGNESIO,,nih_ods_magnesium_consumer
-2026-06-16.2,zinc,Zinc,ug/dL,70,,50,,,BAJA_INMUNIDAD,,nih_ods_zinc_hp|nih_ods_immune_function
-2026-06-16.2,calcium,Calcio serico,mg/dL,8.6,,7.5,,,RIESGO_SALUD_OSEA,,nih_ods_calcium_hp
-2026-06-16.2,creatinine,Creatinina,mg/dL,,,,1.3,2.0,,enfermedad_renal,nih_medlineplus_supplements|fda_dietary_supplements
-2026-06-16.2,alt,ALT/TGP,U/L,,,,40,200,,enfermedad_hepatica,nih_medlineplus_supplements|fda_dietary_supplements
-2026-06-16.2,folate,Folato,ng/mL,3,,2,,,DEFICIT_FOLATO,,nih_ods_folate_hp
-2026-06-16.2,glucose,Glucosa,mg/dL,,,,100,250,RIESGO_METABOLICO_GLUCOSA,,medlineplus_glucose_test
-2026-06-16.2,tsh,TSH,mUI/L,0.4,,0.1,4,10,,disfuncion_tiroidea,medlineplus_thyroid_tests
-2026-06-16.2,total_cholesterol,Colesterol total,mg/dL,,,,200,300,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
-2026-06-16.2,ldl,Colesterol LDL,mg/dL,,,,130,190,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
-2026-06-16.2,hdl,Colesterol HDL,mg/dL,40,,30,,,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
-2026-06-16.2,triglycerides,Trigliceridos,mg/dL,,,,150,500,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests
-2026-06-16.2,ast,AST/TGO,U/L,,,,40,200,,enfermedad_hepatica,medlineplus_liver_tests|fda_dietary_supplements
-2026-06-16.2,egfr,TFG/eGFR,mL/min/1.73m2,90,,60,,,,enfermedad_renal,medlineplus_creatinine_test|fda_dietary_supplements
+version,biomarker_code,display_name,unit,low,borderline,critical_low,high,critical_high,condition_code,safety_condition,source_ids,sex,pregnant,age_min,age_max,alt_units,supplement_name,supplement_component_id,medical_condition,note
+2026-10-22.1,vitamin_d,Vitamina D 25-OH,ng/mL,20,30,12,50,150,DEFICIT_VIT_D,,nih_ods_vitamin_d_hp,any,any,,,nmol/L:0.4,Vitamina D,COMP_94DFE28A9A5C,,FNB/NIH ODS: <12 ng/mL (30 nmol/L) deficiencia; 12-<20 inadecuado; >=20 (50 nmol/L) adecuado; >50 (125 nmol/L) potencialmente adverso. 1 ng/mL = 2.5 nmol/L.
+2026-10-22.1,b12,Vitamina B12,pg/mL,200,300,150,900,,DEFICIT_B12,,nih_ods_vitamin_b12_hp,any,any,,,pmol/L:1.355,Vitamina B12,,,1 pmol/L = 1.355 pg/mL.
+2026-10-22.1,ferritin,Ferritina,ng/mL,30,,10,300,,DEFICIT_HIERRO,,nih_ods_iron_hp|who_ferritin_2020,any,any,,,ug/L:1|pmol/L:0.445,Hierro,,,OMS 2020: <15 ug/L = deficiencia de hierro (status low junto con <30 reservas depletas segun NIH ODS); <10 se marca critico y requiere revision profesional. ug/L = ng/mL.
+2026-10-22.1,hemoglobin,Hemoglobina,g/dL,12.0,,8.0,17.5,20,DEFICIT_HIERRO,,nih_ods_iron_hp|who_haemoglobin_cutoffs_2024,any,any,,,g/L:0.1|mmol/L:1.611,,,possible_anemia_pattern,Fila por defecto (mujer no embarazada >=15 a). OMS 2024 Tabla 2-3: <120 g/L anemia; <80 severa.
+2026-10-22.1,hemoglobin,Hemoglobina,g/dL,12.0,,8.0,16.5,20,DEFICIT_HIERRO,,who_haemoglobin_cutoffs_2024,female,no,15,,g/L:0.1|mmol/L:1.611,,,possible_anemia_pattern,OMS 2024: mujeres no embarazadas 15-65 a: <120 g/L anemia; leve 110-119; moderada 80-109; severa <80.
+2026-10-22.1,hemoglobin,Hemoglobina,g/dL,13.0,,8.0,17.5,20,DEFICIT_HIERRO,,who_haemoglobin_cutoffs_2024,male,any,15,,g/L:0.1|mmol/L:1.611,,,possible_anemia_pattern,OMS 2024: hombres 15-65 a: <130 g/L anemia; leve 110-129; moderada 80-109; severa <80.
+2026-10-22.1,hemoglobin,Hemoglobina,g/dL,11.0,,7.0,16.5,20,DEFICIT_HIERRO,,who_haemoglobin_cutoffs_2024,female,yes,,,g/L:0.1|mmol/L:1.611,,,possible_anemia_pattern,OMS 2024: embarazo 1er/3er trimestre <110 g/L (2do trimestre <105); severa <70. Sin dato de trimestre se usa 110.
+2026-10-22.1,hemoglobin,Hemoglobina,g/dL,12.0,,8.0,16.5,20,DEFICIT_HIERRO,,who_haemoglobin_cutoffs_2024,any,any,12,14,g/L:0.1|mmol/L:1.611,,,possible_anemia_pattern,OMS 2024: 12-14 a: <120 g/L.
+2026-10-22.1,hemoglobin,Hemoglobina,g/dL,11.5,,8.0,16.0,20,DEFICIT_HIERRO,,who_haemoglobin_cutoffs_2024,any,any,5,11,g/L:0.1|mmol/L:1.611,,,possible_anemia_pattern,OMS 2024: 5-11 a: <115 g/L.
+2026-10-22.1,hemoglobin,Hemoglobina,g/dL,11.0,,7.0,15.5,20,DEFICIT_HIERRO,,who_haemoglobin_cutoffs_2024,any,any,2,4,g/L:0.1|mmol/L:1.611,,,possible_anemia_pattern,OMS 2024: 24-59 meses: <110 g/L; severa <70.
+2026-10-22.1,hematocrit,Hematocrito,%,36,,25,52,60,,,medlineplus_hematocrit_test,any,any,,,L/L:100,,,possible_anemia_pattern,Rango adulto general; varia por sexo (MedlinePlus).
+2026-10-22.1,iron,Hierro serico,ug/dL,60,,30,170,,DEFICIT_HIERRO,,medlineplus_iron_tests|nih_ods_iron_hp,any,any,,,umol/L:5.585,Hierro,,,1 umol/L = 5.585 ug/dL.
+2026-10-22.1,folate,Folato,ng/mL,3,,2,20,,DEFICIT_FOLATO,,nih_ods_folate_hp,any,any,,,nmol/L:0.4413,Acido Folico,,,NIH ODS: <3 ng/mL (7 nmol/L) deficiencia. 1 ng/mL = 2.266 nmol/L.
+2026-10-22.1,calcium,Calcio serico,mg/dL,8.6,,7.5,10.2,12,RIESGO_SALUD_OSEA,,nih_ods_calcium_hp|medlineplus_calcium_test,any,any,,,mmol/L:4.008,Calcio,,,1 mmol/L = 4.008 mg/dL. Calcio ionico tiene otro rango y no se mapea aqui.
+2026-10-22.1,magnesium,Magnesio,mg/dL,1.7,,1.2,2.4,3.0,DEFICIT_MAGNESIO,,nih_ods_magnesium_consumer|medlineplus_magnesium_test,any,any,,,mmol/L:2.431|mEq/L:1.2155,Magnesio,,,1 mmol/L = 2.431 mg/dL.
+2026-10-22.1,potassium,Potasio,mmol/L,3.5,,2.8,5.1,6.0,,enfermedad_renal,nih_ods_potassium_hp|medlineplus_potassium_test,any,any,,,mEq/L:1,,,,mEq/L = mmol/L para potasio.
+2026-10-22.1,zinc,Zinc,ug/dL,70,,50,120,180,BAJA_INMUNIDAD,,nih_ods_zinc_hp|nih_ods_immune_function,any,any,,,umol/L:6.538,Zinc,,,1 umol/L = 6.538 ug/dL.
+2026-10-22.1,creatinine,Creatinina,mg/dL,,,,1.3,2.0,,enfermedad_renal,medlineplus_creatinine_test|fda_dietary_supplements,any,any,,,umol/L:0.01131,,,,1 umol/L = 0.01131 mg/dL.
+2026-10-22.1,egfr,TFG/eGFR,mL/min/1.73m2,90,,60,,,,enfermedad_renal,medlineplus_creatinine_test|fda_dietary_supplements,any,any,,,,,,,
+2026-10-22.1,alt,ALT/TGP,U/L,,,,40,200,,enfermedad_hepatica,medlineplus_liver_tests|fda_dietary_supplements,any,any,,,IU/L:1,,,,
+2026-10-22.1,ast,AST/TGO,U/L,,,,40,200,,enfermedad_hepatica,medlineplus_liver_tests|fda_dietary_supplements,any,any,,,IU/L:1,,,,
+2026-10-22.1,glucose,Glucosa,mg/dL,70,,50,100,250,RIESGO_METABOLICO_GLUCOSA,,medlineplus_glucose_test,any,any,,,mmol/L:18.016,,,,1 mmol/L = 18.016 mg/dL.
+2026-10-22.1,hba1c,Hemoglobina glicosilada HbA1c,%,4.0,,,5.7,6.5,RIESGO_METABOLICO_GLUCOSA,,medlineplus_hba1c_test,any,any,,,,,,glycemic_risk_pattern,mmol/mol (IFCC) no es conversion lineal; no se convierte automaticamente.
+2026-10-22.1,tsh,TSH,mUI/L,0.4,,0.1,4.0,10,,problema_tiroideo,medlineplus_thyroid_tests,any,any,,,uIU/mL:1|mIU/L:1,,,,uIU/mL = mUI/L.
+2026-10-22.1,t4,T4 total Tiroxina,ug/dL,5.1,,2.0,14.1,25,,problema_tiroideo,medlineplus_thyroid_tests,any,any,,,nmol/L:0.0777,,,,1 nmol/L = 0.0777 ug/dL.
+2026-10-22.1,free_t4,T4 libre,ng/dL,0.87,,0.4,1.70,4.0,,problema_tiroideo,medlineplus_thyroid_tests,any,any,,,pmol/L:0.0777,,,,1 pmol/L = 0.0777 ng/dL.
+2026-10-22.1,t3,T3 total Triyodotironina,ng/mL,0.8,,0.3,2.0,5.0,,problema_tiroideo,medlineplus_thyroid_tests,any,any,,,nmol/L:0.651|ng/dL:0.01,,,,1 nmol/L = 0.651 ng/mL.
+2026-10-22.1,total_cholesterol,Colesterol total,mg/dL,,,,200,240,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests,any,any,,,mmol/L:38.67,,,,MedlinePlus: 200-239 limite alto; >=240 alto. 1 mmol/L = 38.67 mg/dL.
+2026-10-22.1,ldl,Colesterol LDL,mg/dL,,,,130,190,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests,any,any,,,mmol/L:38.67,,,,
+2026-10-22.1,hdl,Colesterol HDL,mg/dL,40,,30,,,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests,any,any,,,mmol/L:38.67,,,,
+2026-10-22.1,triglycerides,Trigliceridos,mg/dL,,,,150,500,RIESGO_DISLIPIDEMIA,,medlineplus_cholesterol_tests,any,any,,,mmol/L:88.57,,,,1 mmol/L = 88.57 mg/dL.
+2026-10-22.1,uric_acid,Acido urico,mg/dL,,,,7.0,9.0,,,medlineplus_uric_acid_test,any,any,,,umol/L:0.01681,,,,1 umol/L = 0.01681 mg/dL.
+2026-10-22.1,crp,Proteina C reactiva,mg/L,,,,3.0,10.0,,,medlineplus_crp_test,any,any,,,mg/dL:10,,,,

@@ -1,0 +1,143 @@
+gnn_component_id,gnn_canonical_name,component_id,canonical_name_es,match_rule,matched_alias
+COMP_617A5FCFE130,calcium citrate,COMP_275450118D60,Calcio,salt_form,calcium
+COMP_DF53BB0FF023,calcium phosphate,COMP_275450118D60,Calcio,salt_form,calcium
+COMP_CF0FF41CA2C6,L-Carnitine,COMP_0987F386BB65,Carnitina,exact,l carnitine
+COMP_401293949CEC,Carnitine &mdash; Health Professional Fact Sheet (ODS),COMP_0987F386BB65,Carnitina,source_page,carnitine
+COMP_D83A406217A4,Carnitine (ClinicalTrials.gov),COMP_0987F386BB65,Carnitina,source_page,carnitine
+COMP_E388F25D01B8,Cobre,COMP_9C5C72058DB1,Cobre,exact,cobre
+COMP_562B8FADBFA2,copper citrate,COMP_9C5C72058DB1,Cobre,salt_form,copper
+COMP_39295A952CC9,copper sulfate,COMP_9C5C72058DB1,Cobre,salt_form,copper
+COMP_26A913E0682B,Coenzyme Q10 (PDQ&reg;) - Information for Health Professionals (NCI),COMP_8BB25B9A3BE5,Coenzima Q10,qualified,coenzyme q10
+COMP_C329DDB8EFC4,Coenzyme Q10 (PDQ&reg;) - Patient Information (NCI),COMP_8BB25B9A3BE5,Coenzima Q10,qualified,coenzyme q10
+COMP_DB0ADC409216,Coenzyme Q10 (ClinicalTrials.gov),COMP_8BB25B9A3BE5,Coenzima Q10,source_page,coenzyme q10
+COMP_A9EF90B73700,collagen,COMP_2671E7AB4CBB,Colágeno,exact,collagen
+COMP_252C51860327,Chromium,COMP_3F24EA59D864,Cromo,exact,chromium
+COMP_08E1F0BC18AB,iron glycinate,COMP_B6A8F8958154,Hierro,salt_form,iron
+COMP_BF9CE150E7A0,magnesium chloride,COMP_83336712C554,Magnesio,salt_form,magnesium
+COMP_EF944BAE2602,magnesium hydroxide,COMP_83336712C554,Magnesio,salt_form,magnesium
+COMP_D16D281DE414,magnesium oxide,COMP_83336712C554,Magnesio,salt_form,magnesium
+COMP_B34430AC434D,magnesium phosphate,COMP_83336712C554,Magnesio,salt_form,magnesium
+COMP_7D7AC50FCACD,magnesium sulfate,COMP_83336712C554,Magnesio,salt_form,magnesium
+COMP_0D7733C816EE,manganese chloride,COMP_5FCBE278ABF3,Manganeso,salt_form,manganese
+COMP_4500B5DBAFB3,manganese sulfate,COMP_5FCBE278ABF3,Manganeso,salt_form,manganese
+COMP_F9E1B8CF7D0E,Omega-3,COMP_447F5E523CED,Omega 3,exact,omega 3
+COMP_C34D1F3079C8,Omega-3 Fatty Acids,COMP_447F5E523CED,Omega 3,exact,omega 3 fatty acids
+COMP_18A7C64368AE,Omega-3 Fatty Acids (ODS),COMP_447F5E523CED,Omega 3,source_page,omega 3 fatty acids
+COMP_87830EC94B25,potassium bicarbonate,COMP_BB2F708BF799,Potasio,salt_form,potassium
+COMP_232DFD13C010,potassium citrate,COMP_BB2F708BF799,Potasio,salt_form,potassium
+COMP_2AC11FDDB0D2,potassium hydroxide,COMP_BB2F708BF799,Potasio,salt_form,potassium
+COMP_D022F9B54612,potassium phosphate,COMP_BB2F708BF799,Potasio,salt_form,potassium
+COMP_5030A6666E7D,Probiotics,COMP_C5CD8E1D6AAE,Probióticos,exact,probiotics
+COMP_F6050F70F676,Probióticos,COMP_C5CD8E1D6AAE,Probióticos,exact,probioticos
+COMP_4B30AB95B997,pea protein,COMP_927AAC8EA873,Proteína,exact,pea protein
+COMP_3DABB0A3B655,soy protein isolate,COMP_927AAC8EA873,Proteína,exact,soy protein isolate
+COMP_00D26860E3FF,Riboflavina,COMP_586F3B3DE0F3,Riboflavina,exact,riboflavina
+COMP_07BB03DA4024,Vitamin B2 (riboflavin 5-phosphate),COMP_586F3B3DE0F3,Riboflavina,qualified,vitamin b2
+COMP_E14EDE2992EB,riboflavin phosphate,COMP_586F3B3DE0F3,Riboflavina,salt_form,riboflavin
+COMP_1AF63F39E5BA,sodium bicarbonate,COMP_AFF3B61AB344,Sodio,salt_form,sodium
+COMP_03E04C5A6A98,sodium carbonate,COMP_AFF3B61AB344,Sodio,salt_form,sodium
+COMP_09C95935BD2C,sodium citrate,COMP_AFF3B61AB344,Sodio,salt_form,sodium
+COMP_28688F7ED192,Taurine (ClinicalTrials.gov),COMP_0D2B15E9F9EE,Taurina,source_page,taurine
+COMP_713DC9DF42D4,Thiamin,COMP_4F4F134A6B55,Tiamina,exact,thiamin
+COMP_DEBBE1E3B0FB,Vitamin A (mixed),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_031F00EF9AEC,Vitamin A (not specified),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_67B33F73A3D5,Vitamin A (retinol acetate),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_42698C2988A1,Vitamin A (retinol),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_13A2EFC692F1,Vitamin A (retinyl acetate),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_3B4431445D0B,Vitamin A (retinyl not specified),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_29CF8BB2A0B0,Vitamin A (retinyl palmitate),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_8526A3C1B5CB,Vitamin A (unspecified),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_F6FDFF8FF044,Vitamin A (vitamin A Palmitate),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_C06249622782,Vitamin A (vitamin A acetate),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_2FE4AA441E1C,Vitamin A (vitamin A cetate),COMP_90C4121BAE0C,Vitamina A,qualified,vitamin a
+COMP_27B0172BE904,Vitamin A &mdash; Health Professional Fact Sheet (ODS),COMP_90C4121BAE0C,Vitamina A,source_page,vitamin a
+COMP_E9F8CF297119,Vitamin A (ClinicalTrials.gov),COMP_90C4121BAE0C,Vitamina A,source_page,vitamin a
+COMP_D24191E77409,Vitamin A (MedlinePlus Supplements),COMP_90C4121BAE0C,Vitamina A,source_page,vitamin a
+COMP_59EB5782C8F2,Vitamin B12 (5-deoxyadenosylcobalamin),COMP_06B36D3A8FF3,Vitamina B12,qualified,vitamin b12
+COMP_45168FA6E54D,Vitamin B6 (pridoxal 5-phosphate),COMP_FB0BFF3E6E21,Vitamina B6,qualified,vitamin b6
+COMP_73F4A93D682E,Vitamin B6 (pyridoxal 5 phosphate),COMP_FB0BFF3E6E21,Vitamina B6,qualified,vitamin b6
+COMP_377E8693D626,Vitamin B6 (pyridoxal 5-phosphate),COMP_FB0BFF3E6E21,Vitamina B6,qualified,vitamin b6
+COMP_1B4E4CAA4984,Vitamin B6 (pyridoxine 5-phosphate),COMP_FB0BFF3E6E21,Vitamina B6,qualified,vitamin b6
+COMP_1BCB25859985,Vitamin C,COMP_67B16EEFC42F,Vitamina C,exact,vitamin c
+COMP_B21F094F0BD9,Vitamin C (Ascorbate),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_151BDAE41837,Vitamin C (ascorbic acid)  - Adverse effects (PubMed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_9D0D85FC1328,Vitamin C (ascorbic acid)  - Clinical trials (PubMed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_24E35900B107,Vitamin C (ascorbic acid)  - Contraindications (PubMed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_04CC09E4051F,Vitamin C (ascorbic acid)  - Dietary supplement use in human (PubMed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_33FFF44CEE87,Vitamin C (ascorbic acid)  - Kinetics (PubMed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_9FF65BD6F629,Vitamin C (ascorbic acid)  - Mechanism of action (PubMed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_059566C7552E,Vitamin C (ascorbic acid)  - Poisoning (PubMed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_0C067755CD4A,Vitamin C (ascorbic palmitate),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_1709B9FE80D5,Vitamin C (ascorbyl palmitate),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_EBC8ADEB25D6,Vitamin C (calcium ascorbate),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_ACB5043ED8B9,Vitamin C (mixed ascorbates),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_A80AD4E6418F,Vitamin C (mixed),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_D36F97885A09,Vitamin C (not specified),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_6F8C7BC37F96,Vitamin C (sodium ascorbate),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_FAB3827C67E5,Vitamin C (unspecified),COMP_67B16EEFC42F,Vitamina C,qualified,vitamin c
+COMP_0B3D8AAA7A1E,Vitamin C &mdash; Health Professional Fact Sheet (ODS),COMP_67B16EEFC42F,Vitamina C,source_page,vitamin c
+COMP_AC2C15B327E6,Vitamin C &mdash; QuickFacts (ODS),COMP_67B16EEFC42F,Vitamina C,source_page,vitamin c
+COMP_FABEB65125D8,Vitamin C (Ascorbic acid) (MedlinePlus Supplements),COMP_67B16EEFC42F,Vitamina C,source_page,vitamin c ascorbic acid
+COMP_A51245F69079,Vitamin C (ClinicalTrials.gov),COMP_67B16EEFC42F,Vitamina C,source_page,vitamin c
+COMP_8C56C31FBB78,Vitamin D,COMP_94DFE28A9A5C,Vitamina D,exact,vitamin d
+COMP_2F96B476B663,Vitamin D (ergocalciferol),COMP_94DFE28A9A5C,Vitamina D,qualified,vitamin d
+COMP_256C8675E70B,Vitamin D (mixed),COMP_94DFE28A9A5C,Vitamina D,qualified,vitamin d
+COMP_BBEC02FB78B0,Vitamin D (unspecified),COMP_94DFE28A9A5C,Vitamina D,qualified,vitamin d
+COMP_9B375FC89358,Vitamin D &mdash; Health Professional Fact Sheet (ODS),COMP_94DFE28A9A5C,Vitamina D,source_page,vitamin d
+COMP_3FCCCC5C748C,Vitamin D &mdash; QuickFacts (ODS),COMP_94DFE28A9A5C,Vitamina D,source_page,vitamin d
+COMP_F681E903EEA8,Vitamin D (MedlinePlus Supplements),COMP_94DFE28A9A5C,Vitamina D,source_page,vitamin d
+COMP_899B7F6DAEDD,Vitamin E (Alpha-Tocomonoenol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_0BC6CAC0AC8B,Vitamin E (Gamma Tocotrienol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_2D846B1BC2F2,Vitamin E (alpha tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_DE4F45DAEC3D,Vitamin E (alpha tocopheryl acetate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_08C4D995C34F,Vitamin E (alpha tocopheryl succinate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_57DA6D7E2138,Vitamin E (alpha tocopheryl),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_975A48F0CFD1,Vitamin E (alpha tocotrienol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_1DA8C44431A2,Vitamin E (alpha-tocopherol acetate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_1E4000A2165A,Vitamin E (alpha-tocopherol succinate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_6BA592407A6A,Vitamin E (alpha-tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_05E95D5BF830,Vitamin E (alpha-tocopheryl acetate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_765EC8C9B63B,Vitamin E (alpha-tocopheryl hydrochloride),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_F7E2C201BB82,Vitamin E (alpha-tocopheryl polyethylene glycol succinate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_551DE7CF7504,Vitamin E (alpha-tocopheryl succinate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_5A316FA3FF05,Vitamin E (beta tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_04248BA5EB92,Vitamin E (beta tocotrienol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_3B36B0FD22B2,Vitamin E (beta-tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_88FD0303DC02,Vitamin E (beta-tocotrienol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_677F15C1B063,Vitamin E (delta tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_308C9A7DABF7,Vitamin E (delta tocotrienol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_C37017B50B32,Vitamin E (delta-tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_A098710AC0D0,Vitamin E (delta-tocotrienol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_346C0E02FB02,Vitamin E (gamma tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_9CDCDE158FF3,Vitamin E (gamma unspecified),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_047F32B7A3C5,Vitamin E (mixed alpha-tocopherol),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_589560C8FA22,Vitamin E (mixed tocopherols/tocotrienols),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_6F313CB0D3CB,Vitamin E (mixed tocotrienols),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_43311E1B6113,Vitamin E (mixed tocotrienols/tocopherols),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_9B0490671E3F,Vitamin E (mixed),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_07F4E8E85493,Vitamin E (natural tocopherols),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_77F461C2C497,Vitamin E (not specified),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_BD1B8B3552C1,Vitamin E (tocofersolan),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_CCA1A75A3D35,Vitamin E (tocopherol ascorbyl palmitate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_2287AD21B2B7,Vitamin E (tocopherol not specified),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_6E946AEACC21,Vitamin E (tocopheryl acetate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_C06530345E11,Vitamin E (tocopheryl succinate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_0402880D05A3,Vitamin E (tocotrienol unspecified),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_3CA61CAD493D,Vitamin E (tocotrienols),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_C31870A590FD,Vitamin E (unspecified tocopheryl acetate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_B08CFDD796A4,Vitamin E (unspecified),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_E2EBDB81278D,Vitamin E (vitamin E acetate),COMP_D4790F9775EF,Vitamina E,qualified,vitamin e
+COMP_418A43B67061,Vitamin E &mdash; Health Professional Fact Sheet (ODS),COMP_D4790F9775EF,Vitamina E,source_page,vitamin e
+COMP_732C108E79AA,Vitamin E &mdash; QuickFacts (ODS),COMP_D4790F9775EF,Vitamina E,source_page,vitamin e
+COMP_0860A11D075A,Vitamin E (ClinicalTrials.gov),COMP_D4790F9775EF,Vitamina E,source_page,vitamin e
+COMP_203BD39FD653,Vitamin E (MedlinePlus Supplements),COMP_D4790F9775EF,Vitamina E,source_page,vitamin e
+COMP_1576722A0598,Vitamin K (Mixed),COMP_64DE5343502D,Vitamina K,qualified,vitamin k
+COMP_7CC62498F527,Vitamin K (Phylloquinone),COMP_64DE5343502D,Vitamina K,qualified,vitamin k
+COMP_7ABDD99B444F,Vitamin K (menadione),COMP_64DE5343502D,Vitamina K,qualified,vitamin k
+COMP_97E1ACD32D53,Vitamin K (menaquinone),COMP_64DE5343502D,Vitamina K,qualified,vitamin k
+COMP_FDF597D3A1E4,Vitamin K (unspecified),COMP_64DE5343502D,Vitamina K,qualified,vitamin k
+COMP_89A461DC22AA,Vitamin K (ClinicalTrials.gov),COMP_64DE5343502D,Vitamina K,source_page,vitamin k
+COMP_182AD97EF10F,Vitamin K (MedlinePlus Supplements),COMP_64DE5343502D,Vitamina K,source_page,vitamin k
+COMP_3EA9AB091DED,zinc citrate,COMP_723DBC80CC4E,Zinc,salt_form,zinc
+COMP_153CD3CDEDF5,Folate,COMP_A9136ADF22F7,Ácido fólico,exact,folate
+COMP_64A7056DD4B9,Ácido pantoténico,COMP_CCEF1C481D8D,Ácido pantoténico,exact,acido pantotenico

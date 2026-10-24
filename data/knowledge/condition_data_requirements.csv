@@ -18,4 +18,10 @@ RIESGO_METABOLICO_GLUCOSA,safety_context,edad|bmi,glucose,,Senal metabolica por 
 RIESGO_DISLIPIDEMIA,safety_context,edad|bmi,total_cholesterol|ldl|hdl|triglycerides,,Senal de perfil lipidico alterado; no genera recomendacion comercial directa.
 SAFETY_RENAL,safety,,creatinine|egfr,enfermedad_renal,Senal renal o condicion declarada; debe bloquear compra directa.
 SAFETY_HEPATICA,safety,,alt|ast,enfermedad_hepatica,Senal hepatica o condicion declarada; debe bloquear compra directa.
-SAFETY_TIROIDEA,safety,,tsh,disfuncion_tiroidea,Senal tiroidea por TSH alterada; requiere revision profesional.
+SAFETY_TIROIDEA,safety,,tsh,problema_tiroideo,Senal tiroidea por TSH alterada; requiere revision profesional.
+SALUD_VISUAL,recommendable,meta_visual|screen_hours_day|fruit_veg_servings_day|edad,,,Prioridad contextual de salud visual por metas y habitos declarados; no es un diagnostico ni usa laboratorio.
+SALUD_DIGESTIVA,recommendable,meta_digestiva|digestive_discomfort|fermented_foods_week|dieta_deficiente,,,Prioridad contextual digestiva por molestias y dieta declaradas; no es un diagnostico ni usa laboratorio.
+FATIGA_NUTRICIONAL,recommendable,meta_energia|fatiga_general|benchmark_diet_b12_status|benchmark_diet_protein_status|dieta_deficiente,,,Prioridad contextual de energia por fatiga y dieta declaradas; se fortalece con B12 o proteina dietaria bajas.
+HIDRATACION_ELECTROLITOS,recommendable,meta_hidratacion|water_intake_l_day|heavy_sweat_days_week|calambres,,,Prioridad contextual de hidratacion por consumo de agua y sudoracion declarados; no usa laboratorio.
+SALUD_CARDIOVASCULAR_CONTEXTUAL,recommendable,meta_cardiovascular|edad|fish_servings_week,total_cholesterol|ldl,,Prioridad contextual cardiovascular por metas y dieta; se fortalece con colesterol total o LDL altos.
+SALUD_COGNITIVA,recommendable,meta_cognitivo|niebla_mental|problemas_sueno|benchmark_diet_omega3_status,,,Prioridad contextual cognitiva por niebla mental y sueno declarados; se fortalece con omega-3 dietario bajo.

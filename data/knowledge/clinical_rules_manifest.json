@@ -1,0 +1,17 @@
+{
+  "_doc": "Hash aprobado de cada tabla clinica. Actualizar solo con scripts/clinical/manifiesto_reglas.py --approve tras revisar el informe de impacto (scripts/clinical/informe_impacto_reglas.py).",
+  "approved_at": "2026-10-24T06:51:05.568585+00:00",
+  "approved_by": "Claude (sesion 2026-10-24) - linea base tecnica",
+  "note": "Linea base inicial del candado: incluye encuesta v2 (+5 reglas de factores de riesgo) y reglas de contexto de bienestar movidas del codigo al CSV (+20). NO es revision clinica: pendiente del paquete clinical_review_v1.",
+  "files": {
+    "data/knowledge/condition_rules.csv": "6e9d5d85b7146ad426d9c5e1411e168ef87733bbf1b6cab33d35bc9505ae3d2c",
+    "data/knowledge/conditions.csv": "073c17edf9f6ca69de5dd826c82abfe12c0184e73eac25e02a76c9807b4b8adf",
+    "data/knowledge/condition_data_requirements.csv": "42e6444541da36f795024fd685a56cd31171762b4bd232e2a09664ecadc544cc",
+    "data/knowledge/safety_rules.csv": "b80f6321390c43ffcf21952607c742b20229cc64b0231dec1b06237f09dd2997",
+    "data/knowledge/component_interaction_rules.csv": "45957a296de0f71ae3eb6d5cd3e17cab76afb53a5fe741e7678e2d18da19f4ec",
+    "data/knowledge/condition_component_links.csv": "81d5e9cde1694960cece19c6def5a7e4e33f775c260e13a2aa730ea379b7ce45",
+    "data/knowledge/component_life_stage_guidance.csv": "83c3fb37c2c4b6f3be788554e54c3ffd19e74ee363b8062f3ff1d17438ed4b25",
+    "data/knowledge/biomarkers.csv": "379db7b33ab0ec204fd4a79ad6692e38cca9e632739f7b159c02893229ccb1b7"
+  },
+  "history": []
+}
