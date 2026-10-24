@@ -91,6 +91,13 @@ Reglas:
 - La fila `lab_reports` queda con `status=deleted` y `deleted_at` para traza técnica mínima.
 - No se deben mostrar reportes eliminados ni usarlos para recomendaciones futuras.
 
+### Retención automática de reportes de laboratorio
+
+- `LAB_REPORT_RETENTION_DAYS` (default `365`) define cuánto tiempo se conserva el contenido de un `LabReport`.
+- `LabAnalysisService.purge_expired()` redacta (misma rutina que el borrado del usuario: texto OCR, payload y biomarcadores fuera; `status=deleted`, `deleted_at`) todos los reportes con `created_at` anterior al umbral y `status != deleted`.
+- Cron diario: `python scripts/ops/purgar_lab_reports.py` (`--dry-run` solo cuenta, `--days N` sobreescribe el umbral). Emite un JSON con `expired_reports` y `redacted_reports`.
+- Los eventos de recomendación (`recommendation_events`, ver `docs/recommender_events.md`) no guardan valores de laboratorio ni texto libre de salud; solo códigos de condición, `pack_key` y posición.
+
 ## Perfiles críticos
 
 Debe bloquearse la recomendación comercial y mostrar solo guía para conversación profesional cuando exista:

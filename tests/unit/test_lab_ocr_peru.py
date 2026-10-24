@@ -301,11 +301,63 @@ def test_numbered_explanatory_line_is_not_leading_lab_result():
 
 
 def test_vitamin_d_25_hydroxy_with_leading_value_and_nmol_unit():
+    # 150 nmol/L = 60 ng/mL (1 ng/mL = 2.5 nmol/L). NIH ODS: >50 ng/mL (125 nmol/L) potencialmente adverso.
     results = parse_lab_text("150.00Vitamin D, 25 Hydroxy 75.00 - 250.00 nmol/L")
     vitamin_d = next(r for r in results if r["code"] == "vitamin_d")
-    assert vitamin_d["value"] == 150.0
-    assert vitamin_d["unit"] == "nmol/L"
+    assert vitamin_d["value"] == 60.0
+    assert vitamin_d["unit"] == "ng/mL"
+    assert vitamin_d["original_value"] == 150.0
+    assert vitamin_d["original_unit"] == "nmol/L"
+    assert vitamin_d["unit_converted"] is True
+    assert vitamin_d["reference_low"] == 30.0 and vitamin_d["reference_high"] == 100.0
+    # El rango del propio informe (convertido) manda sobre el umbral generico: 60 esta dentro de 30-100.
     assert vitamin_d["status"] == "normal"
+
+
+def test_vitamin_d_nmol_without_lab_range_uses_nih_cutoffs():
+    results = parse_lab_text("Vitamina D 25-OH: 25 nmol/L")
+    vitamin_d = next(r for r in results if r["code"] == "vitamin_d")
+    assert vitamin_d["value"] == 10.0  # 25 nmol/L = 10 ng/mL
+    assert vitamin_d["unit"] == "ng/mL"
+    assert vitamin_d["status"] == "critical_low"  # NIH ODS: <12 ng/mL deficiencia
+
+
+def test_glucose_without_unit_but_only_plausible_in_mmol_is_inferred():
+    results = parse_lab_text("Glucosa 5.5")
+    glucose = next(r for r in results if r["code"] == "glucose")
+    assert glucose["unit_inferred"] is True
+    assert glucose["original_unit"] == "mmol/L"
+    assert round(glucose["value"], 1) == 99.1
+    assert glucose["status"] == "normal"
+
+
+def test_hemoglobin_uses_who_cutoffs_by_sex_and_pregnancy():
+    text = "Hemoglobina 12.5 g/dL"
+    woman = next(r for r in parse_lab_text(text, context={"sex": "female", "age": 30}) if r["code"] == "hemoglobin")
+    man = next(r for r in parse_lab_text(text, context={"sex": "male", "age": 30}) if r["code"] == "hemoglobin")
+    pregnant = next(
+        r for r in parse_lab_text("Hemoglobina 10.8 g/dL", context={"sex": "female", "age": 30, "pregnant": True})
+        if r["code"] == "hemoglobin"
+    )
+    assert woman["status"] == "normal" and woman["reference_group"] == "female_15+"
+    assert man["status"] == "low" and man["reference_group"] == "male_15+"
+    assert pregnant["status"] == "low" and pregnant["reference_group"] == "female_pregnant"
+
+
+def test_hemoglobin_in_g_per_l_is_converted():
+    hb = next(r for r in parse_lab_text("Hemoglobina 118 g/L", context={"sex": "female", "age": 30}) if r["code"] == "hemoglobin")
+    assert hb["value"] == 11.8 and hb["unit"] == "g/dL" and hb["unit_converted"] is True
+    assert hb["status"] == "low"
+
+
+def test_redact_pii_masks_identifiers():
+    from app.domains.labs.servicio_analisis_examenes import redact_pii
+
+    text = "Paciente: Juan Perez\nDNI 12345678\nCel 987654321\ncorreo juan@mail.com\nHemoglobina 13.1 g/dL"
+    redacted = redact_pii(text)
+    assert "Juan Perez" not in redacted and "12345678" not in redacted
+    assert "987654321" not in redacted and "juan@mail.com" not in redacted
+    assert "Hemoglobina 13.1 g/dL" in redacted
 
 
 # ---------------------------------------------------------------------------

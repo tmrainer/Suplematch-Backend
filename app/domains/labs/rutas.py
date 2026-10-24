@@ -25,6 +25,8 @@ def analyze_manual_labs(
         user=user,
         persist=data.persist,
         source_note=data.source_note,
+        context=data.patient_context.model_dump() if data.patient_context else None,
+        consent_health_data=data.consent_health_data,
     )
 
 
@@ -40,6 +42,8 @@ def analyze_lab_text(
         user=user,
         persist=data.persist,
         ocr_engine="manual_text",
+        context=data.patient_context.model_dump() if data.patient_context else None,
+        consent_health_data=data.consent_health_data,
     )
 
 
@@ -60,7 +64,18 @@ async def analyze_lab_upload(
         )
     if not isinstance(file, UploadFile):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Archivo requerido.")
-    return await LabAnalysisService(db).analyze_upload(file, user=user, persist=persist)
+    context = {
+        "sex": form.get("sex") or None,
+        "age": form.get("age") or None,
+        "pregnant": str(form.get("pregnant") or "").lower() in {"1", "true", "yes", "si", "sí"} or None,
+    }
+    return await LabAnalysisService(db).analyze_upload(
+        file,
+        user=user,
+        persist=persist,
+        context=context,
+        consent_health_data=consent_health_data,
+    )
 
 
 @router.get("/me", response_model=list[LabReportHistoryOut])

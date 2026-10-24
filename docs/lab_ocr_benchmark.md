@@ -53,3 +53,30 @@ Con los archivos subidos se validaron correctamente:
 - Rechazo de frases explicativas que mencionan analitos pero no contienen resultados.
 
 El PDF real de laboratorio con texto extraible detecta TSH, T4 y T3; TSH queda como alerta tiroidea y bloquea compra directa hasta revision profesional.
+
+## Benchmark por carpeta con ground truth (Fase 6 del plan de fiabilidad)
+
+`scripts/validation/benchmark_ocr_carpeta.py` mide precision y recall de valor+unidad sobre una carpeta de PDFs
+(o imagenes) anonimizados, usando el mismo camino que `/labs/upload` (`extract_text_from_upload` + `parse_lab_text`).
+
+```bash
+# 1) Plantilla. --prefill copia lo que detecta el OCR (verificado=no) para corregir en vez de tipear todo.
+python scripts/validation/benchmark_ocr_carpeta.py --input-dir /ruta/pdfs --write-template gt.csv --prefill
+
+# 2) Una persona abre cada PDF y en gt.csv: corrige valores/unidades, borra falsos positivos, AGREGA los
+#    biomarcadores que el OCR no vio y marca verificado=si. Archivo sin resultados: una fila sin code, verificado=si.
+
+# 3) Benchmark (reportes en data/reports/labs/ocr_benchmark/)
+python scripts/validation/benchmark_ocr_carpeta.py --input-dir /ruta/pdfs --ground-truth gt.csv --hash-file-names
+```
+
+- `value`/`unit` del ground truth son los impresos en el informe; se comparan con `original_value`/`original_unit`.
+- Tres niveles: `code`, `code_value` (tolerancia 1 % o 0.02) y `code_value_unit` (unidad normalizada); la metrica
+  del plan es `code_value_unit`.
+- `status`: `passed`, `insufficient_sample` (menos de `--min-files`, default 50) o `failed` (filas invalidas,
+  ground truth de archivos que no existen, o umbrales `--min-precision`/`--min-recall` no alcanzados).
+- Riesgo de anclaje con `--prefill`: quien anota tiende a aceptar lo que propone el OCR. Revisar cada PDF entero,
+  no solo las filas prellenadas; lo ideal es que una segunda persona revise una muestra.
+- Los reportes no guardan texto OCR; con `--hash-file-names` tampoco nombres de archivo.
+- PDFs escaneados requieren `tesseract` + `poppler`; sin ellos el archivo cuenta como error de extraccion
+  (todos sus biomarcadores como no detectados), no se omite.

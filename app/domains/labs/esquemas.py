@@ -25,11 +25,20 @@ class LabBiomarkerInput(BaseModel):
         return self
 
 
+class LabPatientContext(BaseModel):
+    """Contexto minimo para elegir rangos de referencia (ej. hemoglobina por sexo/edad/embarazo, OMS 2024)."""
+
+    sex: Literal["female", "male", "femenino", "masculino"] | None = None
+    age: float | None = Field(default=None, ge=0, le=120)
+    pregnant: bool | None = None
+
+
 class LabManualInput(BaseModel):
     consent_health_data: bool
     biomarkers: list[LabBiomarkerInput] = Field(min_length=1, max_length=40)
     source_note: str | None = Field(default=None, max_length=500)
     persist: bool = True
+    patient_context: LabPatientContext | None = None
 
     @model_validator(mode="after")
     def require_consent(self):
@@ -43,6 +52,7 @@ class LabTextInput(BaseModel):
     raw_text: str = Field(min_length=10, max_length=20000)
     source_type: LabSourceType = "text"
     persist: bool = True
+    patient_context: LabPatientContext | None = None
 
     @model_validator(mode="after")
     def require_consent(self):
@@ -62,6 +72,12 @@ class LabBiomarkerOut(BaseModel):
     severity: str
     confidence: float = 1.0
     source_text: str | None = None
+    original_value: float | None = None
+    original_unit: str | None = None
+    unit_converted: bool = False
+    unit_assumed: bool = False
+    unit_inferred: bool = False
+    reference_group: str = "default"
 
 
 class LabAnalysisOut(BaseModel):
@@ -77,6 +93,7 @@ class LabAnalysisOut(BaseModel):
     extracted_text_preview: str | None = None
     ocr_engine: str | None = None
     created_at: datetime | None = None
+    persisted: bool = False
 
 
 class LabReportHistoryOut(BaseModel):

@@ -5,19 +5,49 @@ import math
 import re
 import tempfile
 import unicodedata
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.observability import log_event, metrics
 from app.db.models import LabBiomarkerResult, LabReport, User, utcnow
-from app.domains.labs.biomarcadores import BIOMARKERS, BiomarkerDefinition
+from app.domains.labs.biomarcadores import (
+    BIOMARKERS,
+    BiomarkerDefinition,
+    convert_to_canonical,
+    definition_for,
+    known_units,
+    normalize_unit_key,
+)
 from app.domains.labs.esquemas import LabBiomarkerInput
 
 
 MAX_LAB_UPLOAD_BYTES = 8 * 1024 * 1024
+HEALTH_CONSENT_TEXT_VERSION = "2026-10-22"
+
+_PII_LINE_PATTERN = re.compile(
+    r"^\s*(paciente|nombres?|apellidos?|dni|documento|c\.?i\.?|pasaporte|historia\s+cl[ií]nica|hc|"
+    r"fecha\s+de\s+nacimiento|f\.?\s*nac|direcci[oó]n|tel[eé]fono|celular|correo|e-?mail|m[eé]dico|dr\.?|dra\.?)\b.*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_PII_DNI_PATTERN = re.compile(r"\b\d{8}\b")
+_PII_PHONE_PATTERN = re.compile(r"\b9\d{8}\b")
+_PII_EMAIL_PATTERN = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def redact_pii(text: str | None) -> str | None:
+    """Enmascara identificadores directos antes de persistir texto OCR (DNI, telefono, correo, lineas de cabecera)."""
+    if not text:
+        return text
+    redacted = _PII_LINE_PATTERN.sub("[LINEA_REDACTADA]", text)
+    redacted = _PII_EMAIL_PATTERN.sub("[EMAIL]", redacted)
+    redacted = _PII_PHONE_PATTERN.sub("[TELEFONO]", redacted)
+    redacted = _PII_DNI_PATTERN.sub("[DNI]", redacted)
+    return redacted
 
 
 ALIASES: dict[str, str] = {
@@ -31,7 +61,7 @@ OCR_GUIDE_WORDS: tuple[str, ...] = tuple(
         {
             token
             for definition in BIOMARKERS.values()
-            for phrase in (*definition.aliases, definition.display_name, definition.unit)
+            for phrase in (*definition.aliases, definition.display_name, definition.unit, *definition.unit_conversions.keys())
             for token in re.split(r"[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9/%.-]+", phrase)
             if len(token) >= 2
         }
@@ -76,7 +106,21 @@ def _status_for_value(
         return "low", "warning"
     if high is not None and value > high:
         return "high", "warning"
+    if definition.borderline is not None and low is not None and value < definition.borderline and reference_low is None:
+        # Zona entre el corte de deficiencia (low) y el optimo (borderline). Ej. vitamina D 20-30 ng/mL.
+        return "borderline", "info"
     return "normal", "normal"
+
+
+def _patient_context(context: dict[str, Any] | None) -> dict[str, Any]:
+    context = context or {}
+    age = context.get("age")
+    try:
+        age = float(age) if age is not None else None
+    except (TypeError, ValueError):
+        age = None
+    pregnant = context.get("pregnant")
+    return {"sex": context.get("sex"), "age": age, "pregnant": bool(pregnant) if pregnant is not None else None}
 
 
 def _biomarker_out(
@@ -88,10 +132,36 @@ def _biomarker_out(
     reference_high: float | None = None,
     confidence: float = 1.0,
     source_text: str | None = None,
+    context: dict[str, Any] | None = None,
+    unit_inferred: bool = False,
 ) -> dict[str, Any] | None:
-    definition = BIOMARKERS.get(normalize_biomarker_code(code))
+    normalized_code = normalize_biomarker_code(code)
+    patient = _patient_context(context)
+    definition = definition_for(normalized_code, **patient)
     if definition is None:
         return None
+
+    original_value, original_unit = value, unit
+    unit_converted = False
+    unit_assumed = False
+    converted = convert_to_canonical(normalized_code, value, unit)
+    if converted is not None:
+        value, factor = converted
+        unit_converted = True
+        if reference_low is not None:
+            reference_low = reference_low * factor
+        if reference_high is not None:
+            reference_high = reference_high * factor
+    elif unit and normalize_unit_key(unit) not in known_units(normalized_code):
+        # Unidad desconocida para este biomarcador: no podemos interpretar el valor con seguridad.
+        unit_assumed = True
+        confidence = min(confidence, 0.5)
+    elif not unit:
+        unit_assumed = True
+        confidence = round(max(0.35, confidence - 0.10), 2)
+    if unit_inferred:
+        confidence = round(max(0.35, confidence - 0.15), 2)
+    unit = definition.unit
     # If extracted range looks like a "deficit" category (high < definition.low),
     # ignore it and use built-in definition ranges instead
     if (
@@ -107,13 +177,19 @@ def _biomarker_out(
         "code": definition.code,
         "display_name": definition.display_name,
         "value": round(value, 4),
-        "unit": unit or definition.unit,
+        "unit": unit,
         "reference_low": reference_low if reference_low is not None else definition.low,
         "reference_high": reference_high if reference_high is not None else definition.high,
         "status": status_value,
         "severity": severity,
         "confidence": confidence,
         "source_text": source_text,
+        "original_value": round(original_value, 4),
+        "original_unit": original_unit,
+        "unit_converted": unit_converted,
+        "unit_assumed": unit_assumed,
+        "unit_inferred": unit_inferred,
+        "reference_group": definition.reference_group,
     }
 
 
@@ -282,7 +358,7 @@ def _value_is_plausible(code: str, value: float) -> bool:
     return low <= value <= high
 
 
-def parse_lab_text(raw_text: str) -> list[dict[str, Any]]:
+def parse_lab_text(raw_text: str, context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     text = _normalize_ocr_text(raw_text)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     results: dict[str, dict[str, Any]] = {}
@@ -312,7 +388,9 @@ def parse_lab_text(raw_text: str) -> list[dict[str, Any]]:
 
             if not match:
                 # Biomarker name found but value is on a following line (multi-line format)
-                next_text = " ".join(lines[i + 1:i + 4]).lower() if i + 1 < len(lines) else ""
+                # Formatos verticales (RESULTADO / valor / UNIDAD / unidad / REFERENCIA / rango) necesitan
+                # una ventana mayor a 3 lineas; los guardas de abajo evitan tomar valores de otro analito.
+                next_text = " ".join(lines[i + 1:i + 7]).lower() if i + 1 < len(lines) else ""
                 combined = normalized_line + " " + next_text
                 value_match = _RESULT_VALUE_PATTERN.search(next_text)
                 if (
@@ -333,11 +411,12 @@ def parse_lab_text(raw_text: str) -> list[dict[str, Any]]:
             value = _clean_float(match.group(1))
             if value is None or value <= 0:
                 continue
-            if not _value_is_plausible(code, value):
-                continue
             unit = _normalize_unit(match.group(2) if len(match.groups()) >= 2 else None)
             if unit is None:
                 unit = _find_unit_near_value(context_text, match.end())
+            unit, unit_inferred, plausible = _resolve_unit_for_plausibility(code, value, unit)
+            if not plausible:
+                continue
             reference_low, reference_high = _extract_reference_range(context_text, match.end())
             confidence = _confidence_for_extraction(
                 alias=alias,
@@ -355,11 +434,43 @@ def parse_lab_text(raw_text: str) -> list[dict[str, Any]]:
                 reference_high=reference_high,
                 confidence=confidence,
                 source_text=line[:500],
+                context=context,
+                unit_inferred=unit_inferred,
             )
             if parsed is not None:
                 results[parsed["code"]] = parsed
 
     return list(results.values())
+
+
+def _resolve_unit_for_plausibility(code: str, value: float, unit: str | None) -> tuple[str | None, bool, bool]:
+    """Decide con que unidad interpretar un valor extraido.
+
+    - Unidad explicita y conocida: se convierte a canonica y se valida plausibilidad.
+    - Unidad explicita desconocida: se valida en unidad canonica (se marcara unit_assumed).
+    - Sin unidad: si el valor es plausible en la unidad canonica, se asume; si no, se busca UNA unidad
+      alternativa en la que sea plausible (ej. glucosa 5.5 -> mmol/L) y se marca unit_inferred.
+      Antes estos valores se descartaban en silencio.
+    Devuelve (unidad_a_usar, unit_inferred, plausible).
+    """
+    converted = convert_to_canonical(code, value, unit) if unit else None
+    if converted is not None:
+        return unit, False, _value_is_plausible(code, converted[0])
+    if unit:
+        return unit, False, _value_is_plausible(code, value)
+    if _value_is_plausible(code, value):
+        return None, False, True
+    definition = BIOMARKERS.get(code)
+    if definition is None:
+        return None, False, False
+    candidates = [
+        alt_unit
+        for alt_unit, factor in definition.unit_conversions.items()
+        if _value_is_plausible(code, value * factor)
+    ]
+    if len(candidates) == 1:
+        return _normalize_unit(candidates[0]) or candidates[0], True, True
+    return None, False, False
 
 
 def _find_unit_near_value(text: str, start_index: int) -> str | None:
@@ -533,6 +644,19 @@ def analyze_biomarkers(biomarkers: list[dict[str, Any]]) -> dict[str, Any]:
             if safety_level == "normal":
                 safety_level = "caution"
 
+        if item.get("unit_inferred"):
+            warnings.append(
+                f"{item['display_name']}: unidad no detectada; se infirio {item.get('original_unit')} por el rango del valor. Confirmar."
+            )
+            if safety_level == "normal":
+                safety_level = "caution"
+        elif item.get("unit_assumed") and item.get("original_unit"):
+            warnings.append(
+                f"{item['display_name']}: unidad '{item.get('original_unit')}' no reconocida; se interpreto en {item['unit']}. Confirmar."
+            )
+            if safety_level == "normal":
+                safety_level = "caution"
+
         if item["severity"] == "critical":
             commercial_blocked = True
             safety_level = "medical_review_required"
@@ -545,14 +669,19 @@ def analyze_biomarkers(biomarkers: list[dict[str, Any]]) -> dict[str, Any]:
             safety_level = "medical_review_required"
             warnings.append(f"{item['display_name']}: puede implicar condición de seguridad ({definition.safety_condition}).")
 
-        if definition.supplement_name and status_value == "low":
+        if definition.supplement_name and status_value in {"low", "critical_low", "borderline"}:
             supplement_signals.append(
                 {
                     "biomarker_code": definition.code,
                     "component_id": definition.supplement_component_id or f"lab_{definition.code}",
                     "supplement": definition.supplement_name,
-                    "reason": f"{definition.display_name} por debajo del rango de referencia.",
-                    "requires_professional_review": definition.code in {"ferritin", "calcium"} or commercial_blocked,
+                    "reason": (
+                        f"{definition.display_name} en zona limite (por debajo del nivel optimo)."
+                        if status_value == "borderline"
+                        else f"{definition.display_name} por debajo del rango de referencia."
+                    ),
+                    "status": status_value,
+                    "requires_professional_review": definition.code in {"ferritin", "calcium"} or commercial_blocked or status_value == "critical_low",
                 }
             )
 
@@ -621,6 +750,8 @@ class LabAnalysisService:
         user: User | None = None,
         persist: bool = True,
         source_note: str | None = None,
+        context: dict[str, Any] | None = None,
+        consent_health_data: bool = True,
     ) -> dict[str, Any]:
         biomarkers = []
         for value in values:
@@ -632,6 +763,7 @@ class LabAnalysisService:
                 reference_high=value.reference_high,
                 confidence=1.0,
                 source_text=source_note,
+                context=context,
             )
             if parsed is not None:
                 biomarkers.append(parsed)
@@ -640,9 +772,10 @@ class LabAnalysisService:
             source_type="manual",
             user=user,
             persist=persist,
-            parsed_payload={"source_note": source_note},
+            parsed_payload={"source_note": source_note, "patient_context": _patient_context(context)},
             raw_text=None,
             ocr_engine=None,
+            consent_health_data=consent_health_data,
         )
 
     def analyze_text(
@@ -655,18 +788,25 @@ class LabAnalysisService:
         file_name: str | None = None,
         file_mime_type: str | None = None,
         ocr_engine: str | None = None,
+        context: dict[str, Any] | None = None,
+        consent_health_data: bool = True,
     ) -> dict[str, Any]:
-        biomarkers = parse_lab_text(raw_text)
+        biomarkers = parse_lab_text(raw_text, context=context)
         return self._build_response(
             biomarkers=biomarkers,
             source_type=source_type,
             user=user,
             persist=persist,
-            parsed_payload={"file_name": file_name, "file_mime_type": file_mime_type},
-            raw_text=raw_text[:20000],
+            parsed_payload={
+                "file_name": file_name,
+                "file_mime_type": file_mime_type,
+                "patient_context": _patient_context(context),
+            },
+            raw_text=redact_pii(raw_text[:20000]),
             file_name=file_name,
             file_mime_type=file_mime_type,
             ocr_engine=ocr_engine,
+            consent_health_data=consent_health_data,
         )
 
     async def analyze_upload(
@@ -675,10 +815,24 @@ class LabAnalysisService:
         *,
         user: User | None = None,
         persist: bool = True,
+        context: dict[str, Any] | None = None,
+        consent_health_data: bool = True,
     ) -> dict[str, Any]:
-        content = await upload.read()
-        if len(content) > MAX_LAB_UPLOAD_BYTES:
+        declared_size = getattr(upload, "size", None)
+        if declared_size is not None and declared_size > MAX_LAB_UPLOAD_BYTES:
             raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Archivo demasiado grande.")
+        # Leer por bloques y cortar en el limite: no cargar en memoria un archivo arbitrariamente grande.
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = await upload.read(1 << 20)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_LAB_UPLOAD_BYTES:
+                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Archivo demasiado grande.")
+            chunks.append(chunk)
+        content = b"".join(chunks)
 
         mime = upload.content_type or "application/octet-stream"
         file_name = upload.filename or "lab_report"
@@ -691,6 +845,8 @@ class LabAnalysisService:
             file_name=file_name,
             file_mime_type=mime,
             ocr_engine=engine,
+            context=context,
+            consent_health_data=consent_health_data,
         )
 
     def history(self, user: User, limit: int = 20) -> list[dict[str, Any]]:
@@ -781,6 +937,30 @@ class LabAnalysisService:
         log_event("lab_reports_deleted_bulk", user_id=str(user.id), count=len(reports))
         return len(reports)
 
+    def purge_expired(self, now: datetime | None = None, *, retention_days: int | None = None) -> int:
+        """Redacta los LabReport mas antiguos que LAB_REPORT_RETENTION_DAYS (texto OCR, payload y biomarcadores).
+
+        Politica de retencion de datos de salud: la fila queda con status=deleted y deleted_at como
+        traza tecnica minima, igual que un borrado pedido por el usuario. Devuelve cuantos reportes redacto.
+        """
+        if self.db is None:
+            return 0
+        days = int(retention_days if retention_days is not None else settings.LAB_REPORT_RETENTION_DAYS)
+        if days <= 0:
+            return 0
+        reference = now or utcnow()
+        threshold = reference - timedelta(days=days)
+        reports = list(
+            self.db.scalars(
+                select(LabReport).where(LabReport.created_at < threshold, LabReport.status != "deleted")
+            )
+        )
+        for report in reports:
+            self._redact_report(report)
+        self.db.commit()
+        log_event("lab_reports_purged", count=len(reports), retention_days=days, threshold=threshold.isoformat())
+        return len(reports)
+
     def _redact_report(self, report: LabReport) -> None:
         now = utcnow()
         self.db.execute(delete(LabBiomarkerResult).where(LabBiomarkerResult.lab_report_id == report.id))
@@ -802,25 +982,42 @@ class LabAnalysisService:
         file_name: str | None = None,
         file_mime_type: str | None = None,
         ocr_engine: str | None = None,
+        consent_health_data: bool = True,
     ) -> dict[str, Any]:
         analysis = analyze_biomarkers(biomarkers)
+        # Datos de salud = datos sensibles (Ley 29733 / D.S. 016-2024-JUS). Solo se persisten con
+        # consentimiento explicito y un usuario identificado que pueda exportarlos o borrarlos.
+        will_persist = bool(persist and self.db is not None and consent_health_data and user is not None)
         payload = {
             "source_type": source_type,
             "biomarkers": biomarkers,
             **analysis,
             "extracted_text_preview": raw_text[:600] if raw_text else None,
             "ocr_engine": ocr_engine,
+            "persisted": will_persist,
         }
+        if persist and not will_persist:
+            payload["recommendation_notes"] = [
+                *payload.get("recommendation_notes", []),
+                "El analisis no se guardo: se requiere sesion de usuario y consentimiento para almacenar datos de salud.",
+            ]
         report_id = None
         created_at = None
-        if persist and self.db is not None:
+        if will_persist:
             report = LabReport(
                 user_id=user.id if user else None,
                 source_type=source_type,
                 file_name=file_name,
                 file_mime_type=file_mime_type,
                 raw_text=raw_text,
-                parsed_payload_json=parsed_payload,
+                parsed_payload_json={
+                    **parsed_payload,
+                    "consent": {
+                        "accepted": True,
+                        "accepted_at": utcnow().isoformat(),
+                        "text_version": HEALTH_CONSENT_TEXT_VERSION,
+                    },
+                },
                 analysis_json=payload,
                 consent_health_data=True,
                 status="processed",
