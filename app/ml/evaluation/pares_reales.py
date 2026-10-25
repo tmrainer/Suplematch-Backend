@@ -37,13 +37,19 @@ from app.ml.runtime.condition_mvp_inference import apply_second_opinion, predict
 DEFAULT_WINDOW_DAYS = 90  # la HbA1c refleja ~3 meses; habitos y sol cambian por temporada
 
 
-def survey_only_predictions(encuesta: EncuestaInput, feature_builder: FeatureBuilder | None = None) -> dict[str, set[str]]:
-    """Lo que el sistema habria marcado con esta encuesta si la persona no hubiera dado examenes."""
+def survey_only_details(
+    encuesta: EncuestaInput, feature_builder: FeatureBuilder | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Detalle del Modelo 1 (con segunda opinion) y estimaciones NHANES para la encuesta sin examenes."""
     without_labs = encuesta.model_copy(update={"lab_results": []})
     lab_risks = predict_lab_risks(without_labs)
     payload = build_pipeline_input(feature_builder or FeatureBuilder(), without_labs, None, lab_risks)
-    details = apply_second_opinion(predict_condition_probabilities(payload), payload.get("_second_opinion"))
-    return predicted_conditions(details, lab_risks)
+    return apply_second_opinion(predict_condition_probabilities(payload), payload.get("_second_opinion")), lab_risks
+
+
+def survey_only_predictions(encuesta: EncuestaInput, feature_builder: FeatureBuilder | None = None) -> dict[str, set[str]]:
+    """Lo que el sistema habria marcado con esta encuesta si la persona no hubiera dado examenes."""
+    return predicted_conditions(*survey_only_details(encuesta, feature_builder))
 
 
 def _statuses(biomarkers: list[Any]) -> dict[str, str]:

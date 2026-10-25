@@ -25,15 +25,14 @@ HIGH = frozenset({"high", "critical_high"})
 ABNORMAL = LOW | HIGH
 
 # Condicion -> examenes que la confirman y en que direccion. Solo condiciones que un examen define; las de bienestar
-# (sueño, energia) o las que un examen solo sugiere (zinc para defensas) no se evaluan.
+# (sueño, energia) o las que un examen solo sugiere (zinc para defensas) no se evaluan. Calcio y magnesio en sangre
+# quedan fuera: el cuerpo los mantiene estables aunque la ingesta sea baja y no reflejan el deficit (NIH ODS).
 TRUTH_BIOMARKERS: dict[str, tuple[tuple[str, frozenset[str]], ...]] = {
     "DEFICIT_VIT_D": (("vitamin_d", LOW),),
     "DEFICIT_B12": (("b12", LOW),),
     "DEFICIT_HIERRO": (("ferritin", LOW), ("hemoglobin", LOW)),
-    "DEFICIT_MAGNESIO": (("magnesium", LOW),),
     "DEFICIT_FOLATO": (("folate", LOW),),
     "DEFICIT_ZINC": (("zinc", LOW),),
-    "DEFICIT_CALCIO": (("calcium", LOW),),
     "RIESGO_METABOLICO_GLUCOSA": (("hba1c", HIGH), ("glucose", HIGH)),
     "RIESGO_DISLIPIDEMIA": (("total_cholesterol", HIGH), ("ldl", HIGH), ("triglycerides", HIGH), ("hdl", LOW)),
     "SAFETY_RENAL": (("creatinine", HIGH), ("egfr", LOW)),
