@@ -292,3 +292,7 @@ a las reglas; el modelo NHANES es la mejor señal (vitamina D AUC 0.70, azúcar 
 AUC 0.46 (no descuentan suplementos; la barrera por protector solar y la edad 50-59 van al revés o no suman). El cambio
 `edad>=50` 0.12 → 0.25 no tiene respaldo en estos datos. Detalle y propuestas en `docs/precision_nhanes_2013_2014.md`.
 Calcio y magnesio en sangre salieron de la verdad de `precision_real` (no reflejan el déficit).
+
+Aplicado el 2026-10-25: `edad>=50` vuelve a 0.12, el protector solar deja de ser barrera y quien toma vitamina D no
+recibe la marca sin examen. Vitamina D en NHANES: precisión 45 % → 63 % (sensibilidad 11 % → 6 %); paquete clínico
+25 → 12 casos. Ver `docs/precision_nhanes_2013_2014.md`.

@@ -53,11 +53,31 @@ La prevalencia es la precisión de marcar a todos.
    da la dosis de sus suplementos). Reentrenarlo sin esas variables da 0.770 en su test de 2017-2018, pero no mejora
    aquí (0.616 sin dosis), así que no se cambió el modelo servido.
 
-## Propuestas para el nutricionista (no aplicadas)
+## Aplicado el 2026-10-25 (aprobado por el usuario, pendiente del nutricionista)
 
-- No marcar o atenuar `DEFICIT_VIT_D` si la persona ya toma vitamina D.
-- Quitar el protector solar de `vitamin_d_sun_barrier`.
-- Volver `edad>=50` a 0.12 (o subir el corte a 70) hasta tener datos de mayores.
+1. `DEFICIT_VIT_D edad>=50` vuelve a 0.12.
+2. Quien toma vitamina D o un multivitamínico no recibe `DEFICIT_VIT_D` solo por la encuesta; con examen observado
+   sí (`SUPPLEMENTS_SUPPRESSING_CONDITION` en `condition_mvp_inference.py`, `suppressed_by_supplement` en el detalle).
+   La segunda opinión NHANES no la reactiva.
+3. El protector solar deja de contar en `vitamin_d_sun_barrier` (queda piel expuesta: cara y manos); se quita la
+   regla `vitamin_d_sun_barrier>=2`, que ya no se puede cumplir. La pregunta de protector sigue en la encuesta pero
+   no cambia nada: candidata a retirarse.
+
+Efecto:
+
+| | Antes | Después |
+|---|---|---|
+| NHANES 2013-2014, vitamina D: precisión / sensibilidad del sistema | 45 % / 11 % | **63 % / 6 %** |
+| NHANES, AUC del puntaje de reglas de vitamina D | 0.46 | 0.50 |
+| Paquete clínico (120 casos), vitamina D | 25 | 12 (13 casos cambian; nada más cambia) |
+| Escenarios de calidad | 16/16 | 16/16 (`mayor_50_activo_sol_bajo` acepta salud ósea, ver comentario) |
+
+Marca menos y acierta más. La sensibilidad sigue baja porque la encuesta no ve el factor más fuerte (color de piel);
+el modelo NHANES encuentra 29 % de los casos con 54 % de precisión. El Modelo 1 se reentrenó manteniendo la secuencia
+aleatoria del generador; sin eso cambiaban 47 de 120 casos por puro ruido del reentreno.
+
+## Propuestas pendientes
+
 - Evaluar una pregunta opcional de fototipo de piel.
 - Usar la estimación NHANES de azúcar (HbA1c) para sugerir el examen, no las reglas.
 
