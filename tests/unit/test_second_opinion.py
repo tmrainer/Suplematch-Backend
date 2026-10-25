@@ -71,3 +71,8 @@ def test_complementary_family_confirms_with_real_model() -> None:
 def test_borderline_path_reports_its_reason() -> None:
     [item] = apply_second_opinion([_detail()], {"DEFICIT_VIT_D": 0.47})
     assert item["second_opinion_reason"] == "borderline"
+
+
+def test_second_opinion_does_not_reactivate_a_supplement_suppression() -> None:
+    [item] = apply_second_opinion([_detail(suppressed_by_supplement="vitamina_d")], {"DEFICIT_VIT_D": 0.47})
+    assert item["positive"] is False and "second_opinion_reason" not in item

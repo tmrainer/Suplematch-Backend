@@ -589,7 +589,8 @@ def synthetic_risk_factors(rng: random.Random, sexo: str, edad: int, tipo_dieta:
         + int(sexo == "F" and 18 <= edad <= 45 and rng.random() < 0.08)
         + int(rng.random() < 0.04)
     )
-    sun_barrier = int(rng.random() < 0.25) + int(rng.random() < 0.45)
+    rng.random()  # antes: protector solar (ya no cuenta); se consume para no cambiar la secuencia aleatoria
+    sun_barrier = int(rng.random() < 0.45)  # piel expuesta: solo cara y manos
     b12 = (
         int(rng.random() < (0.12 if edad >= 50 else 0.04))
         + int(rng.random() < 0.08)

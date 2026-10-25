@@ -72,3 +72,9 @@ def test_report_counts_prevalence_per_condition() -> None:
     assert vit_d["n"] == 2 and vit_d["prevalence"] == 0.5
     assert vit_d["predictors"]["sistema"]["precision"] == 0.5 and vit_d["predictors"]["sistema"]["recall"] == 1.0
     assert vit_d["predictors"]["reglas"]["precision"] is None and vit_d["predictors"]["reglas"]["recall"] == 0.0
+
+
+def test_rules_variant_respects_supplement_suppression() -> None:
+    details = [{"condition": "DEFICIT_VIT_D", "positive": False, "corroborated": True, "rule_score": 0.6, "rule_threshold": 0.55,
+                "suppressed_by_supplement": "vitamina_d"}]
+    assert predicted_conditions(details, [])["reglas"] == set()

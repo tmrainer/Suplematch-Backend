@@ -416,10 +416,10 @@ class FeatureBuilder:
             None if parto is None else parto == "si",
             None if dona_sangre is None else dona_sangre == "2_o_mas_al_anio",
         ])
-        protector_solar = getattr(encuesta, "protector_solar", None)
+        # El protector solar ya no cuenta: en la practica no se asocia a deficit (NHANES 2013-2014: 23 % con deficit
+        # entre quienes lo usan siempre frente a 39 %; docs/precision_nhanes_2013_2014.md). Queda la piel expuesta.
         piel_expuesta = getattr(encuesta, "piel_expuesta", None)
         vitamin_d_sun_barrier = self._answered_count([
-            None if protector_solar is None else protector_solar == "siempre",
             None if piel_expuesta is None else piel_expuesta == "cara_manos",
         ])
 

@@ -1,10 +1,10 @@
 {
   "_doc": "Hash aprobado de cada tabla clinica. Actualizar solo con scripts/clinical/manifiesto_reglas.py --approve tras revisar el informe de impacto (scripts/clinical/informe_impacto_reglas.py).",
-  "approved_at": "2026-10-24T22:59:06.639956+00:00",
-  "approved_by": "Claude (sesion 2026-10-24)",
-  "note": "DEFICIT_VIT_D edad>=50: 0.12 -> 0.25. NIH ODS (vitamin D HP) lista adultos mayores y poca exposicion solar como grupos de riesgo; con 0.12 ambas juntas (0.42) no llegaban al umbral 0.55. Impacto: paquete clinico vitamina D 21 -> 25 de 120 (solo reglas 5 -> 12). PENDIENTE de revision del nutricionista.",
+  "approved_at": "2026-10-25T00:31:39.050301+00:00",
+  "approved_by": "Claude (sesion 2026-10-24), aprobado por el usuario",
+  "note": "Por NHANES 2013-2014 (docs/precision_nhanes_2013_2014.md): DEFICIT_VIT_D edad>=50 vuelve a 0.12 (50-59 no suma riesgo, ni con poco sol); se quita vitamin_d_sun_barrier>=2 porque el protector solar deja de contar como barrera (23% vs 39% de deficit, al reves de lo supuesto). Ademas, en codigo, quien toma vitamina D o multivitaminico no recibe DEFICIT_VIT_D sin examen (15% vs 44%). PENDIENTE de revision del nutricionista.",
   "files": {
-    "data/knowledge/condition_rules.csv": "fdb4b31e969954d13bfdd909a46d6b6eac1d746062d05c48eb71f1f10fa1d127",
+    "data/knowledge/condition_rules.csv": "1987b6d1de841c80263bb73b5e36d4f3c7e4c59026932630f6f48efec81d210c",
     "data/knowledge/conditions.csv": "073c17edf9f6ca69de5dd826c82abfe12c0184e73eac25e02a76c9807b4b8adf",
     "data/knowledge/condition_data_requirements.csv": "42e6444541da36f795024fd685a56cd31171762b4bd232e2a09664ecadc544cc",
     "data/knowledge/safety_rules.csv": "b80f6321390c43ffcf21952607c742b20229cc64b0231dec1b06237f09dd2997",
@@ -18,6 +18,11 @@
       "approved_at": "2026-10-24T06:51:05.568585+00:00",
       "approved_by": "Claude (sesion 2026-10-24) - linea base tecnica",
       "note": "Linea base inicial del candado: incluye encuesta v2 (+5 reglas de factores de riesgo) y reglas de contexto de bienestar movidas del codigo al CSV (+20). NO es revision clinica: pendiente del paquete clinical_review_v1."
+    },
+    {
+      "approved_at": "2026-10-24T22:59:06.639956+00:00",
+      "approved_by": "Claude (sesion 2026-10-24)",
+      "note": "DEFICIT_VIT_D edad>=50: 0.12 -> 0.25. NIH ODS (vitamin D HP) lista adultos mayores y poca exposicion solar como grupos de riesgo; con 0.12 ambas juntas (0.42) no llegaban al umbral 0.55. Impacto: paquete clinico vitamina D 21 -> 25 de 120 (solo reglas 5 -> 12). PENDIENTE de revision del nutricionista."
     }
   ]
 }

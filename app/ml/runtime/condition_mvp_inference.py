@@ -54,13 +54,21 @@ SIGNAL_GROUP_ORDER = [
 
 
 # Segunda opinion del modelo real (NHANES, condition_lab_model) para condiciones limitrofes. Solo para targets con
-# AUC de prueba util (vitamina D: 0.815; ferritina 0.58 queda fuera). Ver apply_second_opinion.
+# AUC util (vitamina D: 0.70 con encuestas como las de SupleMatch en NHANES 2013-2014; ferritina 0.58 queda fuera).
+# Ver apply_second_opinion.
 SECOND_OPINION_TARGETS: dict[str, str] = {"DEFICIT_VIT_D": "target_vitamin_d_low"}
 SECOND_OPINION_MARGIN = 0.15
 # Familias de evidencia de la encuesta que el modelo real no ve (NHANES no pregunta por exposicion solar). Una de
 # ellas + estimacion positiva del modelo real son dos evidencias independientes: confirman sin exigir el margen.
 SECOND_OPINION_COMPLEMENTARY_FAMILIES: dict[str, frozenset[str]] = {
     "DEFICIT_VIT_D": frozenset({"sun", "sun_barrier"}),
+}
+
+# Quien ya toma el suplemento que corrige el deficit no recibe la marca solo por la encuesta; con un examen observado
+# si. NHANES 2013-2014: 15 % con vitamina D < 20 ng/mL entre quienes la toman (incluye multivitaminicos) frente a 44 %
+# entre quienes no (docs/precision_nhanes_2013_2014.md). La segunda opinion tampoco la reactiva.
+SUPPLEMENTS_SUPPRESSING_CONDITION: dict[str, frozenset[str]] = {
+    "DEFICIT_VIT_D": frozenset({"vitamina_d", "multivitaminico"}),
 }
 
 # Ningun umbral de decision puede bajar de este valor aunque la calibracion sobre NHANES lo sugiera
@@ -231,6 +239,8 @@ def predict_condition_probabilities(features: dict[str, Any], artifact: dict[str
             if row_payload.get(f"lab_{item}_status") == MISSING_CATEGORY
         ]
         signal_groups = _signal_groups_from_rules(matched_rule_details)
+        taking = SUPPLEMENTS_SUPPRESSING_CONDITION.get(label, frozenset()) & set(features.get("suplementos_actuales") or [])
+        suppressed_by = sorted(taking)[0] if taking and "observed_lab" not in signal_groups else None
         primary_signal_group = _primary_signal_group(signal_groups)
         evidence_level = _evidence_level(primary_signal_group, signal_groups, label.startswith("SAFETY_"))
         signal_strength = _signal_strength(primary_signal_group, signal_groups, rule_score)
@@ -241,7 +251,8 @@ def predict_condition_probabilities(features: dict[str, Any], artifact: dict[str
                 "model_probability": round(model_probability, 4),
                 "threshold": threshold,
                 # Sin laboratorio hacen falta dos familias de evidencia: el modelo tampoco puede marcar con una.
-                "positive": bool(float(final_probability) >= threshold and corroborated),
+                "positive": bool(float(final_probability) >= threshold and corroborated) and suppressed_by is None,
+                "suppressed_by_supplement": suppressed_by,
                 "corroborated": corroborated,
                 "rule_families": rule_families,
                 "rule_aggregation": aggregation,
@@ -298,7 +309,7 @@ def apply_second_opinion(details: list[dict[str, Any]], second_opinion: dict[str
     for item in details:
         probability = second_opinion.get(item["condition"])
         reason = None
-        if probability is not None and not item.get("positive"):
+        if probability is not None and not item.get("positive") and not item.get("suppressed_by_supplement"):
             rule_threshold = float(item.get("rule_threshold", item.get("threshold", 1.0)))
             complementary = SECOND_OPINION_COMPLEMENTARY_FAMILIES.get(item["condition"], frozenset())
             if item.get("corroborated", False) and float(item.get("rule_score", 0.0)) >= rule_threshold - SECOND_OPINION_MARGIN:

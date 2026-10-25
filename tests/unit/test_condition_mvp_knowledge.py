@@ -559,3 +559,26 @@ def test_condition_mvp_runtime_detects_safety_lab_signals():
 
     positives = {item["condition"] for item in result if item["positive"]}
     assert {"SAFETY_RENAL", "SAFETY_HEPATICA", "SAFETY_TIROIDEA"}.issubset(positives)
+
+
+@pytest.mark.skipif(not (Path(settings.MODEL_DIR) / "condition_mvp_model.pkl").exists(), reason="condition_mvp_model.pkl no entrenado")
+def test_taking_vitamin_d_suppresses_the_survey_only_deficit_but_not_an_observed_lab() -> None:
+    from app.domains.survey.esquemas_encuesta import EncuestaInput
+    from app.ml.feature_builder import FeatureBuilder
+    from app.ml.runtime.condition_mvp_inference import predict_condition_probabilities
+
+    survey = dict(
+        edad_rango="mas_50", horas_sueno="7_9h", frecuencia_ejercicio="1_2_semana", fatiga="siempre",
+        exposicion_solar="menos_15min", frecuencia_enfermedad="1_2_anio", estres="moderado", alcohol="raro",
+        piel_expuesta="cara_manos",
+    )
+    features = FeatureBuilder().build_pipeline_payload(EncuestaInput(**survey))
+
+    def vit_d(extra: dict) -> dict:
+        return next(item for item in predict_condition_probabilities({**features, **extra}) if item["condition"] == "DEFICIT_VIT_D")
+
+    assert vit_d({})["positive"] is True
+    taking = vit_d({"suplementos_actuales": ["vitamina_d"]})
+    assert taking["positive"] is False and taking["suppressed_by_supplement"] == "vitamina_d"
+    with_lab = vit_d({"suplementos_actuales": ["vitamina_d"], "lab_vitamin_d_status": "low"})
+    assert with_lab["positive"] is True and with_lab["suppressed_by_supplement"] is None

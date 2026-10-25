@@ -97,7 +97,8 @@ def test_risk_factor_counts_and_missing_sentinel() -> None:
     iron = _build(sexo="femenino", menstruacion_abundante="si", parto_ultimo_anio="no", dona_sangre="2_o_mas_al_anio")
     assert iron["iron_loss_risk"] == 2
     assert _build(dona_sangre="no")["iron_loss_risk"] == 0
-    assert _build(protector_solar="siempre", piel_expuesta="cara_manos")["vitamin_d_sun_barrier"] == 2
+    assert _build(protector_solar="siempre", piel_expuesta="cara_manos")["vitamin_d_sun_barrier"] == 1
+    assert _build(protector_solar="siempre")["vitamin_d_sun_barrier"] == -1  # el protector solo ya no es barrera
     assert _build(medicamentos_b12=["metformina", "antiacidos_ibp"])["b12_absorption_risk"] == 2
     assert _build(tipo_dieta="vegano", anios_dieta_vegetal="mas_3")["b12_absorption_risk"] == 1
     assert _build(tipo_dieta="vegano", anios_dieta_vegetal="mas_3", alimentos_fortificados_b12="si")["b12_absorption_risk"] == 0

@@ -66,7 +66,11 @@ def predicted_conditions(condition_details: list[dict[str, Any]], lab_risks: lis
         item["condition"]
         for item in condition_details
         if item.get("second_opinion_reason")
-        or (item.get("corroborated") and float(item.get("rule_score") or 0.0) >= float(item.get("rule_threshold") or math.inf))
+        or (
+            item.get("corroborated")
+            and not item.get("suppressed_by_supplement")
+            and float(item.get("rule_score") or 0.0) >= float(item.get("rule_threshold") or math.inf)
+        )
     }
     nhanes = {item["condition"] for item in lab_risks if item.get("positive") and item.get("condition")}
     return {"sistema": sistema, "reglas": reglas, "nhanes": nhanes}
