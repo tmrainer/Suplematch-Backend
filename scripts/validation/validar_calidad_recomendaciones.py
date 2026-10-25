@@ -251,7 +251,9 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "name": "mayor_50_activo_sol_bajo",
-        "expected_focus": ["DEFICIT_VIT_D", "RENDIMIENTO_DEPORTIVO"],
+        # Salud osea (con vitamina D primero en el pack) es correcto: en NHANES 2013-2014, 50-59 años con poco sol no
+        # tienen mas deficit de vitamina D que el resto (43 % vs 44 %; docs/precision_nhanes_2013_2014.md).
+        "expected_focus": ["DEFICIT_VIT_D", "RENDIMIENTO_DEPORTIVO", "RIESGO_SALUD_OSEA"],
         "feedback_rating": 5,
         "payload": {
             "edad_rango": "mas_50",
