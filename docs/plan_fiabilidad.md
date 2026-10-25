@@ -284,3 +284,11 @@ estima (sin exámenes) contra el examen de la misma persona, para el sistema ser
 NHANES (`docs/precision_real.md`). Hoy la base no tiene pares reales: el reporte sale vacío hasta que haya usuarios
 con exámenes. `build_pipeline_input` (servicio de recomendaciones) es ahora el único camino que arma la entrada del
 pipeline, compartido por `/recommend` y la medición.
+
+### Precisión con NHANES 2013-2014 (2026-10-24)
+
+`scripts/validation/precision_nhanes.py`: 2 932 adultos reales, encuesta → sistema → examen. El Modelo 1 no mejora
+a las reglas; el modelo NHANES es la mejor señal (vitamina D AUC 0.70, azúcar 0.77); las reglas de vitamina D tienen
+AUC 0.46 (no descuentan suplementos; la barrera por protector solar y la edad 50-59 van al revés o no suman). El cambio
+`edad>=50` 0.12 → 0.25 no tiene respaldo en estos datos. Detalle y propuestas en `docs/precision_nhanes_2013_2014.md`.
+Calcio y magnesio en sangre salieron de la verdad de `precision_real` (no reflejan el déficit).
